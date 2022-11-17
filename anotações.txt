@@ -1,0 +1,52 @@
+# iniciar pygame
+import pygame
+
+pygame.init()
+
+
+# criar uma tela
+tela = pygame.display.set_mode((largura, altura))
+pygame.display.update()
+
+
+# Mudar nome do jogo
+pygame.display.set_caption('Aula01')
+
+
+# Definir a veocidade de atualização de quadros
+clock = pygame.time.Clock()
+clock.tick(<numero_de_quadros>)
+
+
+# Musica de Fundo
+pygame.mixer.music.set_volume(0.35) # mudar volume 0-1
+musica_de_fundo = pygame.mixer.music.load('<nome_da_musica.mp3>>') # carregar a musica
+pygame.mixer.music.play(-1) #tocar a musica, -1 para tocar infinitamente
+
+
+# Definir fonte para texto
+fonte = pygame.font.SysFont('Arial', 40, True, False)
+
+
+# escrever na tela
+mensagem = ''
+texto_formatado = fonte.render(mensagem, False, (cor em rgb))
+tela.blit(texto_formatado, (420, 40))
+
+# Pegar clicks
+for event in pygame.event.get():
+        if event.type == QUIT:
+            pygame.quit()
+            exit()
+
+    -- Exemplo: click unico:
+            if event.type == KEYDOWN:
+                if event.key == K_LEFT:
+    
+    -- Exemplo: click contínuo:
+            if pygame.key.get_pressed()[K_LEFT]:
+             x = x - 20
+
+
+# Adicionar elemento retangular na tela
+    retangulo = pygame.draw.rect(nome da tela, (cor em rgb), (posição x, posição y , 40, 50))
