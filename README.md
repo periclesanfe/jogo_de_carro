@@ -6,7 +6,7 @@
 <img src="https://img.shields.io/badge/Versão-b%201.0-blue">
 </p>
 
-<h3 style="color: blue;">Dscrição do Progeto:<h3>
+<h3 style="color: blue;">Descrição do Projeto:<h3>
 
 <h3 style="color: lightgreen;">Status do Projeto:<h3>
 
@@ -19,10 +19,10 @@
 <img src="https://img.shields.io/badge/Pygame-2.1.2-orange">
 
 <h2 style="color: lightblue;">DESENVOLVEDORES:</h2>
-<p>
-Adenilson Silva dos Santos<br>
-Eduardo Pedro da Silva<br>
-Erimaiken Batista dos Santos<br>
-Ingrid Monica da Silva Bezerra<br>
-Péricles Andrade Feitoza<br>
+<p style="color: lightgreen;">
+<strong><a href="https://github.com/adenilson666">Adenilson Silva dos Santos</a></strong><br>
+<strong><a href="https://github.com/eduardopedro2">Eduardo Pedro da Silva</a></strong><br>
+<strong><a href="https://github.com/M4iKen">Erimaiken Batista dos Santos</a></strong><br>
+<strong><a href="https://github.com/ingridmonica">Ingrid Mônica da Silva Bezerra</a></strong><br>
+<strong><a href="https://github.com/periclesanfe">Péricles Andrade Feitoza</a><strong>
 </p>
