@@ -1,19 +1,31 @@
+<h1>"Espaço Para Título"</h1>
+
+<p><img></p>
 Título e Imagem de capa;
 
 Badges;
 
-<p align="center">
-<img src="http://img.shields.io/static/v1?label=STATUS&message=EM%20DESENVOLVIMENTO&color=GREEN&style=for-the-badge"/>
+<p align="left">
+<img src="https://img.shields.io/badge/Versão-b%201.0-blue">
 </p>
 
-Descrição do Projeto;
+<h3 color="blue">Dscrição do Progeto:<h3>
 
-Status do Projeto;
+<h3 color="lightgreen">Status do Projeto:<h3>
 
-Funcionalidades e Demonstração da Aplicação;
+<p>Funcionalidades e Demonstração da Aplicação</p>
 
-Acesso ao Projeto;
+<h3 color="red">DOWNLOAD:</h3>
 
-Tecnologias utilizadas;
+<h4>Tecnologias Utilizadas:</h4>
+<img src="https://img.shields.io/badge/Python-3.10.8-lightgrey">
+<img src="https://img.shields.io/badge/Pygame-2.1.2-orange">
 
-Pessoas Desenvolvedoras do Projeto;
+<h2 color="blue">DESENVOLVEDORES:</h2>
+<p>
+Adenilson Silva dos Santos
+Eduardo Pedro da Silva
+Erimaiken Batista dos Santos
+Ingrid Monica da Silva Bezerra
+Péricles Andrade Feitoza
+</p>
