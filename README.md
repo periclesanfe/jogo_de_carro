@@ -10,7 +10,7 @@
 
 <h3 style="color: lightgreen;">Status do Projeto:<h3>
 
-<p>Funcionalidades e Demonstração da Aplicação</p>
+<p>Funcionalidades e Demonstração da Aplicação:</p>
 
 <h3 style="color: red;">DOWNLOAD:</h3>
 
