@@ -1,10 +1,10 @@
 <h1>"Espaço Para Título"</h1>
 
-<p><img></p>
-
-<p align="left">
+<p align="center">
 <img src="https://img.shields.io/badge/Versão-b%201.0-blue">
 </p>
+
+<p><img></p>
 
 <h3 style="color: blue;">Descrição do Projeto:<h3>
 
