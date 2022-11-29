@@ -35,7 +35,7 @@
 <img src="https://www.pygame.org/ftp/pygame-head-party.png" height="100" width="100"><br>
 </p>
 
-![python_version](https://img.shields.io/badge/Python-3.10.8-lightgrey)
+![python_version](https://img.shields.io/badge/Python-3.10.8-blue)
 ![pygame_version](https://img.shields.io/badge/Pygame-2.1.2-orange)<br>
 
 ## **DESENVOLVEDORES:**
