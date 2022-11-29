@@ -14,16 +14,16 @@
 ![status](https://img.shields.io/badge/-INICIANDO-brightgreen)
 
 ## Funcionalidades:
- 
-| **IN GAME:**                   | **INTERFACE:**                           |   |   |   |
-|--------------------------------|------------------------------------------|---|---|---|
-| - [ ] Controle de Movimentação | - [ ] Informar Nick_Name                 |   |   |   |
-| - [ ] Colisão com obstáculos   | - [ ] Selecionar Modo de Jogo            |   |   |   |
-| - [ ] Contador de Progresso    | - [ ] Selecionar dificuldade             |   |   |   |
-| - [ ] Aceleração gradativa     | - [ ] Selecionar Skin do mapa e do carro |   |   |   |
-| - [ ] Mostrador de Ranking     | - [ ] Fechar o jogo                      |   |   |   |
-| - [ ] Pause/Play               | - [ ] Configurações de volume            |   |   |   |
-| - [ ] Restart Game/Menu        |                                          |   |   |   |
+
+| **IN GAME:**                   | **INTERFACE:**                           |
+|--------------------------------|------------------------------------------|
+| - [ ] Controle de Movimentação | - [ ] Informar Nick_Name                 |
+| - [ ] Colisão com obstáculos   | - [ ] Selecionar Modo de Jogo            |
+| - [ ] Contador de Progresso    | - [ ] Selecionar dificuldade             |
+| - [ ] Aceleração gradativa     | - [ ] Selecionar Skin do mapa e do carro |
+| - [ ] Mostrador de Ranking     | - [ ] Fechar o jogo                      |
+| - [ ] Pause/Play               | - [ ] Configurações de volume            |
+| - [ ] Restart Game/Menu        |                                          |
 
 ## DOWNLOAD:
 ![em_breve](https://img.shields.io/badge/-Em%20Breve-red)
