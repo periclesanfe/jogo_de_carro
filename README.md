@@ -37,11 +37,15 @@
 ## DOWNLOAD:
 ![em_breve](https://img.shields.io/badge/-Em%20Breve-red)
 
-## Tecnologias Utilizadas:
-<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" max-height="50" max-width="50">
-<img src="https://www.pygame.org/ftp/pygame-head-party.png" max-height="50" max-width="50""><br>      
+## Tecnologias Utilizadas:   
+
+<p>
+<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" height="100" width="100">
+<img src="https://www.pygame.org/ftp/pygame-head-party.png" height="100" width="100"><br>
+</p>
+
 ![python_version](https://img.shields.io/badge/Python-3.10.8-lightgrey)
-![pygame_version](https://img.shields.io/badge/Pygame-2.1.2-orange)
+![pygame_version](https://img.shields.io/badge/Pygame-2.1.2-orange)<br>
 
 ## **DESENVOLVEDORES:**
 [Adenilson Silva dos Santos](https://github.com/adenilson666)<br>
