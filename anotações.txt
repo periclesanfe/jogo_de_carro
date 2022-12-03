@@ -50,3 +50,27 @@ for event in pygame.event.get():
 
 # Adicionar elemento retangular na tela
     retangulo = pygame.draw.rect(nome da tela, (cor em rgb), (posição x, posição y , 40, 50))
+
+_____________________________________________________________________
+COMO FAZER UMA COLISÂO DE SPRITES PERFEITA COM PIXEL NO PYGAME?
+
+1º crie uma máscara ao redor das sprites que serão colididas com o comando:
+self.mask = pygame.mask.from_surface(self.image)
+
+2º crie um grupo com as sprites que colidirão com a sprite principal
+grupo_sprite_2 = pygame.sprite.Group()
+grupo_sprite_2.add(sprite_2)
+
+3º utilize o comando dentro do loop principal do jogo:
+
+# colisão entre objeto simples
+colisões = pygame.sprite.spritecolide(<primeira_sprite>,<seguda_sprite>,<variavel_booleana>)
+True para segunda sprite sumir
+False para nao acontecer nada
+
+# colisão entre objeto por pixel
+colisões = pygame.sprite.spritecolide(<primeira_sprite>,<seguda_sprite>,<variavel_booleana>, pygame.sprite.collide_mask)
+
+4º crie a condição de colisão:
+if colisoes:
+	faca_alguma_coisa()
