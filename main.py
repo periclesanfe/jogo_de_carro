@@ -111,7 +111,7 @@ while True:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
 
-    todas_as_sprites.draw(tela)
+    todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update()
 
     pygame.display.flip()
