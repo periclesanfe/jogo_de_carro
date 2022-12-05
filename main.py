@@ -21,6 +21,8 @@ carro_pos_y = 144*5.75
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 
 pygame.display.set_caption('jogo_de_carro')
+pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha()
+pygame.display.set_icon(pygame_icon)
 
 
 class Carro(pygame.sprite.Sprite):
