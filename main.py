@@ -6,20 +6,17 @@ from tkinter import *
 
 root = Tk()
 
-ALTURA = (root.winfo_screenheight() - 150)
-LARGURA = (root.winfo_screenwidth() - 150)
+ALTURA = 920
+LARGURA = 685
 
 diretorio_principal = os.path.dirname(__file__)
 diretorio_imagens = os.path.join(diretorio_principal, 'sprites')
 diretorio_sons = os.path.join(diretorio_principal, 'songs')
 
-LARGURA = 640
-ALTURA = 945
-
 BRANCO = (255, 255, 255)
 
-carro_pos_x = LARGURA//2
-carro_pos_y = ALTURA//2
+carro_pos_x = 68*5
+carro_pos_y = 144*5.75
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 
@@ -61,12 +58,12 @@ class Carro(pygame.sprite.Sprite):
 class Rua(pygame.sprite.Sprite):
     def __init__(self):
         sprite_rua = pygame.image.load(os.path.join(
-            diretorio_imagens, 'road.png')).convert_alpha()
+            diretorio_imagens, 'road.png'))
         pygame.sprite.Sprite.__init__(self)
         self.imagens_rua = []
         for i in range(16):
-            img = sprite_rua.subsurface((135*i, 0), (135, 160))
-            img = pygame.transform.scale(img, (LARGURA, ALTURA))
+            img = sprite_rua.subsurface((0, 160*i), (137, 160))
+            img = pygame.transform.scale(img, (685, 920))
             self.imagens_rua.append(img)
 
         self.index_lista = 0
@@ -85,6 +82,7 @@ todas_as_sprites = pygame.sprite.Group()
 carro = Carro()
 todas_as_sprites.add(carro)
 
+
 rodovia = pygame.sprite.Group()
 rua = Rua()
 rodovia.add(rua)
@@ -99,16 +97,16 @@ while True:
             exit()
         if event.type == KEYDOWN:
             if event.key == K_a or event.key == K_LEFT:
-                carro_pos_x = carro_pos_x - (LARGURA - 20)//5
+                carro_pos_x = carro_pos_x - 127
                 carro.movimento()
             if event.key == K_d or event.key == K_RIGHT:
-                carro_pos_x = carro_pos_x + (LARGURA - 20)//5
+                carro_pos_x = carro_pos_x + 127
                 carro.movimento()
             if event.key == K_w or event.key == K_UP:
-                carro_pos_y = carro_pos_y - ALTURA//7
+                carro_pos_y = carro_pos_y - ALTURA//5
                 carro.movimento()
             if event.key == K_s or event.key == K_DOWN:
-                carro_pos_y = carro_pos_y + ALTURA//7
+                carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
 
     todas_as_sprites.draw(tela)
