@@ -2,9 +2,6 @@ import pygame
 from pygame.locals import *
 from sys import exit
 import os
-from tkinter import *
-
-root = Tk()
 
 ALTURA = 920
 LARGURA = 685
@@ -98,16 +95,28 @@ while True: #Esse laço de repetição vai auxiliar no botão de fechar a tela
             pygame.quit()
             exit()
         if event.type == KEYDOWN: #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
-            if event.key == K_a or event.key == K_LEFT:
+            if event.key == K_a:
                 carro_pos_x = carro_pos_x - 127
                 carro.movimento()
-            if event.key == K_d or event.key == K_RIGHT:
+            if event.key == K_LEFT:
+                carro_pos_x = carro_pos_x - 127
+                carro.movimento()
+            if event.key == K_d:
                 carro_pos_x = carro_pos_x + 127
                 carro.movimento()
-            if event.key == K_w or event.key == K_UP:
+            if event.key == K_RIGHT:
+                carro_pos_x = carro_pos_x + 127
+                carro.movimento()
+            if event.key == K_w:
                 carro_pos_y = carro_pos_y - ALTURA//5
                 carro.movimento()
-            if event.key == K_s or event.key == K_DOWN:
+            if event.key == K_UP:
+                carro_pos_y = carro_pos_y - ALTURA//5
+                carro.movimento()
+            if event.key == K_s:
+                carro_pos_y = carro_pos_y + ALTURA//5
+                carro.movimento()
+            if event.key == K_DOWN:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
 
