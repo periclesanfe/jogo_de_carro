@@ -71,6 +71,8 @@ False para nao acontecer nada
 # colisão entre objeto por pixel
 colisões = pygame.sprite.spritecolide(<primeira_sprite>,<seguda_sprite>,<variavel_booleana>, pygame.sprite.collide_mask)
 
+# Se colidir, parar movimento do carro/pista
+
 4º crie a condição de colisão:
 if colisoes:
 	faca_alguma_coisa()
