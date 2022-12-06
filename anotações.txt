@@ -72,6 +72,7 @@ False para nao acontecer nada
 colisões = pygame.sprite.spritecolide(<primeira_sprite>,<seguda_sprite>,<variavel_booleana>, pygame.sprite.collide_mask)
 
 # Se colidir, parar movimento do carro/pista
+# Função pra turbo (opcional)
 
 4º crie a condição de colisão:
 if colisoes:
