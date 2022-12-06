@@ -1,23 +1,25 @@
-# **Espaço Para Título**
+# **Jogo De Carro**
 
 <p align="center">
 <img src="https://img.shields.io/badge/Versão-b%201.0-blue">
 </p>
 
-![imagem_do_jogo]()
+<p align="center">
+<img src="https://github.com/periclesanfe/jogo_de_carro/blob/sprint-0/sprites/icon.png">
+</p>
 
 ## Descrição do Projeto
 
 <p align="justify">Jogo de carro dos gêneros *Puzzle* ou *Endless Runner* (“Corrida interminável”) no qual o jogador precisa acelerar por uma pista com cinco faixas enquanto desvia de troncos, buracos, outros carros e outros obstáculos que surgem pelo caminho, ao mesmo tempo que tenta cumprir a missão da partida, sobrevivendo a maior quantidade de tempo possível disputando as melhores colocações do ranking, ou cumprir desafios que podem ser: coletar moedas, percorrer longas distâncias e sobreviver por tempo determinado, propostos no início da gameplay.</p>
 
 ## Status do Projeto:
-![status](https://img.shields.io/badge/-INICIANDO-brightgreen)
+![status](https://img.shields.io/badge/-PRIMEIRA_SEMANA_FINALIZADA-brightgreen)
 
 ## Funcionalidades:
 
 | **IN GAME:**                   | **INTERFACE:**                           |
 |--------------------------------|------------------------------------------|
-| - [ ] Controle de Movimentação | - [ ] Informar Nick_Name                 |
+| - [ x ] Controle de Movimentação | - [ ] Informar Nick_Name                 |
 | - [ ] Colisão com obstáculos   | - [ ] Selecionar Modo de Jogo            |
 | - [ ] Contador de Progresso    | - [ ] Selecionar dificuldade             |
 | - [ ] Aceleração gradativa     | - [ ] Selecionar Skin do mapa e do carro |

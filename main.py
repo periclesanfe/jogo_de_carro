@@ -2,9 +2,6 @@ import pygame
 from pygame.locals import *
 from sys import exit
 import os
-from tkinter import *
-
-root = Tk()
 
 ALTURA = 920
 LARGURA = 685
@@ -21,6 +18,8 @@ carro_pos_y = 144*5.75
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 
 pygame.display.set_caption('jogo_de_carro')
+pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha()
+pygame.display.set_icon(pygame_icon)
 
 
 class Carro(pygame.sprite.Sprite):
@@ -63,7 +62,7 @@ class Rua(pygame.sprite.Sprite):
         self.imagens_rua = []
         for i in range(16):
             img = sprite_rua.subsurface((0, 160*i), (137, 160))
-            img = pygame.transform.scale(img, (685, 920))
+            img = pygame.transform.scale(img, (LARGURA, ALTURA))
             self.imagens_rua.append(img)
 
         self.index_lista = 0
@@ -96,16 +95,28 @@ while True:
             pygame.quit()
             exit()
         if event.type == KEYDOWN:
-            if event.key == K_a or event.key == K_LEFT:
+            if event.key == K_a:
                 carro_pos_x = carro_pos_x - 127
                 carro.movimento()
-            if event.key == K_d or event.key == K_RIGHT:
+            if event.key == K_LEFT:
+                carro_pos_x = carro_pos_x - 127
+                carro.movimento()
+            if event.key == K_d:
                 carro_pos_x = carro_pos_x + 127
                 carro.movimento()
-            if event.key == K_w or event.key == K_UP:
+            if event.key == K_RIGHT:
+                carro_pos_x = carro_pos_x + 127
+                carro.movimento()
+            if event.key == K_w:
                 carro_pos_y = carro_pos_y - ALTURA//5
                 carro.movimento()
-            if event.key == K_s or event.key == K_DOWN:
+            if event.key == K_UP:
+                carro_pos_y = carro_pos_y - ALTURA//5
+                carro.movimento()
+            if event.key == K_s:
+                carro_pos_y = carro_pos_y + ALTURA//5
+                carro.movimento()
+            if event.key == K_DOWN:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
 
