@@ -1,8 +1,13 @@
+#Importar as bibliotecas/mõdulos necessários para o código
 import pygame
-from pygame.locals import *
-from sys import exit
-import os
+from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
+from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
+import os                     
 
+#Este comando inicializa as funções e variáveis da biblioteca pygame
+pygame.init()
+
+#Criando as varáveis para dimensões
 ALTURA = 920
 LARGURA = 685
 
@@ -15,17 +20,20 @@ BRANCO = (255, 255, 255)
 carro_pos_x = 68*5
 carro_pos_y = 144*5.75
 
-tela = pygame.display.set_mode((LARGURA, ALTURA)) #Este comando abre a tela
+#Criada uma variável (objeto) e a função cria uma janela
+tela = pygame.display.set_mode((LARGURA, ALTURA))
 
-pygame.display.set_caption('jogo_de_carro') #Este comando insere um nome ao jogo
+#Este comando insere um nome ao jogo
+pygame.display.set_caption('jogo_de_carro') 
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
 
 
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
-    def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
-        sprite_carro = pygame.image.load(os.path.join(
-            diretorio_imagens, 'car_yellow.png')).convert_alpha()
+   
+    #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
+    def __init__(self): 
+        sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
         pygame.sprite.Sprite.__init__(self)
         self.imagens_carro = []
         for i in range(2):
@@ -86,15 +94,26 @@ rodovia = pygame.sprite.Group() #Este vai auxiliar quando formos exibir a pista 
 rua = Rua()
 rodovia.add(rua)
 
-relogio = pygame.time.Clock() #Este comando controla a velocidade do objeto na tela
-while True: #Esse laço de repetição vai auxiliar no botão de fechar a tela
+#Este comando controla a velocidade do objeto na tela
+relogio = pygame.time.Clock() 
+
+
+#Criamos o laço de repetição(loop) para rodar o jogo atualizando
+while True: 
+    
     relogio.tick(30)
     rodovia.draw(tela)
+    
+    #Esse loop tem a função de verificar se um evento aconteceu
     for event in pygame.event.get():
+        
+        #Essa condição de repetição vai auxiliar no botão de fechar a tela
         if event.type == QUIT:
             pygame.quit()
-            exit()
-        if event.type == KEYDOWN: #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
+            exit()             #Chama a função importada anteriormente
+        
+        #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
+        if event.type == KEYDOWN: 
             if event.key == K_a:
                 carro_pos_x = carro_pos_x - 127
                 carro.movimento()
@@ -123,4 +142,5 @@ while True: #Esse laço de repetição vai auxiliar no botão de fechar a tela
     todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
 
+    #Essa função atualiza a tela do jogo a cada interação
     pygame.display.flip()
