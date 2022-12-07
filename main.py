@@ -3,7 +3,7 @@ from pygame.locals import *
 from sys import exit
 import os
 
-ALTURA = 920
+ALTURA = 700
 LARGURA = 685
 
 diretorio_principal = os.path.dirname(__file__) #Este diretório é o principal, trabalha com o arquivo em si
