@@ -1,4 +1,4 @@
-#Importar as bibliotecas/mõdulos necessários para o código
+#Importar as bibliotecas/módulos necessários para o código
 import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
