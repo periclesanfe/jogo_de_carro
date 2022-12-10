@@ -9,15 +9,15 @@ pygame.init()
 
 #Criando as varáveis para dimensões
 ALTURA = 644
-LARGURA = 480
+LARGURA = 520
+BRANCO = (255,255,255)
+PRETO = (0,0,0)
 
 diretorio_principal = os.path.dirname(__file__) #Este diretório é o principal, trabalha com o arquivo em si
 diretorio_imagens = os.path.join(diretorio_principal, 'sprites') #Este diretório é responsavel pelas sprites do jogo
 diretorio_sons = os.path.join(diretorio_principal, 'songs') #Este diretório é responsavel pelos sons do jogo(game)
 
-BRANCO = (255, 255, 255)
-
-carro_pos_x = 47.6*5
+carro_pos_x = (47.6*5)+40
 carro_pos_y = 100.8*5.75
 
 #Criada uma variável (objeto) e a função cria uma janela
@@ -28,11 +28,6 @@ pygame.display.set_caption('jogo_de_carro')
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
 
-#Essa função define o contador e sua atualização
-contador = 0
-def contador_update(contador):
-    return contador + 1
-
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
    
     #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
@@ -42,7 +37,7 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
         self.imagens_carro = []
         for i in range(2):
             img = sprite_carro.subsurface((56*i, 0), (56, 40))
-            img = pygame.transform.scale(img, ((LARGURA//2.7), (ALTURA//5.5)))
+            img = pygame.transform.scale(img, (((LARGURA-40)//2.7), (ALTURA//5.5)))
             self.imagens_carro.append(img)
 
         self.index_lista = 0
@@ -51,6 +46,7 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
         self.rect.center = (carro_pos_x, carro_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
         self.movimentar = False
+
 
     def movimento(self): #Já esta função estará responsavel pela posição que o carro aparece na tela
         self.movimentar = True
@@ -72,19 +68,27 @@ class Rua(pygame.sprite.Sprite): #Esta classe vai auxiliar na imagem da tela
             diretorio_imagens, 'road.png'))
         pygame.sprite.Sprite.__init__(self)
         self.rua = sprite_rua.subsurface((0, 160*1), (137, 160)) #Esses dois comandos vão dar as escalas, as medidas que apareceram na tela
-        self.rua = pygame.transform.scale(self.rua, (LARGURA, ALTURA))
+        self.rua = pygame.transform.scale(self.rua, (LARGURA-40, ALTURA))
 
 
         self.index_lista = 0
         self.image = self.rua
         self.rect = self.image.get_rect()
-        self.rect.topleft = (0, 0)
+        self.rect.center = ((LARGURA//2)+20, ALTURA//2)
 
-    """def update(self): #Esta função vai auxiliar de grande forma o funcionamento do jogo, o mantendo fluido
+    def update(self): #Esta função vai auxiliar de grande forma o funcionamento do jogo, o mantendo fluido
         if self.index_lista > 15:
             self.index_lista = 0
         self.index_lista += 1
-        self.image = self.imagens_carro[int(self.index_lista)]"""
+        self.image = self.imagens_carro[int(self.index_lista)]
+
+
+contador = 0
+fonte = pygame.font.SysFont('arial', 20, True, False)
+pontuacao = f'{contador}'
+quadro_de_pontuacao = fonte.render(pontuacao, True, (BRANCO))
+ret_pont = quadro_de_pontuacao.get_rect()
+ret_pont.center = (20, 20)
 
 todas_as_sprites = pygame.sprite.Group() #Este comando vai auxiliar, quando formos adicionar o carrinho na tela
 carro = Carro()
@@ -99,10 +103,10 @@ relogio = pygame.time.Clock()
 
 #Criamos o laço de repetição(loop) para rodar o jogo atualizando
 while True: 
-    
+    tela.fill(PRETO)
     relogio.tick(30)
+
     rodovia.draw(tela)
-    
     #Esse loop tem a função de verificar se um evento aconteceu
     for event in pygame.event.get():
         
@@ -113,6 +117,7 @@ while True:
         
         #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
         if event.type == KEYDOWN: 
+            contador += 1
             if event.key == K_a:
                 carro_pos_x = carro_pos_x - 88.9
                 carro.movimento()
@@ -138,9 +143,10 @@ while True:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
 
-    contador = contador_update(contador)
+
+    tela.blit(quadro_de_pontuacao, ret_pont)
     todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
 
     #Essa função atualiza a tela do jogo a cada interação
-    pygame.display.flip()
+    pygame.display.update()
