@@ -66,6 +66,9 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
 
 
 def tela_jogo(tela,contador):
+
+    global carro_pos_x, carro_pos_y
+    
     #Este comando controla a velocidade do objeto na tela
     relogio = pygame.time.Clock() 
 
@@ -75,29 +78,37 @@ def tela_jogo(tela,contador):
 
     assets = load_assets(os.path.join(diretorio_imagens))
     rua = assets[RUA_IMG]
-    rua = pygame.transform.scale(rua, ((LARGURA-300, ALTURA-40)))
+    rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
     rua_rect = rua.get_rect()
-    rua_rect.center = ((LARGURA//2)+120, ALTURA//2)
+    rua_rect.bottomleft = (300, ALTURA)
+    rua_rect2 = rua_rect.copy()
+    
 
 
     #Criamos o laço de repetição(loop) para rodar o jogo atualizando
     while True: 
         tela.fill(CINZA)
-        relogio.tick(FPS)
+        relogio.tick(FPS*10)
         pontuacao = f'{str(contador).zfill(3)}'
         quadro_de_pontuacao = fonte.render(pontuacao, False, (BRANCO))
 
         todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
 
-        rua_rect.y -= FPS//4
-
-        if rua_rect.y > 0:
-            rua_rect.topleft -= rua_rect.height
-
-        tela.blit(rua, rua_rect)
-        rua_rect2 = rua_rect.copy()
-        rua_rect2.y = rua_rect2.height
-        tela.blit(rua, rua_rect2)
+        rua_numero = 0
+        if rua_numero == 0:
+            if rua_rect.topleft[1] >= 0:
+                rua_rect.bottomleft = (300, ALTURA)
+                rua_numero = 1
+            else:
+                tela.blit(rua, rua_rect)
+                rua_rect.y += FPS//16
+        else:
+            if rua_rect2.topleft[1] >= 0:
+                rua_rect2.bottomleft = (300, ALTURA)
+                rua_numero = 0
+            else:
+                tela.blit(rua, rua_rect2)
+                rua_rect2.y += FPS//16
         tela.blit(quadro_de_pontuacao, (18,20))
 
         #Esse loop tem a função de verificar se um evento aconteceu
