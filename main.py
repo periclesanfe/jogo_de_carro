@@ -24,7 +24,7 @@ def load_assets(diretorio_imagens):
     assets[RUA_IMG] = pygame.image.load(os.path.join(diretorio_imagens, 'road.png'))
     return assets
 
-carro_pos_x = 530
+carro_pos_x = 555
 carro_pos_y = 556
 
 contador = 0
