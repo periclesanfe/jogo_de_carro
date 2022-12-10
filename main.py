@@ -2,8 +2,8 @@
 import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
-import os                  
-
+import os
+            
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
 
@@ -27,6 +27,11 @@ tela = pygame.display.set_mode((LARGURA, ALTURA))
 pygame.display.set_caption('jogo_de_carro') 
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
+
+#Essa função define o contador e sua atualização
+contador = 0
+def contador_update(contador):
+    return contador + 1
 
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
    
@@ -133,7 +138,7 @@ while True:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
 
-
+    contador = contador_update(contador)
     todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
 
