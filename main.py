@@ -9,16 +9,16 @@ pygame.init()
 
 #Criando as varáveis para dimensões
 ALTURA = 644
-LARGURA = 520
+LARGURA = 820
 BRANCO = (255,255,255)
-PRETO = (0,0,0)
+CINZA = (20,20,20)
 
 diretorio_principal = os.path.dirname(__file__) #Este diretório é o principal, trabalha com o arquivo em si
 diretorio_imagens = os.path.join(diretorio_principal, 'sprites') #Este diretório é responsavel pelas sprites do jogo
 diretorio_sons = os.path.join(diretorio_principal, 'songs') #Este diretório é responsavel pelos sons do jogo(game)
 
-carro_pos_x = (47.6*5)+40
-carro_pos_y = 100.8*5.75
+carro_pos_x = 530
+carro_pos_y = 556
 
 #Criada uma variável (objeto) e a função cria uma janela
 tela = pygame.display.set_mode((LARGURA, ALTURA))
@@ -37,7 +37,7 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
         self.imagens_carro = []
         for i in range(2):
             img = sprite_carro.subsurface((56*i, 0), (56, 40))
-            img = pygame.transform.scale(img, (((LARGURA-40)//2.7), (ALTURA//5.5)))
+            img = pygame.transform.scale(img, (((LARGURA-340)//2.7), (ALTURA//5.5)))
             self.imagens_carro.append(img)
 
         self.index_lista = 0
@@ -68,13 +68,13 @@ class Rua(pygame.sprite.Sprite): #Esta classe vai auxiliar na imagem da tela
             diretorio_imagens, 'road.png'))
         pygame.sprite.Sprite.__init__(self)
         self.rua = sprite_rua.subsurface((0, 160*1), (137, 160)) #Esses dois comandos vão dar as escalas, as medidas que apareceram na tela
-        self.rua = pygame.transform.scale(self.rua, (LARGURA-40, ALTURA))
+        self.rua = pygame.transform.scale(self.rua, (LARGURA-300, ALTURA-40))
 
 
         self.index_lista = 0
         self.image = self.rua
         self.rect = self.image.get_rect()
-        self.rect.center = ((LARGURA//2)+20, ALTURA//2)
+        self.rect.center = ((LARGURA//2)+120, ALTURA//2)
 
     def update(self): #Esta função vai auxiliar de grande forma o funcionamento do jogo, o mantendo fluido
         if self.index_lista > 15:
@@ -84,11 +84,7 @@ class Rua(pygame.sprite.Sprite): #Esta classe vai auxiliar na imagem da tela
 
 
 contador = 0
-fonte = pygame.font.SysFont('arial', 20, True, False)
-pontuacao = f'{contador}'
-quadro_de_pontuacao = fonte.render(pontuacao, True, (BRANCO))
-ret_pont = quadro_de_pontuacao.get_rect()
-ret_pont.center = (20, 20)
+fonte = pygame.font.SysFont('arial', 40, True, False)
 
 todas_as_sprites = pygame.sprite.Group() #Este comando vai auxiliar, quando formos adicionar o carrinho na tela
 carro = Carro()
@@ -103,9 +99,10 @@ relogio = pygame.time.Clock()
 
 #Criamos o laço de repetição(loop) para rodar o jogo atualizando
 while True: 
-    tela.fill(PRETO)
+    tela.fill(CINZA)
     relogio.tick(30)
-
+    pontuacao = f'{str(contador).zfill(3)}'
+    quadro_de_pontuacao = fonte.render(pontuacao, False, (BRANCO))
     rodovia.draw(tela)
     #Esse loop tem a função de verificar se um evento aconteceu
     for event in pygame.event.get():
@@ -117,34 +114,34 @@ while True:
         
         #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
         if event.type == KEYDOWN: 
-            contador += 1
+            contador = contador + 1 
             if event.key == K_a:
-                carro_pos_x = carro_pos_x - 88.9
+                carro_pos_x = carro_pos_x - 100
                 carro.movimento()
             if event.key == K_LEFT:
-                carro_pos_x = carro_pos_x - 88.9
+                carro_pos_x = carro_pos_x - 100
                 carro.movimento()
             if event.key == K_d:
-                carro_pos_x = carro_pos_x + 88.9
+                carro_pos_x = carro_pos_x + 100
                 carro.movimento()
             if event.key == K_RIGHT:
-                carro_pos_x = carro_pos_x + 88.9
+                carro_pos_x = carro_pos_x + 100
                 carro.movimento()
             if event.key == K_w:
-                carro_pos_y = carro_pos_y - ALTURA//5
+                carro_pos_y = carro_pos_y - 120
                 carro.movimento()
             if event.key == K_UP:
-                carro_pos_y = carro_pos_y - ALTURA//5
+                carro_pos_y = carro_pos_y - 120
                 carro.movimento()
             if event.key == K_s:
-                carro_pos_y = carro_pos_y + ALTURA//5
+                carro_pos_y = carro_pos_y + 120
                 carro.movimento()
             if event.key == K_DOWN:
-                carro_pos_y = carro_pos_y + ALTURA//5
+                carro_pos_y = carro_pos_y + 120
                 carro.movimento()
 
 
-    tela.blit(quadro_de_pontuacao, ret_pont)
+    tela.blit(quadro_de_pontuacao, (18,20))
     todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
 
