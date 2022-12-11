@@ -2,6 +2,8 @@ import pygame
 from pygame.locals import *
 from sys import exit
 import os
+import random
+from random import randint
 
 ALTURA = 700
 LARGURA = 685
@@ -14,6 +16,12 @@ BRANCO = (255, 255, 255)
 
 carro_pos_x = 68*5
 carro_pos_y = 144*5.75
+
+obstaculo_x = random.randrange(60, 580, 130)
+obstaculo_y = 0
+
+obstaculo_pos_x = random.randrange(60, 580, 130)
+obstaculo_pos_y = 0
 
 tela = pygame.display.set_mode((LARGURA, ALTURA)) #Este comando abre a tela
 
@@ -119,6 +127,17 @@ while True: #Esse laço de repetição vai auxiliar no botão de fechar a tela
             if event.key == K_DOWN:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
+    obstaculo_vermelho = pygame.draw.rect(tela, (255, 0, 0), (obstaculo_x, obstaculo_y, 40, 50)) #Adicionando objeto quadrado
+    while obstaculo_y >= ALTURA:
+        obstaculo_y = randint(- 2500, -600)
+        obstaculo_x = random.randrange(60, 580, 130)
+    obstaculo_y = obstaculo_y + 10
+
+    obstaculo_verde = pygame.draw.rect(tela, (0, 255, 0), (obstaculo_pos_x, obstaculo_pos_y, 40, 50)) #Adicionando objeto quadrado
+    while obstaculo_pos_y >= ALTURA:
+        obstaculo_pos_y = randint(- 3000, - 200)
+        obstaculo_pos_x = random.randrange(60, 580, 130)
+    obstaculo_pos_y = obstaculo_pos_y + 10
 
     todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
