@@ -6,6 +6,12 @@ import os
 
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
+pygame.mixer.init() #Iniciando o mixer
+
+musica_da_partida = pygame.mixer.music.load("musica_partida.mp3")
+pygame.mixer.music.play(-1)
+
+pygame.mixer.Sound('musica_partida.mp3')
 
 #Criando as varáveis para dimensões
 ALTURA = 920
