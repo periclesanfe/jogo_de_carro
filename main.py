@@ -2,8 +2,8 @@
 import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
-import os      
-   
+import os
+       
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
 
@@ -129,8 +129,8 @@ def tela_jogo(tela,contador):
                     carro_pos_x = carro_pos_x - 100
                     carro.movimento()
                 if event.key == K_d:
-                   carro_pos_x = carro_pos_x + 100
-                   carro.movimento()
+                    carro_pos_x = carro_pos_x + 100
+                    carro.movimento()
                 if event.key == K_RIGHT:
                     carro_pos_x = carro_pos_x + 100
                     carro.movimento()
@@ -147,7 +147,7 @@ def tela_jogo(tela,contador):
                     carro_pos_y = carro_pos_y + 120
                     carro.movimento()
 
-        
+            
         todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
         
         #Essa função atualiza a tela do jogo a cada interação
@@ -165,3 +165,4 @@ try:
     tela_jogo(tela,contador)
 finally:
     pygame.quit()
+    
