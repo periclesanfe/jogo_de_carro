@@ -39,14 +39,14 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
             img = sprite_carro.subsurface((56*i, 0), (56, 40))
             img = pygame.transform.scale(img, ((LARGURA//2.7), (ALTURA//5.5)))
             self.imagens_carro.append(img)
-
+        
         self.index_lista = 0
         self.image = self.imagens_carro[self.index_lista]
         self.rect = self.image.get_rect()
         self.rect.center = (carro_pos_x, carro_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
         self.movimentar = False
-
+    
     def movimento(self): #Já esta função estará responsavel pela posição que o carro aparece na tela
         self.movimentar = True
 
@@ -95,7 +95,7 @@ relogio = pygame.time.Clock()
 #Criamos o laço de repetição(loop) para rodar o jogo atualizando
 while True: 
     
-    relogio.tick(30)
+    relogio.tick(120)
     rodovia.draw(tela)
     
     #Esse loop tem a função de verificar se um evento aconteceu
@@ -105,7 +105,7 @@ while True:
         if event.type == QUIT:
             pygame.quit()
             exit()             #Chama a função importada anteriormente
-        
+
         #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
         if event.type == KEYDOWN: 
             if event.key == K_a:
