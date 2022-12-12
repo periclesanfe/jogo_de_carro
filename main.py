@@ -2,8 +2,8 @@
 import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
-import os
-            
+import os      
+   
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
 
@@ -118,7 +118,7 @@ def tela_jogo(tela,contador):
             if event.type == QUIT:
                 pygame.quit()
                 exit()             #Chama a função importada anteriormente
-            
+
             #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
             if event.type == KEYDOWN: 
                 contador = contador + 1 
@@ -129,8 +129,8 @@ def tela_jogo(tela,contador):
                     carro_pos_x = carro_pos_x - 100
                     carro.movimento()
                 if event.key == K_d:
-                    carro_pos_x = carro_pos_x + 100
-                    carro.movimento()
+                   carro_pos_x = carro_pos_x + 100
+                   carro.movimento()
                 if event.key == K_RIGHT:
                     carro_pos_x = carro_pos_x + 100
                     carro.movimento()
