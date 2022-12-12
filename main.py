@@ -132,7 +132,7 @@ while True:
             if event.key == K_DOWN:
                 carro_pos_y = carro_pos_y + ALTURA//5
                 carro.movimento()
-
+   
 
     todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
     todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
