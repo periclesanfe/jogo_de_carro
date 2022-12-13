@@ -85,7 +85,7 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
     def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
         if self.movimentar == True:
             self.movimentar = False
-            self.rect.center = (carro_pos_x, carro_pos_y)
+            self.rect.center = (configurations.carro_pos_x, configurations.carro_pos_y)
 
         if self.index_lista > 1:
             self.index_lista = 0
@@ -223,7 +223,6 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
         """if jogo == PAUSADO:
             pygame.display.flip()
             continue"""
-
         
         if rua_numero == 0:
             if rua_rect.topleft[1] >= 0:
@@ -242,7 +241,7 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
 
         tela.blit(quadro_de_pontuacao, (115,60))
         todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
-        
+
         #Essa função atualiza a tela do jogo a cada interação
         pygame.display.flip()
 
@@ -309,3 +308,4 @@ try:
     tela_jogo()
 finally:
     pygame.quit()
+
