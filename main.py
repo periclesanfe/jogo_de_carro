@@ -85,7 +85,7 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
     def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
         if self.movimentar == True:
             self.movimentar = False
-            self.rect.center = (configurations.carro_pos_x, configurations.carro_pos_y)
+            self.rect.center = (carro_pos_x, carro_pos_y)
 
         if self.index_lista > 1:
             self.index_lista = 0
