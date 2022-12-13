@@ -1,12 +1,15 @@
 #Importar as bibliotecas/módulos necessários para o código
+from asyncio import Event
 import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
 import os     
 from random import choice
 
+
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
+pygame.mixer.init()          #Iniciando o módulo mixer
 
 #Criando as varáveis do jogo
 ALTURA = 644
@@ -23,10 +26,26 @@ carro_pos_y = 556
 rua_numero = 0
 
 
-diretorio_principal = os.path.dirname(__file__) #Este diretório é o principal, trabalha com o arquivo em si
-diretorio_imagens = os.path.join(diretorio_principal, 'sprites') #Este diretório é responsavel pelas sprites do jogo
-diretorio_sons = os.path.join(diretorio_principal, 'songs') #Este diretório é responsavel pelos sons do jogo(game)
+diretorio_principal = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
+diretorio_imagens = os.path.join(diretorio_principal, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
+diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
 
+
+musica_partida = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_partida.mp3'))
+musica_partida.set_volume(0.25)
+
+'''musica_menu = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_menu.mp3'))
+musica_partida.set_volume(1)
+
+colisao_buraco = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisao_buraco.wav'))
+colisao_buraco.set_volume(1)
+
+colisão_carros = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisão_carros.wav'))
+colisão_carros.set_volume(1)
+
+colisao_troncos = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisao_troncos.wav'))
+colisao_troncos.set_volume(1)                    
+    '''
 
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
    
@@ -47,18 +66,18 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
             sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_white.png')).convert_alpha()
         pygame.sprite.Sprite.__init__(self)
         self.imagens_carro = []
+
         for i in range(2):
             img = sprite_carro.subsurface((56*i, 0), (56, 40))
             img = pygame.transform.scale(img, (((LARGURA-340)//2.7), (ALTURA//5.5)))
             self.imagens_carro.append(img)
-
+        
         self.index_lista = 0
         self.image = self.imagens_carro[self.index_lista]
         self.rect = self.image.get_rect()
         self.rect.center = (555, 556)
         self.mask = pygame.mask.from_surface(self.image)
         self.movimentar = False
-
 
     def movimento(self): #Já esta função estará responsavel pela posição que o carro aparece na tela
         self.movimentar = True
@@ -83,7 +102,6 @@ def reiniciar_jogo():
     carro_pos_x = 555
     carro_pos_y = 556
     pygame.display.update()
-
 
 
 def aumentar_contador(contador):
@@ -111,8 +129,8 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
             
-            #Essa condição de repetição vai auxiliar no botão de fechar a tela
-            if event.type == QUIT:
+            #Essa condição de repetição vai auxiliar no botão de fechar a tela (no X e Esc)
+            if event.type == QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 pygame.quit()
                 exit()             #Chama a função importada anteriormente
 
@@ -185,6 +203,21 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
                         carro_pos_y = carro_pos_y + 120
                         contador = aumentar_contador(contador)
                         carro.movimento()
+            ''' if event.key == pygame.K_p:
+                    if jogo != PAUSADO:
+                        pygame.mixer.music.pause()
+                        pause = fonte_pause.render("PAUSE", True, AZUL, CINZA)
+                        tela.blit(pause, ((tela.get_width()-pause.get_width())/2, (tela.get_height()-pause.get_height())/2))
+                        jogo = PAUSADO
+                        
+
+                    else:
+                        jogo = RODANDO
+                        pygame.mixer.music.unpause()
+                        
+                      
+        if jogo == PAUSADO:
+         pygame.display.flip()      ''' 
 
         
         """if jogo == PAUSADO:
@@ -249,6 +282,14 @@ def tela_jogo():
     rua_rect = rua.get_rect()
     rua_rect.bottomleft = (300, ALTURA)
     rua_rect2 = rua_rect.copy()
+    musica_partida.play()         #Este comando reproduz a música da partida
+    
+    fonte_pause = pygame.font.Font(pygame.font.get_default_font(), 40)
+    
+    #Variáveis para pausar o jogo
+    RODANDO = 0
+    PAUSADO = 1
+    jogo = RODANDO 
     
     while True:
         if morreu == False:
