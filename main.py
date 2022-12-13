@@ -4,7 +4,7 @@ import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
 import os
-            
+
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
 pygame.mixer.init()          #Iniciando o módulo mixer
@@ -23,10 +23,10 @@ fonte = pygame.font.SysFont('arial', 40, True, False)
 carro_pos_x = 555
 carro_pos_y = 556
 
-
 diretorio_principal = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
 diretorio_imagens = os.path.join(diretorio_principal, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
 diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
+
 
 musica_partida = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_partida.mp3'))
 musica_partida.set_volume(0.25)
@@ -50,7 +50,6 @@ def load_assets(diretorio_imagens):
     assets[RUA_IMG] = pygame.image.load(os.path.join(diretorio_imagens, 'road.png'))
     return assets
 
-
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
    
     #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
@@ -63,15 +62,14 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
             img = sprite_carro.subsurface((56*i, 0), (56, 40))
             img = pygame.transform.scale(img, (((LARGURA-340)//2.7), (ALTURA//5.5)))
             self.imagens_carro.append(img)
-
+        
         self.index_lista = 0
         self.image = self.imagens_carro[self.index_lista]
         self.rect = self.image.get_rect()
         self.rect.center = (carro_pos_x, carro_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
         self.movimentar = False
-
-
+        
     def movimento(self): #Já esta função estará responsavel pela posição que o carro aparece na tela
         self.movimentar = True
 
@@ -84,7 +82,6 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
             self.index_lista = 0
         self.index_lista += 0.25
         self.image = self.imagens_carro[int(self.index_lista)]
-
 
 def tela_jogo(tela,contador):
 
@@ -209,3 +206,4 @@ try:
     tela_jogo(tela, contador)
 finally:
     pygame.quit()
+

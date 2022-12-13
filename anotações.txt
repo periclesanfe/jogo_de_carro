@@ -1,8 +1,8 @@
 # iniciar pygame
 import pygame
 
+#Inicializar as funções e variáveis da biblioteca pygame
 pygame.init()
-
 
 # criar uma tela
 tela = pygame.display.set_mode((largura, altura))
@@ -50,6 +50,10 @@ for event in pygame.event.get():
 
 # Adicionar elemento retangular na tela
     retangulo = pygame.draw.rect(nome da tela, (cor em rgb), (posição x, posição y , 40, 50))
+    
+# Essa função atualiza a tela a cada interação
+    pygame.display.flip()    
+
 
 _____________________________________________________________________
 COMO FAZER UMA COLISÂO DE SPRITES PERFEITA COM PIXEL NO PYGAME?
