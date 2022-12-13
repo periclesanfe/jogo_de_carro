@@ -2,8 +2,9 @@
 import pygame
 from pygame.locals import *   #Importa todas as funções e as constantes existentes no submódulo locals
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
-import os      
-   
+import os     
+from random import choice
+
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
 
@@ -15,11 +16,11 @@ CINZA = (100,100,100)
 PRETO = (0,0,0)
 RUA_IMG = 'road.png'
 FPS = 60
-contador = 0
 fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
+rua_numero = 0
 
 
 diretorio_principal = os.path.dirname(__file__) #Este diretório é o principal, trabalha com o arquivo em si
@@ -27,134 +28,23 @@ diretorio_imagens = os.path.join(diretorio_principal, 'sprites') #Este diretóri
 diretorio_sons = os.path.join(diretorio_principal, 'songs') #Este diretório é responsavel pelos sons do jogo(game)
 
 
-def load_assets(diretorio_imagens):
-    assets = {}
-    assets[RUA_IMG] = pygame.image.load(os.path.join(diretorio_imagens, 'road.png'))
-    return assets
-
-
-#Essa função vai reiniciar os parâmetros do jogo
-def reiniciar_jogo(todas_as_sprites):
-    global contador, carro_pos_x, carro_pos_y, rua_numero, morreu
-    contador = 0
-    rua_numero = 0
-    morreu = False
-    pygame.display.update()
-    carro_pos_x = 555
-    carro_pos_y = 556
-    todas_as_sprites.draw(tela)
-
-
-def aumentar_contador(contador):
-    return contador + 1 
-
-
-def jogar(tela, contador, carro, relogio, todas_as_sprites, rua, rua_rect, rua_rect2):
-    global morreu, carro_pos_y, carro_pos_x
-    pygame.display.flip()
-    while morreu == False: 
-        
-        tela.fill(CINZA)
-        relogio.tick(FPS*10)
-        pontuacao = f'{str(contador).zfill(3)}'
-        quadro_de_pontuacao = fonte.render(pontuacao, False, (BRANCO))
-
-        todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
-
-        rua_numero = 0
-        if rua_numero == 0:
-            if rua_rect.topleft[1] >= 0:
-                rua_rect.bottomleft = (300, ALTURA)
-                rua_numero = 1
-            else:
-                tela.blit(rua, rua_rect)
-                rua_rect.y += FPS//16
-        else:
-            if rua_rect2.topleft[1] >= 0:
-                rua_rect2.bottomleft = (300, ALTURA)
-                rua_numero = 0
-            else:
-                tela.blit(rua, rua_rect2)
-                rua_rect2.y += FPS//16
-
-        #Esse loop tem a função de verificar se um evento aconteceu
-        for event in pygame.event.get():
-            
-            #Essa condição de repetição vai auxiliar no botão de fechar a tela
-            if event.type == QUIT:
-                pygame.quit()
-                exit()             #Chama a função importada anteriormente
-
-            #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
-            if event.type == KEYDOWN: 
-                if event.key == K_r:
-                    morreu = True
-                if event.key == K_a:
-                    carro_pos_x = carro_pos_x - 100
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-                if event.key == K_LEFT:
-                    carro_pos_x = carro_pos_x - 100
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-                if event.key == K_d:
-                   carro_pos_x = carro_pos_x + 100
-                   contador = aumentar_contador(contador)
-                   carro.movimento()
-                if event.key == K_RIGHT:
-                    carro_pos_x = carro_pos_x + 100
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-                if event.key == K_w:
-                    carro_pos_y = carro_pos_y - 120
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-                if event.key == K_UP:
-                    carro_pos_y = carro_pos_y - 120
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-                if event.key == K_s:
-                    carro_pos_y = carro_pos_y + 120
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-                if event.key == K_DOWN:
-                    carro_pos_y = carro_pos_y + 120
-                    contador = aumentar_contador(contador)
-                    carro.movimento()
-
-        tela.blit(quadro_de_pontuacao, (18,20))
-        todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
-        
-        #Essa função atualiza a tela do jogo a cada interação
-        pygame.display.flip()
-
-
-def tela_de_morte(tela, relogio, todas_as_sprites):   
-    global tela_reiniciar, morreu, FPS, BRANCO, PRETO
-
-    while morreu: 
-        relogio.tick(FPS*10)
-        tela.fill(BRANCO)
-        mensagem_morreu = f'Você morreu, aperte R para reiniciar'
-        tela_reiniciar = fonte.render(mensagem_morreu, False, (PRETO))
-        tela_reiniciar.get_rect()
-        tela.blit(tela_reiniciar.rect.center, (ALTURA, LARGURA))
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                exit()
-            if event.type == KEYDOWN: 
-                if event.key == K_r:
-                    reiniciar_jogo(todas_as_sprites)
-        pygame.display.update()
-
-
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
    
     #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
     def __init__(self): 
-        global carro_pos_x, carro_pos_y
-        sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
+        escolha = choice((0,1,2,3,4,5))
+        if escolha == 0:
+            sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
+        if escolha == 1:
+            sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_black.png')).convert_alpha()
+        if escolha == 2:
+            sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_blue.png')).convert_alpha()
+        if escolha == 3:
+            sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_pink.png')).convert_alpha()
+        if escolha == 4:
+            sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_red.png')).convert_alpha()
+        if escolha == 5:
+            sprite_carro = pygame.image.load(os.path.join(diretorio_imagens, 'car_white.png')).convert_alpha()
         pygame.sprite.Sprite.__init__(self)
         self.imagens_carro = []
         for i in range(2):
@@ -184,9 +74,167 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
         self.image = self.imagens_carro[int(self.index_lista)]
 
 
-def tela_jogo(tela, contador):
+#Essa função vai reiniciar os parâmetros do jogo
+def reiniciar_jogo():
+    global contador, rua_numero, morreu, carro_pos_x, carro_pos_y
+    contador = 0
+    rua_numero = 0
+    morreu = False
+    carro_pos_x = 555
+    carro_pos_y = 556
+    pygame.display.update()
 
-    global carro_pos_x, carro_pos_y, morreu
+
+
+def aumentar_contador(contador):
+    return contador + 1 
+
+
+def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
+    global carro_pos_y, carro_pos_x, rua_numero, morreu
+
+    contador = 0
+
+    while morreu == False: 
+        
+        """RODANDO = 0
+        PAUSADO = 1
+        jogo = RODANDO"""
+        tela.fill(CINZA)
+        relogio.tick(FPS*10)
+        pontuacao = f'{str(contador).zfill(3)}'
+        quadro_de_pontuacao = fonte.render(pontuacao, True, BRANCO, PRETO)
+        """tela__de_pause = fonte.render('Aperte P para Continuar', False, PRETO, BRANCO)"""
+
+        todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
+
+        #Esse loop tem a função de verificar se um evento aconteceu
+        for event in pygame.event.get():
+            
+            #Essa condição de repetição vai auxiliar no botão de fechar a tela
+            if event.type == QUIT:
+                pygame.quit()
+                exit()             #Chama a função importada anteriormente
+
+            #Essas condições vão controlar quaisquer movimentos feitos pelo carrinho na tela
+            if event.type == KEYDOWN: 
+                if event.key == K_r:
+                    pygame.display.flip()
+                    morreu = True
+
+                """if event.key == K_p:
+                    if jogo != PAUSADO:
+                        jogo = PAUSADO
+                    else:
+                        jogo = RODANDO"""
+
+
+                if event.key == K_a:
+                    if carro_pos_x <= 355:
+                        pass
+                    else:
+                        carro_pos_x = carro_pos_x - 100
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_LEFT:
+                    if carro_pos_x == 355:
+                        pass
+                    else:
+                        carro_pos_x = carro_pos_x - 100
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_d:
+                    if carro_pos_x == 755:
+                        pass
+                    else:
+                        carro_pos_x = carro_pos_x + 100
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_RIGHT:
+                    if carro_pos_x == 755:
+                        pass
+                    else:
+                        carro_pos_x = carro_pos_x + 100
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_w:
+                    if carro_pos_y == 76:
+                        pass
+                    else:
+                        carro_pos_y = carro_pos_y - 120
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_UP:
+                    if carro_pos_y == 76:
+                        pass
+                    else:
+                        carro_pos_y = carro_pos_y - 120
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_s:
+                    if carro_pos_y == 556:
+                        pass
+                    else:
+                        carro_pos_y = carro_pos_y + 120
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+                if event.key == K_DOWN:
+                    if carro_pos_y == 556:
+                        pass
+                    else:
+                        carro_pos_y = carro_pos_y + 120
+                        contador = aumentar_contador(contador)
+                        carro.movimento()
+
+        
+        """if jogo == PAUSADO:
+            pygame.display.flip()
+            continue"""
+
+        
+        if rua_numero == 0:
+            if rua_rect.topleft[1] >= 0:
+                rua_rect.bottomleft = (300, ALTURA)
+                rua_numero = 1
+            else:
+                tela.blit(rua, rua_rect)
+                rua_rect.y += FPS//16
+        else:
+            if rua_rect2.topleft[1] >= 0:
+                rua_rect2.bottomleft = (300, ALTURA)
+                rua_numero = 0
+            else:
+                tela.blit(rua, rua_rect2)
+                rua_rect2.y += FPS//16
+
+        tela.blit(quadro_de_pontuacao, (115,60))
+        todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
+        
+        #Essa função atualiza a tela do jogo a cada interação
+        pygame.display.flip()
+
+
+def tela_de_morte(tela, relogio, FPS):   
+
+    while morreu: 
+        relogio.tick(FPS*10)
+        tela.fill(BRANCO)
+        mensagem_morreu = f'Você morreu, aperte R para reiniciar'
+        tela_reiniciar = fonte.render(mensagem_morreu, False, PRETO)
+        tela_reiniciar.get_rect()
+        tela.blit(tela_reiniciar, (75, 280))
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                exit()
+            if event.type == KEYDOWN: 
+                if event.key == K_r:
+                    reiniciar_jogo()
+        pygame.display.update()
+
+
+def tela_jogo():
+    global morreu
     
     #Esta variável vai definir se o carro já colidiu ou não
     #Este comando controla a velocidade do objeto na tela
@@ -196,8 +244,6 @@ def tela_jogo(tela, contador):
     carro = Carro()
     todas_as_sprites.add(carro)
 
-    """assets = load_assets(os.path.join(diretorio_imagens))
-    rua = assets[RUA_IMG]"""
     rua = pygame.image.load(os.path.join(diretorio_imagens, 'road.png'))
     rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
     rua_rect = rua.get_rect()
@@ -206,10 +252,9 @@ def tela_jogo(tela, contador):
     
     while True:
         if morreu == False:
-            jogar(tela, contador, carro, relogio, todas_as_sprites, rua, rua_rect, rua_rect2)
+            jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carro)
         elif morreu == True:
-            tela_de_morte(tela, relogio, todas_as_sprites)
-   
+            tela_de_morte(tela, relogio, FPS)
 
 #Criada uma variável (objeto) e a função cria uma janela
 tela = pygame.display.set_mode((LARGURA, ALTURA))
@@ -220,6 +265,6 @@ pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).con
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
 
 try:
-    tela_jogo(tela, contador)
+    tela_jogo()
 finally:
     pygame.quit()
