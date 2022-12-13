@@ -31,20 +31,20 @@ diretorio_imagens = os.path.join(diretorio_principal, 'sprites')  #Este diretór
 diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
 
 
-musica_partida = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_partida.mp3'))
-musica_partida.set_volume(0.25)
+musica_partida = pygame.mixer.music.load(os.path.join(diretorio_sons, './audios_convertidos/musica_partida.mp3'))
+musica_partida = pygame.mixer.music.set_volume(0.35)
 
-'''musica_menu = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_menu.mp3'))
-musica_partida.set_volume(1)
+'''musica_menu = pygame.mixer.music.load(os.path.join(diretorio_sons, './audios_convertidos/musica_menu.mp3'))
+musica_menu = pygame.mixer.music.set_volume(0.25)
 
-colisao_buraco = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisao_buraco.wav'))
-colisao_buraco.set_volume(1)
+colisao_buraco = pygame.mixer.music.load(os.path.join(diretorio_sons, 'colisao_buraco.wav'))
+colisao_buraco = pygame.mixer.music.set_volume(0.7)
 
-colisão_carros = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisão_carros.wav'))
-colisão_carros.set_volume(1)
+colisão_carros = pygame.mixer.music.load(os.path.join(diretorio_sons, 'colisão_carros.wav'))
+colisão_carros = pygame.mixer.music.set_volume(0.7)
 
-colisao_troncos = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisao_troncos.wav'))
-colisao_troncos.set_volume(1)                    
+colisao_troncos = pygame.mixer.music.load(os.path.join(diretorio_sons, 'colisao_troncos.wav'))
+colisao_troncos = pygame.mixer.music.set_volume(0.7)                    
     '''
 
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
@@ -112,10 +112,11 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
     global carro_pos_y, carro_pos_x, rua_numero, morreu
 
     contador = 0
-    musica_partida.play()         #Este comando reproduz a música da partida
 
-    while morreu == False: 
-        
+    musica_partida = pygame.mixer.music.play(-1)       #Este comando reproduz a música da partida 
+    
+    while morreu == False:
+    
         """RODANDO = 0
         PAUSADO = 1
         jogo = RODANDO"""
