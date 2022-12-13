@@ -15,13 +15,18 @@ ALTURA = 644
 LARGURA = 820
 BRANCO = (255,255,255)
 CINZA = (20,20,20)
+AZUL = (0, 0, 255)
 RUA_IMG = 'road.png'
 FPS = 60
-pause = False
+contador = 0
+fonte = pygame.font.SysFont('arial', 40, True, False)
+carro_pos_x = 555
+carro_pos_y = 556
 
-diretorio_principal = os.path.dirname(__file__) #Este diretório é o principal, trabalha com o arquivo em si
-diretorio_imagens = os.path.join(diretorio_principal, 'sprites') #Este diretório é responsavel pelas sprites do jogo
-diretorio_sons = os.path.join(diretorio_principal, 'songs') #Este diretório é responsavel pelos sons do jogo(game)
+
+diretorio_principal = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
+diretorio_imagens = os.path.join(diretorio_principal, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
+diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
 
 musica_partida = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_partida.mp3'))
 musica_partida.set_volume(0.25)
@@ -45,32 +50,6 @@ def load_assets(diretorio_imagens):
     assets[RUA_IMG] = pygame.image.load(os.path.join(diretorio_imagens, 'road.png'))
     return assets
 
-carro_pos_x = 555
-carro_pos_y = 556
-
-contador = 0
-fonte = pygame.font.SysFont('arial', 40, True, False)
-
-#Péricles fez*
-def reiniciar_jogo(todas_as_sprites):
-    print('aqui dentro vai?')
-    global contador, carro_pos_x, carro_pos_y, rua_numero, morreu
-    contador = 0
-    rua_numero = 0
-    morreu = False
-    carro_pos_x = 555
-    carro_pos_y = 556
-    todas_as_sprites.draw(tela)
-    pygame.display.flip()
-
-def pausar_jogo():
-
-    if pause == True:
-        pygame.K_PAUSE()
-
-    while pause:    
-        tela_jogo.fill(CINZA)
-        pygame.display.update()
 
 class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
    
@@ -117,16 +96,22 @@ def tela_jogo(tela,contador):
     carro = Carro()
     todas_as_sprites.add(carro)
 
-    assets = load_assets(os.path.join(diretorio_imagens))
-    rua = assets[RUA_IMG]
+    '''assets = load_assets(os.path.join(diretorio_imagens))
+    rua = assets[RUA_IMG]'''
+    rua = pygame.image.load(os.path.join(diretorio_imagens, 'road.png'))
     rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
     rua_rect = rua.get_rect()
     rua_rect.bottomleft = (300, ALTURA)
     rua_rect2 = rua_rect.copy()
     musica_partida.play()         #Este comando reproduz a música da partida
     
-
+    fonte_pause = pygame.font.Font(pygame.font.get_default_font(), 40)
     
+    #Variáveis para pausar o jogo
+    RODANDO = 0
+    PAUSADO = 1
+    jogo = RODANDO 
+
     #Criamos o laço de repetição(loop) para rodar o jogo atualizando
     while True: 
         tela.fill(CINZA)
@@ -138,7 +123,7 @@ def tela_jogo(tela,contador):
 
         rua_numero = 0
         if rua_numero == 0:
-            if rua_rect.topleft[1] >= 0:
+            if rua_rect.topleft[1] >= 0 :
                 rua_rect.bottomleft = (300, ALTURA)
                 rua_numero = 1
             else:
@@ -156,8 +141,8 @@ def tela_jogo(tela,contador):
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
             
-            #Essa condição de repetição vai auxiliar no botão de fechar a tela
-            if event.type == QUIT:
+            #Essa condição de repetição vai auxiliar no botão de fechar a tela (no X e Esc)
+            if event.type == QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 pygame.quit()
                 exit()             #Chama a função importada anteriormente
             
@@ -189,28 +174,38 @@ def tela_jogo(tela,contador):
                     carro_pos_y = carro_pos_y + 120
                     carro.movimento()
 
-                if event.key == K_r:
-                    print('reinicia?')
-                    reiniciar_jogo(todas_as_sprites)
-                if event.key == K_p:
-                    pause = True
-                    print('pause?')
-                    pausar_jogo()
+            ''' if event.key == pygame.K_p:
+                    if jogo != PAUSADO:
+                        pygame.mixer.music.pause()
+                        pause = fonte_pause.render("PAUSE", True, AZUL, CINZA)
+                        tela.blit(pause, ((tela.get_width()-pause.get_width())/2, (tela.get_height()-pause.get_height())/2))
+                        jogo = PAUSADO
+                        
 
+                    else:
+                        jogo = RODANDO
+                        pygame.mixer.music.unpause()
+                        
+                      
+        if jogo == PAUSADO:
+         pygame.display.flip()      ''' 
+     
     
         todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
         
         #Essa função atualiza a tela do jogo a cada interação
         pygame.display.flip()
 
-    
 
 #Criada uma variável (objeto) e a função cria uma janela
 tela = pygame.display.set_mode((LARGURA, ALTURA))
-
+    
 #Este comando insere um nome ao jogo
 pygame.display.set_caption('jogo_de_carro') 
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
 
-tela_jogo(tela,contador)
+try:
+    tela_jogo(tela, contador)
+finally:
+    pygame.quit()
