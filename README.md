@@ -22,9 +22,9 @@
 |--------------------------------|------------------------------------------|
 | - [ x ] Controle de Movimentação | - [ ] Informar Nick_Name                 |
 | - [ ] Colisão com obstáculos   | - [ ] Selecionar Modo de Jogo            |
-| - [ ] Contador de Progresso    | - [ ] Selecionar dificuldade             |
+| - [ x ] Contador de Progresso    | - [ ] Selecionar dificuldade             |
 | - [ ] Aceleração gradativa     | - [ ] Selecionar Skin do mapa e do carro |
-| - [ ] Mostrador de Ranking     | - [ ] Fechar o jogo                      |
+| - [ ] Mostrador de Ranking     | - [ x ] Fechar o jogo                      |
 | - [ ] Pause/Play               | - [ ] Configurações de volume            |
 | - [ ] Restart Game/Menu        |                                          |
 
