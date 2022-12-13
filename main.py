@@ -32,6 +32,7 @@ diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretór
 
 
 musica_partida = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_partida.mp3'))
+pygame.mixer.music.play(-1)
 musica_partida.set_volume(0.25)
 
 '''musica_menu = pygame.mixer.Sound(os.path.join(diretorio_sons, './audios_convertidos/musica_menu.mp3'))
