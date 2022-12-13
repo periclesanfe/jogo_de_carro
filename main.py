@@ -112,6 +112,7 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
     global carro_pos_y, carro_pos_x, rua_numero, morreu
 
     contador = 0
+    musica_partida.play()         #Este comando reproduz a música da partida
 
     while morreu == False: 
         
@@ -120,7 +121,7 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
         jogo = RODANDO"""
         tela.fill(CINZA)
         relogio.tick(FPS*10)
-        pontuacao = f'{str(contador).zfill(3)}'
+        pontuacao = f'{str(contador).zfill(2)}'
         quadro_de_pontuacao = fonte.render(pontuacao, True, BRANCO, PRETO)
         """tela__de_pause = fonte.render('Aperte P para Continuar', False, PRETO, BRANCO)"""
 
@@ -263,6 +264,7 @@ def tela_de_morte(tela, relogio, FPS):
                 if event.key == K_r:
                     reiniciar_jogo()
         pygame.display.update()
+        musica_partida.stop()
 
 
 def tela_jogo():
@@ -281,7 +283,7 @@ def tela_jogo():
     rua_rect = rua.get_rect()
     rua_rect.bottomleft = (300, ALTURA)
     rua_rect2 = rua_rect.copy()
-    musica_partida.play()         #Este comando reproduz a música da partida
+    
     
     fonte_pause = pygame.font.Font(pygame.font.get_default_font(), 40)
     
