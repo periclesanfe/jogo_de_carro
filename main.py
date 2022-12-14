@@ -6,7 +6,6 @@ import os
 import config as cf
 import classes as cl
 
-
 #Essa função vai reiniciar os parâmetros do jogo
 def reiniciar_jogo():
     global contador
@@ -136,7 +135,6 @@ def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
         """if jogo == PAUSADO:
             pygame.display.flip()
             continue"""
-
         
         if cf.rua_numero == 0:
             if rua_rect.topleft[1] >= 0:
@@ -155,7 +153,7 @@ def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
 
         cf.tela.blit(quadro_de_pontuacao, (115,60))
         todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
-        
+
         #Essa função atualiza a tela do jogo a cada interação
         pygame.display.flip()
 
@@ -178,6 +176,7 @@ def tela_de_morte(tela, relogio):
                 if event.key == K_r:
                     reiniciar_jogo()
         pygame.display.update()
+        musica_partida.stop()
 
 
 def tela_jogo():
@@ -208,3 +207,4 @@ try:
     tela_jogo()
 finally:
     pygame.quit()
+
