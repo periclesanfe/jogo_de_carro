@@ -22,19 +22,19 @@ def aumentar_contador(contador):
     return contador + 1 
 
 
-def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
+def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
 
     contador = 0
-
+    cf.musica_partida = pygame.mixer.music.play()
     while cf.morreu == False: 
         
         """RODANDO = 0
         PAUSADO = 1
         jogo = RODANDO"""
-        tela.fill(cf.CINZA)
+        cf.tela.fill(cf.CINZA)
         relogio.tick(cf.FPS*10)
-        pontuacao = f'{str(contador).zfill(3)}'
-        quadro_de_pontuacao = fonte.render(pontuacao, True, cf.BRANCO, cf.PRETO)
+        pontuacao = f'{str(contador).zfill(2)}'
+        quadro_de_pontuacao = cf.fonte.render(pontuacao, True, cf.BRANCO, cf.PRETO)
         """tela__de_pause = fonte.render('Aperte P para Continuar', False, PRETO, BRANCO)"""
 
         todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
@@ -103,17 +103,17 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
                         contador = aumentar_contador(contador)
                         carro.movimento()
                 if event.key == K_s:
-                    if carro_pos_y == 556:
+                    if cf.carro_pos_y == 556:
                         pass
                     else:
                         cf.carro_pos_y = cf.carro_pos_y + 120
                         contador = aumentar_contador(contador)
                         carro.movimento()
                 if event.key == K_DOWN:
-                    if carro_pos_y == 556:
+                    if cf.carro_pos_y == 556:
                         pass
                     else:
-                        carro_pos_y = carro_pos_y + 120
+                        cf.carro_pos_y = cf.carro_pos_y + 120
                         contador = aumentar_contador(contador)
                         carro.movimento()
             ''' if event.key == pygame.K_p:
@@ -138,22 +138,22 @@ def jogar(tela, relogio, fonte, todas_as_sprites, rua, rua_rect, rua_rect2, carr
             continue"""
 
         
-        if rua_numero == 0:
+        if cf.rua_numero == 0:
             if rua_rect.topleft[1] >= 0:
                 rua_rect.bottomleft = (300, cf.ALTURA)
-                rua_numero = 1
+                cf.rua_numero = 1
             else:
                 tela.blit(rua, rua_rect)
                 rua_rect.y += cf.FPS//16
         else:
             if rua_rect2.topleft[1] >= 0:
                 rua_rect2.bottomleft = (300, cf.ALTURA)
-                rua_numero = 0
+                cf.rua_numero = 0
             else:
                 tela.blit(rua, rua_rect2)
                 rua_rect2.y += cf.FPS//16
 
-        tela.blit(quadro_de_pontuacao, (115,60))
+        cf.tela.blit(quadro_de_pontuacao, (115,60))
         todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
         
         #Essa função atualiza a tela do jogo a cada interação
@@ -164,11 +164,12 @@ def tela_de_morte(tela, relogio):
 
     while cf.morreu: 
         relogio.tick(cf.FPS*10)
-        tela.fill(cf.BRANCO)
+        cf.tela.fill(cf.BRANCO)
+        cf.musica_partida = pygame.mixer.music.pause()
         mensagem_morreu = f'Você morreu, aperte R para reiniciar'
         tela_reiniciar = cf.fonte.render(mensagem_morreu, False, cf.PRETO)
         tela_reiniciar.get_rect()
-        tela.blit(tela_reiniciar, (75, 280))
+        cf.tela.blit(tela_reiniciar, (75, 280))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -191,7 +192,6 @@ def tela_jogo():
     rua_rect = rua.get_rect()
     rua_rect.bottomleft = (300, cf.ALTURA)
     rua_rect2 = rua_rect.copy()
-    cf.musica_partida.play()         #Este comando reproduz a música da partida
     fonte_pause = pygame.font.Font(pygame.font.get_default_font(), 40)
     #Variáveis para pausar o jogo
     RODANDO = 0
@@ -200,16 +200,9 @@ def tela_jogo():
     
     while True:
         if cf.morreu == False:
-            jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro)
+            jogar(cf.tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro)
         elif cf.morreu == True:
-            tela_de_morte(tela, relogio)
-
-#Criada uma variável (objeto) e a função cria uma janela
-tela = pygame.display.set_mode((cf.LARGURA, cf.ALTURA))
-#Este comando insere um nome ao jogo
-pygame.display.set_caption('jogo_de_carro') 
-pygame_icon = pygame.image.load(os.path.join(cf.diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
-pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
+            tela_de_morte(cf.tela, relogio)
 
 try:
     tela_jogo()
