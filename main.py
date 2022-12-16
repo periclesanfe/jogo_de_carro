@@ -12,7 +12,7 @@ def aumentar_contador(contador):
     return contador + 1 
 
 
-def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
+def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro, car):
 
     contador = 0
     cf.musica_partida = pygame.mixer.music.play()
@@ -65,7 +65,7 @@ def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro):
                         contador = aumentar_contador(contador)
                         carro.movimento()
                 if event.key == K_d:
-                    if cf.arro_pos_x == 755:
+                    if cf.carro_pos_x == 755:
                         pass
                     else:
                         cf.carro_pos_x = cf.carro_pos_x + 100
@@ -171,7 +171,8 @@ def tela_jogo():
     relogio = pygame.time.Clock() 
     todas_as_sprites = pygame.sprite.Group() #Este comando vai auxiliar, quando formos adicionar o carrinho na tela
     carro = cl.Carro()
-    todas_as_sprites.add(carro)
+    car = cl.Car()
+    todas_as_sprites.add(carro, car)
 
     rua = pygame.image.load(os.path.join(cf.diretorio_imagens, 'road.png'))
     rua = pygame.transform.scale(rua, ((cf.LARGURA-300, int(cf.ALTURA*5.36))))
@@ -186,7 +187,7 @@ def tela_jogo():
     
     while True:
         if cf.morreu == False:
-            jogar(cf.tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro)
+            jogar(cf.tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro, car)
         elif cf.morreu == True:
             tela_de_morte(cf.tela, relogio)
 

@@ -17,6 +17,8 @@ fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
+car_pos_x = 355
+car_pos_y = 556
 rua_numero = 0
 
 
