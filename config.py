@@ -1,5 +1,6 @@
 import pygame
 import os
+import random
 
 #Este comando inicializa as funções e variáveis da biblioteca pygame
 pygame.init()
@@ -12,13 +13,13 @@ BRANCO = (255,255,255)
 CINZA = (100,100,100)
 PRETO = (0,0,0)
 RUA_IMG = 'road.png'
-FPS = 60
+FPS = 10
 fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
-car_pos_x = 355
-car_pos_y = 556
+car_pos_x = 555
+car_pos_y = -120
 rua_numero = 0
 
 

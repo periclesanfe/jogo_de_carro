@@ -4,7 +4,8 @@ from pygame.locals import *   #Importa todas as funções e as constantes existe
 from sys import exit          #Essa função dentro do módulo sys torna possível fechar a janela
 import os
 import config as cf
-import classes as cl
+import carro_player as cp
+import carro_obstaculo as co
 import defs 
 
 
@@ -12,7 +13,7 @@ def aumentar_contador(contador):
     return contador + 1 
 
 
-def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro, car):
+def jogar(tela, relogio, player, rua, rua_rect, rua_rect2, carro, obstaculos):
 
     contador = 0
     cf.musica_partida = pygame.mixer.music.play()
@@ -27,7 +28,8 @@ def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro, car)
         quadro_de_pontuacao = cf.fonte.render(pontuacao, True, cf.BRANCO, cf.PRETO)
         """tela__de_pause = fonte.render('Aperte P para Continuar', False, PRETO, BRANCO)"""
 
-        todas_as_sprites.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
+        player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
+        obstaculos.update()
 
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
@@ -133,23 +135,24 @@ def jogar(tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro, car)
                 cf.rua_numero = 1
             else:
                 tela.blit(rua, rua_rect)
-                rua_rect.y += cf.FPS//16
+                rua_rect.y += cf.FPS//6
         else:
             if rua_rect2.topleft[1] >= 0:
                 rua_rect2.bottomleft = (300, cf.ALTURA)
                 cf.rua_numero = 0
             else:
                 tela.blit(rua, rua_rect2)
-                rua_rect2.y += cf.FPS//16
+                rua_rect2.y += cf.FPS//6
 
         cf.tela.blit(quadro_de_pontuacao, (115,60))
-        todas_as_sprites.draw(tela) #Este comando auxilia na exibição das sprites na tela
+        player.draw(tela) #Este comando auxilia na exibição das sprites na tela
+        obstaculos.draw(tela)
 
         #Essa função atualiza a tela do jogo a cada interação
         pygame.display.flip()
 
 
-def tela_de_morte(tela, relogio):   
+def tela_de_morte(relogio):   
 
     while cf.morreu: 
         relogio.tick(cf.FPS*10)
@@ -169,25 +172,27 @@ def tela_de_morte(tela, relogio):
 def tela_jogo():
     #Este comando controla a velocidade do objeto na tela
     relogio = pygame.time.Clock() 
-    todas_as_sprites = pygame.sprite.Group() #Este comando vai auxiliar, quando formos adicionar o carrinho na tela
-    carro = cl.Carro()
-    car = cl.Car()
-    todas_as_sprites.add(carro, car)
+    player = pygame.sprite.Group() #Este comando vai auxiliar, quando formos adicionar o carrinho na tela
+    obstaculos = pygame.sprite.Group()
+    carro_player = cp.Carro_Player()
+    carro_obstaculo = co.Carro_Obstaculo()
+    player.add(carro_player)
+    obstaculos.add(carro_obstaculo)
 
     rua = pygame.image.load(os.path.join(cf.diretorio_imagens, 'road.png'))
     rua = pygame.transform.scale(rua, ((cf.LARGURA-300, int(cf.ALTURA*5.36))))
     rua_rect = rua.get_rect()
     rua_rect.bottomleft = (300, cf.ALTURA)
     rua_rect2 = rua_rect.copy()
-    fonte_pause = pygame.font.Font(pygame.font.get_default_font(), 40)
-    #Variáveis para pausar o jogo
+    """fonte_pause = pygame.font.Font(pygame.font.get_default_font(), 40)
+    Variáveis para pausar o jogo
     RODANDO = 0
     PAUSADO = 1
     jogo = RODANDO 
-    
+    """
     while True:
         if cf.morreu == False:
-            jogar(cf.tela, relogio, todas_as_sprites, rua, rua_rect, rua_rect2, carro, car)
+            jogar(cf.tela, relogio, player, rua, rua_rect, rua_rect2, carro_player, obstaculos)
         elif cf.morreu == True:
             tela_de_morte(cf.tela, relogio)
 
