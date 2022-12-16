@@ -155,10 +155,7 @@ def tela_de_morte(tela, relogio):
         relogio.tick(cf.FPS*10)
         cf.tela.fill(cf.BRANCO)
         cf.musica_partida = pygame.mixer.music.stop()
-        mensagem_morreu = f'Você morreu, aperte R para reiniciar'
-        tela_reiniciar = cf.fonte.render(mensagem_morreu, False, cf.PRETO)
-        tela_reiniciar.get_rect()
-        cf.tela.blit(tela_reiniciar, (75, 280))
+        cf.tela.blit(cf.tela_reiniciar, (75, 280))
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
