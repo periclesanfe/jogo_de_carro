@@ -49,3 +49,7 @@ tela = pygame.display.set_mode((LARGURA, ALTURA))
 pygame.display.set_caption('jogo_de_carro') 
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
+
+mensagem_morreu = f'Você morreu, aperte R para reiniciar'
+tela_reiniciar = fonte.render(mensagem_morreu, False, PRETO)
+tela_reiniciar.get_rect()
