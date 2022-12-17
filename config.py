@@ -1,6 +1,7 @@
 import pygame
 import os
-
+from random import randint
+from random import randrange
 
 pygame.init()
 
@@ -25,9 +26,9 @@ fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
-car_pos_x = 555
-car_pos_y_inicial = -120
-car_pos_y = -120
+car_pos_x = randrange(345,745, 105)
+car_pos_y_inicial = randint(-2000, -1000)
+car_pos_y = randint(-200, -120)
 rua_numero = 0
 relogio = pygame.time.Clock()
 missao = 'tempo'

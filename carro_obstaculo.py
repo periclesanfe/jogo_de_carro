@@ -2,7 +2,7 @@ import pygame
 import os
 import config as cf
 from random import randint
-
+from random import randrange
 
 class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
@@ -31,7 +31,7 @@ class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
         self.index_lista = 0
         self.image = self.imagens_carro_obstaculo[self.index_lista]
         self.rect = self.image.get_rect()
-        self.rect.center = (cf.car_pos_x, cf.car_pos_y)
+        self.rect.center = (cf.car_pos_x, cf.car_pos_y)         #randrange(345, 745, 105)                                          #(cf.car_pos_x, cf.car_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
 
 
@@ -44,9 +44,11 @@ class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
 
         cf.car_pos_y += cf.FPS//6
         if self.rect.y >= 880:
-            cf.car_pos_y = cf.car_pos_y_inicial
-        
-        self.rect.center = (cf.car_pos_x, cf.car_pos_y)
+            cf.car_pos_y = randint(-2000, -200)                                 #cf.car_pos_y_inicial
+            cf.car_pos_x = randrange(345, 745, 105)
+        #self.rect.y = 0
+        #self.rect.x = randrange(345, 745, 105)
+        self.rect.center = (cf.car_pos_x), (cf.car_pos_y)
 
         
 
