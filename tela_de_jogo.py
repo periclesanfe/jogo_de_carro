@@ -11,7 +11,7 @@ def jogar():
     player = pygame.sprite.Group() #GRUPOS
     obstaculos = pygame.sprite.Group()
     carro_player = cp.Carro_Player()
-    carro_obstaculo = co.Carro_Obstaculo()
+    carro_obstaculo = co.carro_Obstaculo()
     player.add(carro_player)
     obstaculos.add(carro_obstaculo)
 
