@@ -4,7 +4,7 @@ import config as cf
 from random import randint
 
 
-class carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
+class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
 
         escolha = randint(1, 6)

@@ -68,7 +68,6 @@ def tempo():
         cf.FPS = cf.FPS + (0.016*1.5)
 
 def missao():
-    print(cf.FPS)
     if cf.missao == 'tempo':
             cf.contador += 1
             tempo()
