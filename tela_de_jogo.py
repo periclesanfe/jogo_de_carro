@@ -4,6 +4,7 @@ from sys import exit
 import config as cf
 import carro_obstaculo as co
 import carro_player as cp
+import pedra_obstaculo as po
 import defs
 
 def jogar():
@@ -12,8 +13,10 @@ def jogar():
     obstaculos = pygame.sprite.Group()
     carro_player = cp.Carro_Player()
     carro_obstaculo = co.Carro_Obstaculo()
+    pedra_obstaculo = po.pedra_Obstaculo()
     player.add(carro_player)
     obstaculos.add(carro_obstaculo)
+    obstaculos.add(pedra_obstaculo)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
