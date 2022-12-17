@@ -5,6 +5,7 @@ import config as cf
 import carro_obstaculo as co
 import carro_player as cp
 import pedra_obstaculo as po
+import buraco_obstaculo as bo
 import defs
 
 def jogar():
@@ -14,9 +15,9 @@ def jogar():
     carro_player = cp.Carro_Player()
     carro_obstaculo = co.Carro_Obstaculo()
     pedra_obstaculo = po.pedra_Obstaculo()
+    buraco_obstaculo = bo.buraco_Obstaculo()
     player.add(carro_player)
-    obstaculos.add(carro_obstaculo)
-    obstaculos.add(pedra_obstaculo)
+    obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)

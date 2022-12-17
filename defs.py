@@ -57,6 +57,8 @@ def reiniciar_jogo():
     cf.car_pos_y = 556
     cf.pedra_pos_x = 555
     cf.pedra_pos_y = 556
+    cf.buraco_pos_x = 555
+    cf.buraco_pos_y = 556
     pygame.display.update()
 
 def tempo():
