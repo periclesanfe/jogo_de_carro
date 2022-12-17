@@ -1,12 +1,24 @@
 import pygame
 import os
 import config as cf
-
+from random import randint
 
 class carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
 
-        sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_red.png')).convert_alpha()
+        escolha = randint(1, 6)
+        if escolha == 1:
+            sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_yellow.png')).convert_alpha()
+        if escolha == 2:
+            sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_black.png')).convert_alpha()
+        if escolha == 3:
+            sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_blue.png')).convert_alpha()
+        if escolha == 4:
+            sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_pink.png')).convert_alpha()
+        if escolha == 5:
+            sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_red.png')).convert_alpha()
+        if escolha == 6:
+            sprite_carro_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_white.png')).convert_alpha()
         pygame.sprite.Sprite.__init__(self)
         self.imagens_carro_obstaculo = []
         for i in range(2):
