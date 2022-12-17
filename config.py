@@ -20,6 +20,7 @@ BRANCO = (255,255,255)
 CINZA = (100,100,100)
 PRETO = (0,0,0)
 RUA_IMG = 'road.png'
+VELOCIDADE = 10
 FPS = 10
 fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False

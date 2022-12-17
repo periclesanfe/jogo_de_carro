@@ -69,6 +69,7 @@ def tempo():
 
 def missao():
     print(cf.FPS)
+    print(cf.VELOCIDADE)
     if cf.missao == 'tempo':
             cf.contador += 1
             tempo()
@@ -81,5 +82,5 @@ def missao():
         pontuacao = '{:02d}'.format(cf.contador)
         quadro_de_pontuacao = cf.fonte.render(pontuacao, True, cf.BRANCO)
         if cf.contador % 10 == 0:
-            cf.FPS = cf.FPS + (0.016*1.5)
+            cf.VELOCIDADE = cf.VELOCIDADE + (0.016*1.5)
         cf.tela.blit(quadro_de_pontuacao, (135,60))
