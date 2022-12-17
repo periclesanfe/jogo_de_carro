@@ -56,3 +56,30 @@ def reiniciar_jogo():
     cf.car_pos_x = 300
     cf.car_pos_y = 556
     pygame.display.update()
+
+def tempo():
+    if cf.contador == 60:
+        cf.segundo += 1
+        cf.contador = 0
+        if cf.segundo == 60:
+            cf.segundo = 0
+            cf.minuto += 1
+    if (cf.segundo % 10) == 0:
+        cf.FPS = cf.FPS + (0.016*1.5)
+
+def missao():
+    print(cf.FPS)
+    if cf.missao == 'tempo':
+            cf.contador += 1
+            tempo()
+            pontuacao = '{:02d}:{:02d}'.format(cf.minuto, cf.segundo)
+            quadro_de_pontuacao = cf.fonte.render(pontuacao, True, cf.BRANCO)
+            cf.tela.blit(quadro_de_pontuacao, (100,60))
+
+    if cf.missao == 'moeda':
+        cf.tela.blit(cf.moeda, (80,60))
+        pontuacao = '{:02d}'.format(cf.contador)
+        quadro_de_pontuacao = cf.fonte.render(pontuacao, True, cf.BRANCO)
+        if cf.contador % 10 == 0:
+            cf.FPS = cf.FPS + (0.016*1.5)
+        cf.tela.blit(quadro_de_pontuacao, (135,60))

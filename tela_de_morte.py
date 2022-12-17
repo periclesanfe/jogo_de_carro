@@ -7,7 +7,7 @@ import defs
 def morto():   
 
     while cf.morreu: 
-        cf.relogio.tick(cf.FPS*10)
+        cf.relogio.tick(cf.FPS)
         cf.tela.fill(cf.BRANCO)
         cf.musica_partida = pygame.mixer.music.stop()
         cf.tela.blit(cf.tela_reiniciar, (75, 280))

@@ -8,16 +8,18 @@ import defs
 
 def jogar():
     defs.musica_partida()
-    player = pygame.sprite.Group() #GRUPOS
+    player = pygame.sprite.Group()
     obstaculos = pygame.sprite.Group()
     carro_player = cp.Carro_Player()
-    carro_obstaculo = co.carro_Obstaculo()
+    carro_obstaculo = co.Carro_Obstaculo()
     player.add(carro_player)
     obstaculos.add(carro_obstaculo)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
-        cf.relogio.tick(cf.FPS*5)
+        cf.relogio.tick(cf.FPS*6)
+
+        defs.missao()
 
 
         player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
@@ -42,56 +44,48 @@ def jogar():
                         pass
                     else:
                         cf.carro_pos_x = cf.carro_pos_x - 100
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_LEFT:
                     if cf.carro_pos_x == 355:
                         pass
                     else:
                         cf.carro_pos_x = cf.carro_pos_x - 100
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_d:
                     if cf.carro_pos_x == 755:
                         pass
                     else:
                         cf.carro_pos_x = cf.carro_pos_x + 100
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_RIGHT:
                     if cf.carro_pos_x == 755:
                         pass
                     else:
                         cf.carro_pos_x = cf.carro_pos_x + 100
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_w:
                     if cf.carro_pos_y == 76:
                         pass
                     else:
                         cf.carro_pos_y = cf.carro_pos_y - 120
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_UP:
                     if cf.carro_pos_y == 76:
                         pass
                     else:
                         cf.carro_pos_y = cf.carro_pos_y - 120
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_s:
                     if cf.carro_pos_y == 556:
                         pass
                     else:
                         cf.carro_pos_y = cf.carro_pos_y + 120
-                        cf.contador =+ 1
                         carro_player.movimento()
                 if event.key == K_DOWN:
                     if cf.carro_pos_y == 556:
                         pass
                     else:
                         cf.carro_pos_y = cf.carro_pos_y + 120
-                        cf.contador =+ 1
                         carro_player.movimento()
 
 
@@ -110,8 +104,7 @@ def jogar():
                 cf.tela.blit(cf.rua, cf.rua_rect2)
                 cf.rua_rect2.y += cf.FPS//6
 
-        cf.tela.blit(cf.quadro_de_pontuacao, (115,60))
+        
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
         obstaculos.draw(cf.tela)
         pygame.display.flip()  #Essa função atualiza a tela do jogo a cada interação
-

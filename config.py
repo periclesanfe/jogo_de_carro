@@ -1,7 +1,5 @@
 import pygame
 import os
-import carro_obstaculo as co
-import carro_player as cp
 
 
 pygame.init()
@@ -28,23 +26,20 @@ morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
 car_pos_x = 555
+car_pos_y_inicial = -120
 car_pos_y = -120
 rua_numero = 0
+relogio = pygame.time.Clock()
+missao = 'tempo'
 contador = 0
-relogio = pygame.time.Clock() 
-
-
-#MENSAGENS
-
-mensagem_morreu = f'Você morreu, aperte R para reiniciar'
-pontuacao = f'{str(contador).zfill(2)}'
-quadro_de_pontuacao = fonte.render(pontuacao, True, BRANCO, PRETO)
+segundo = 1
+minuto = 0
 
 
 #TELAS              
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
-
+mensagem_morreu = f'Você morreu, aperte R para reiniciar'
 tela_reiniciar = fonte.render(mensagem_morreu, False, PRETO)
 tela_reiniciar.get_rect()
 
@@ -60,3 +55,6 @@ rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
 rua_rect = rua.get_rect()
 rua_rect.bottomleft = (300, ALTURA)
 rua_rect2 = rua_rect.copy()
+sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
+moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
+moeda = pygame.transform.scale(moeda, (60, 46))
