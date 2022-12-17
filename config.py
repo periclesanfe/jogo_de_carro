@@ -21,6 +21,7 @@ CINZA = (100,100,100)
 PRETO = (0,0,0)
 RUA_IMG = 'road.png'
 FPS = 10
+VELOCIDADE = 10
 fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False
 carro_pos_x = 555

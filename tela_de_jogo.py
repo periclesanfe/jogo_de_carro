@@ -95,14 +95,14 @@ def jogar():
                 cf.rua_numero = 1
             else:
                 cf.tela.blit(cf.rua, cf.rua_rect)
-                cf.rua_rect.y += cf.FPS//6
+                cf.rua_rect.y += cf.VELOCIDADE//6
         else:
             if cf.rua_rect2.topleft[1] >= 0:
                 cf.rua_rect2.bottomleft = (300, cf.ALTURA)
                 cf.rua_numero = 0
             else:
                 cf.tela.blit(cf.rua, cf.rua_rect2)
-                cf.rua_rect2.y += cf.FPS//6
+                cf.rua_rect2.y += cf.VELOCIDADE//6
 
         
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
