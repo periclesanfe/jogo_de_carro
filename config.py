@@ -55,30 +55,8 @@ pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiç
 
 #SPRITES
 
-
-
 rua = pygame.image.load(os.path.join(diretorio_imagens, 'road.png')) #RUA
 rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
 rua_rect = rua.get_rect()
 rua_rect.bottomleft = (300, ALTURA)
 rua_rect2 = rua_rect.copy()
-
-
-# MÚSICAS
-
-pygame.mixer.init()
-
-musica_partida = pygame.mixer.music.load(os.path.join(diretorio_sons, 'audios_convertidos/musica_partida.mp3'))
-musica_partida = pygame.mixer.music.set_volume(0.25)
-
-musica_menu = pygame.mixer.music.load(os.path.join(diretorio_sons, 'audios_convertidos/musica_menu.mp3'))
-musica_menu = pygame.mixer.music.set_volume(0.25)
-
-colisao_buraco = pygame.mixer.music.load(os.path.join(diretorio_sons, 'audios_convertidos/colisao_buracos.wav'))
-colisao_buraco = pygame.mixer.music.set_volume(0.35)
-
-colisao_carros = pygame.mixer.music.load(os.path.join(diretorio_sons, 'audios_convertidos/colisao_carros.wav'))
-colisão_carros = pygame.mixer.music.set_volume(0.35)
-
-colisao_troncos = pygame.mixer.music.load(os.path.join(diretorio_sons, 'audios_convertidos/colisao_troncos.wav'))
-colisao_troncos = pygame.mixer.music.set_volume(0.35)  
