@@ -6,19 +6,22 @@ import carro_obstaculo as co
 import carro_player as cp
 import pedra_obstaculo as po
 import buraco_obstaculo as bo
+import moeda_recompensa as mr
 import defs
 
 def jogar():
     defs.musica_partida()
     player = pygame.sprite.Group()
     obstaculos = pygame.sprite.Group()
+    recompensa = pygame.sprite.Group()
     carro_player = cp.Carro_Player()
     carro_obstaculo = co.Carro_Obstaculo()
     pedra_obstaculo = po.pedra_Obstaculo()
     buraco_obstaculo = bo.buraco_Obstaculo()
+    moeda_recompensa = mr.moeda_Recompensa()
     player.add(carro_player)
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo)
-
+    recompensa.add(moeda_recompensa)
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
         cf.relogio.tick(cf.FPS*6)
@@ -28,7 +31,7 @@ def jogar():
 
         player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
         obstaculos.update()
-
+        recompensa.update()
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
             
@@ -111,4 +114,5 @@ def jogar():
         
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
         obstaculos.draw(cf.tela)
+        recompensa.draw(cf.tela)
         pygame.display.flip()  #Essa função atualiza a tela do jogo a cada interação
