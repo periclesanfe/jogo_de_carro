@@ -44,13 +44,9 @@ class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
 
         cf.car_pos_y += cf.FPS//6
         if self.rect.y >= 880:
-            cf.car_pos_y = randint(-2000, -200)                                 #cf.car_pos_y_inicial
+            cf.car_pos_y = randint(-600, -200)                                 #cf.car_pos_y_inicial
             cf.car_pos_x = randrange(345, 745, 105)
         #self.rect.y = 0
         #self.rect.x = randrange(345, 745, 105)
         self.rect.center = (cf.car_pos_x), (cf.car_pos_y)
-
         
-
-
-        #3.9 #7.5
