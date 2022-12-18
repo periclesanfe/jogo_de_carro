@@ -37,7 +37,7 @@ def colisao_troncos():
 def aceleracao_carro():
     aceleracao_carro = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'aceleracao_carro.wav'))
     pygame.mixer.music.set_volume(0.35)
-    pygame.mixer.music.play(-1)
+    pygame.mixer.music.play(0)
 
 def som_moeda():
     som_moeda = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'som_moeda.wav'))

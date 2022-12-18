@@ -3,17 +3,21 @@ from pygame.locals import *
 from sys import exit
 import config as cf
 import carro_obstaculo as co
+import tronco_obstaculo as to
 import carro_player as cp
 import defs
 
 def jogar():
+    defs.aceleracao_carro()
     defs.musica_partida()
     player = pygame.sprite.Group()
     obstaculos = pygame.sprite.Group()
     carro_player = cp.Carro_Player()
     carro_obstaculo = co.Carro_Obstaculo()
+    tronco_obstaculo = to.Tronco()
     player.add(carro_player)
     obstaculos.add(carro_obstaculo)
+    obstaculos.add(tronco_obstaculo)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)

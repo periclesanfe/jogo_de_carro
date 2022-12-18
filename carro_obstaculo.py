@@ -1,7 +1,7 @@
 import pygame
 import os
 import config as cf
-from random import randint
+from random import randint 
 
 
 class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
@@ -47,8 +47,5 @@ class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
             cf.car_pos_y = cf.car_pos_y_inicial
         
         self.rect.center = (cf.car_pos_x, cf.car_pos_y)
-
-        
-
 
         #3.9 #7.5
