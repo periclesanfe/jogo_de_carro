@@ -20,13 +20,13 @@
 
 | **IN GAME:**                   | **INTERFACE:**                           |
 |--------------------------------|------------------------------------------|
-| - [ x ] Controle de Movimentação | - [ ] Informar Nick_Name                 |
-| - [ ] Colisão com obstáculos   | - [ ] Selecionar Modo de Jogo            |
-| - [ x ] Contador de Progresso    | - [ ] Selecionar dificuldade             |
-| - [ x ] Aceleração gradativa     | - [ ] Selecionar Skin do mapa e do carro |
-| - [ ] Mostrador de Ranking     | - [ x ] Fechar o jogo                      |
-| - [ ] Pause/Play               | - [ ] Configurações de volume            |
-| - [ x ] Restart Game/Menu        |                                          |
+| - [ x ] Controle de Movimentação | - [ x ] Restart Game/Menu              |
+| - [ ] Colisão com obstáculos   | - [ x ] Selecionar Modo de Jogo          |
+| - [ x ] Contador de Progresso  | - [ x ] Selecionar dificuldade           |
+| - [ x ] Aceleração gradativa   | - [ x ] Selecionar Skin do carro         |
+| - [ x ] Obstaculos aleatórios  | - [ x ] Fechar o jogo                    |
+| - [ x ] Menu Principal         | - [ ] Transformar em .exe                |
+
 
 ## DOWNLOAD:
 ![em_breve](https://img.shields.io/badge/-Em%20Breve-red)
