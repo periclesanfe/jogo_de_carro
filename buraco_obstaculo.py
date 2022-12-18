@@ -18,6 +18,6 @@ class buraco_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprit
     def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
         cf.buraco_pos_y += cf.FPS//6
         if self.rect.y >= 880:
-            cf.buraco_pos_y = randint(-450, -300)                                 
+            cf.buraco_pos_y = randint(-950, -750)                                 
             cf.buraco_pos_x = randrange(355, 755, 100)
         self.rect.center = (cf.buraco_pos_x), (cf.buraco_pos_y)
