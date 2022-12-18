@@ -86,15 +86,15 @@ def missao():
         cf.tela.blit(quadro_de_pontuacao, (135,60))
 
 def menu_skin():
-    if cf.escolha == 0:
+    if cf.escolha_skin == 0:
         return cf.carro_amarelo_cortado
-    elif cf.escolha == 1:
+    elif cf.escolha_skin == 1:
         return cf.carro_preto_cortado
-    elif cf.escolha == 2:
+    elif cf.escolha_skin == 2:
         return cf.carro_azul_cortado
-    elif cf.escolha == 3:
+    elif cf.escolha_skin == 3:
         return cf.carro_rosa_cortado
-    elif cf.escolha == 4:
+    elif cf.escolha_skin == 4:
         return cf.carro_vermelho_cortado
-    elif cf.escolha == 5:
+    elif cf.escolha_skin == 5:
         return cf.carro_branco_cortado

@@ -3,7 +3,8 @@ import pygame
 import config as cf
 import tela_de_jogo
 import menu_skins
-import carro_player as cp
+import menu_dificuldades
+import menu_modo
 from pygame.locals import *
 from sys import exit
 import defs
@@ -19,15 +20,16 @@ def menu():
         skin = defs.menu_skin()
         skin = pygame.transform.scale(skin, (100,70))
         
+        
         pos_mouse_telaAviso = pygame.mouse.get_pos()
 
         botao_jogar= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 120), 
-                                text_input="JOGAR", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=70)
+                                text_input="JOGAR", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=80)
         botao_skin= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 220), 
                                 text_input="SKIN   ", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=90)
-        botao_Modo_Jogo= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 320), 
+        botao_Modo_Jogo= botao(image=cf.image_botao, pos=((cf.LARGURA//2), 320), 
                                 text_input="MODO DE JOGO", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=400, size_y=80)
-        botao_dificuldade= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 420), 
+        botao_dificuldade= botao(image=cf.image_botao, pos=((cf.LARGURA//2), 420), 
                                 text_input="DIFICULDADE", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=340, size_y=80)
         botao_Sair= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 520), 
                                 text_input="SAIR", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=80)
@@ -38,10 +40,10 @@ def menu():
         for button in [botao_skin]:
             button.changeColor(pos_mouse_telaAviso)
             button.update(cf.tela)
-        for button in [botao_dificuldade]:
+        for button in [botao_Modo_Jogo]:
             button.changeColor(pos_mouse_telaAviso)
             button.update(cf.tela)
-        for button in [botao_Modo_Jogo]:
+        for button in [botao_dificuldade]:
             button.changeColor(pos_mouse_telaAviso)
             button.update(cf.tela)
         for button in [botao_Sair]:
@@ -58,11 +60,11 @@ def menu():
                     cf.morreu == False
                     tela_de_jogo.jogar()
                 if botao_skin.checkForInput(pos_mouse_telaAviso):
-                    cf.escolha = menu_skins.skin()
+                    cf.escolha_skin = menu_skins.skin()
                 if botao_dificuldade.checkForInput(pos_mouse_telaAviso):
-                    pass
+                    cf.dificuldade = menu_dificuldades.diciculdade()
                 if botao_Modo_Jogo.checkForInput(pos_mouse_telaAviso):
-                    pass
+                    cf.missao = menu_modo.modo_de_jogo()
                 if botao_Sair.checkForInput(pos_mouse_telaAviso):
                     pygame.quit()
                     exit()

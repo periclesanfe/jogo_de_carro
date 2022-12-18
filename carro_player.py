@@ -6,17 +6,17 @@ class Carro_Player(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do
    
     #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
     def __init__(self): 
-        if cf.escolha == 0:
+        if cf.escolha_skin == 0:
             sprite_carro_player = cf.carro_amarelo
-        if cf.escolha == 1:
+        if cf.escolha_skin == 1:
             sprite_carro_player = cf.carro_preto
-        if cf.escolha == 2:
+        if cf.escolha_skin == 2:
             sprite_carro_player = cf.carro_azul
-        if cf.escolha == 3:
+        if cf.escolha_skin == 3:
             sprite_carro_player = cf.carro_rosa
-        if cf.escolha == 4:
+        if cf.escolha_skin == 4:
             sprite_carro_player = cf.carro_vermelho
-        if cf.escolha == 5:
+        if cf.escolha_skin == 5:
             sprite_carro_player = cf.carro_branco
         pygame.sprite.Sprite.__init__(self)
         self.imagens_carro = []

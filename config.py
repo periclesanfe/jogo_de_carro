@@ -32,18 +32,38 @@ car_pos_y_inicial = -120
 car_pos_y = -120
 rua_numero = 0
 relogio = pygame.time.Clock()
-missao = 'tempo'
 contador = 0
 segundo = 1
 minuto = 0
-escolha = 0
+escolha_skin = 0
+modo_de_jogo = 0
+dificuldade = 0
+escolha_missao = 0
 
+if escolha_missao == 0:
+    missao = 'tempo'
+elif escolha_missao == 1:
+    missao = 'moeda'
+
+if dificuldade == 0:
+    nome_dificuldade = 'FACIL'
+elif dificuldade == 1:
+    nome_dificuldade = 'NORMAL'
+elif dificuldade == 2:
+    nome_dificuldade = 'DIFICIL'
+elif dificuldade == 3:
+    nome_dificuldade = 'INFINITO'
 
 
 #TELAS              
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
+
 mensagem_morreu = f'GAME OVER'
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
+tela_reiniciar.get_rect()
+
+
 tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
 tela_reiniciar.get_rect()
 
@@ -66,7 +86,7 @@ moeda = pygame.transform.scale(moeda, (60, 46))
 #BOTÃO
 
 image_botao = pygame.image.load(os.path.join(diretorio_imagens, "button.png")).convert_alpha()
-image_botao = pygame.transform.scale(image_botao, (300, 101))
+image_botao = pygame.transform.scale(image_botao, (300, 75))
 
 #CARROS
 carro_amarelo = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
