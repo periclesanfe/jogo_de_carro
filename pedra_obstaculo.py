@@ -18,6 +18,6 @@ class pedra_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
     def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
         cf.pedra_pos_y += cf.FPS//6
         if self.rect.y >= 880:
-            cf.pedra_pos_y = randint(-800, -400)                                 
+            cf.pedra_pos_y = randint(-700, -500)                                 
             cf.pedra_pos_x = randrange(360, 760, 100)
         self.rect.center = (cf.pedra_pos_x), (cf.pedra_pos_y)
