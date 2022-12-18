@@ -1,6 +1,8 @@
 import pygame
 import config as cf
 import os
+from random import randint
+from random import randrange
 
 pygame.mixer.init()
 
@@ -53,14 +55,16 @@ def reiniciar_jogo():
     cf.morreu = False
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
-    cf.car_pos_x = 300
-    cf.car_pos_y = 556
-    cf.pedra_pos_x = 555
-    cf.pedra_pos_y = 556
-    cf.buraco_pos_x = 555
-    cf.buraco_pos_y = 556
-    cf.moeda_pos_x = 555
-    cf.moeda_pos_y = 556
+    cf.car_pos_x = randrange(355, 555, 100)
+    cf.car_pos_y = randint(- 500, -200)
+    cf.pedra_pos_x = randrange(660, 760, 100)
+    cf.pedra_pos_y = randint(- 1400, - 1100)
+    cf.buraco_pos_x = randrange(355, 455, 100)
+    cf.buraco_pos_y = randint(- 1100, - 900)
+    cf.tronco_pos_x = randrange(660, 760, 100)
+    cf.tronco_pos_y = randint(- 800, - 400)
+    cf.moeda_pos_x = randrange(460, 560, 100)
+    cf.moeda_pos_y = randint(- 1500, 1250)
     pygame.display.update()
 
 def tempo():
