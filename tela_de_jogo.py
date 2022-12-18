@@ -16,8 +16,8 @@ def jogar():
     carro_obstaculo = co.Carro_Obstaculo()
     tronco_obstaculo = to.Tronco()
     player.add(carro_player)
-    obstaculos.add(carro_obstaculo)
-    obstaculos.add(tronco_obstaculo)
+    obstaculos.add(carro_obstaculo, tronco_obstaculo)
+    
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)

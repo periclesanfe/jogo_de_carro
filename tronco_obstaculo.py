@@ -4,33 +4,32 @@ import config as cf
 from random import randint
 from random import randrange #Biblioteca para sortear a posiçaõ em x do tronco
 
-sprite_tronco = pygame.image.load(os.path.join(cf.diretorio_imagens, 'tree_Trunk.png')).convert_alpha()
-
 class Tronco(pygame.sprite.Sprite):
-
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
+        self.sprite_tronco = pygame.image.load(os.path.join(cf.diretorio_imagens, 'tree_Trunk.png')).convert_alpha()
         self.imagens_tronco_obstaculo = []
-        for i in range(4):
-            img = sprite_tronco.subsurface((i*40,0), (40,32))
+        
+        for i in range (3):
+            img = self.sprite_tronco.subsurface((i*40,0), (40,32))
             img = pygame.transform.scale(img, (40*2.5, 32*2.5))
+            img = pygame.transform.flip(img, False, True)
             self.imagens_tronco_obstaculo.append(img)
 
-        self.index_lista = 0    
+        self.index_lista = 0
         self.image = self.imagens_tronco_obstaculo[self.index_lista]
         self.rect = self.image.get_rect()
-        self.rect.x = randrange(4, 575, 105)
-        self.rect.y = -115
-             
+        self.rect.center = (cf.car_pos_x, cf.car_pos_y)
+        self.mask = pygame.mask.from_surface(self.image)
 
-    def update(self): 
-        if self.index_lista > 3:
+    def update(self):
+        if self.index_lista > 1:
             self.index_lista = 0
         self.index_lista += 0.25
         self.image = self.imagens_tronco_obstaculo[int(self.index_lista)]
 
-        cf.car_pos_y += cf.FPS//5
-        if self.rect.topright[0] < 0:
-            self.rect.y = cf.LARGURA
-            self.rect.x = randrange(4, 575, 105)
-        self.rect.y -= 115
+        cf.tronco_pos_y += cf.FPS//5
+        if self.rect.y >= 800:
+            cf.tronco_pos_y = randint (-1000, - 1600)
+            cf.tronco_pos_x = randrange(100, 575, 105)
+        self.rect.center = (cf.tronco_pos_x), (cf.tronco_pos_y)

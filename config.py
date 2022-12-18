@@ -1,5 +1,7 @@
 import pygame
 import os
+from random import randrange
+from random import randint
 
 
 pygame.init()
@@ -28,6 +30,8 @@ carro_pos_y = 556
 car_pos_x = 555
 car_pos_y_inicial = -120
 car_pos_y = -120
+tronco_pos_x = randrange(100, 575, 105)
+tronco_pos_y = randint (-1000, -1600)
 rua_numero = 0
 relogio = pygame.time.Clock()
 missao = 'tempo'
