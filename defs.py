@@ -55,16 +55,16 @@ def reiniciar_jogo():
     cf.morreu = False
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
-    cf.car_pos_x = randrange(355, 555, 100)
-    cf.car_pos_y = randint(- 500, -200)
-    cf.pedra_pos_x = randrange(660, 760, 100)
-    cf.pedra_pos_y = randint(- 1400, - 1100)
-    cf.buraco_pos_x = randrange(355, 455, 100)
-    cf.buraco_pos_y = randint(- 1100, - 900)
-    cf.tronco_pos_x = randrange(660, 760, 100)
-    cf.tronco_pos_y = randint(- 800, - 400)
-    cf.moeda_pos_x = randrange(460, 560, 100)
-    cf.moeda_pos_y = randint(- 1500, 1250)
+    cf.car_pos_x = randrange(355, 755, 100)
+    cf.car_pos_y = randint(- 350, - 200)
+    cf.pedra_pos_x = randrange(360, 760, 100)
+    cf.pedra_pos_y = randint(- 1100, - 950)
+    cf.buraco_pos_x = randrange(355, 755, 100)
+    cf.buraco_pos_y = randint(- 890, - 750)
+    cf.tronco_pos_x = randrange(360, 760, 100)
+    cf.tronco_pos_y = randint(- 600, - 470)
+    cf.moeda_pos_x = randrange(360, 760, 100)
+    cf.moeda_pos_y = randint(- 3000, 2800)
     pygame.display.update()
 
 def tempo():

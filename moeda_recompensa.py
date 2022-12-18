@@ -22,7 +22,7 @@ class moeda_Recompensa(pygame.sprite.Sprite): #Este classe vai auxiliar na sprit
     def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
         cf.moeda_pos_y += cf.FPS//7
         if self.rect.y >= 880:
-            cf.moeda_pos_y = randint(-1600, 1350)                                 
+            cf.moeda_pos_y = randint(- 3000, - 2800)                                 
             cf.moeda_pos_x = randrange(360, 760, 100)
         self.rect.center = (cf.moeda_pos_x), (cf.moeda_pos_y)
         
