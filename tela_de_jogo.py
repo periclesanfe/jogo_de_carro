@@ -5,6 +5,7 @@ import config as cf
 import carro_obstaculo as co
 import carro_player as cp
 import defs
+import tela_de_morte
 
 def jogar():
     defs.musica_partida()
@@ -38,6 +39,7 @@ def jogar():
                 if event.key == K_r:
                     pygame.display.flip()
                     cf.morreu = True
+                    tela_de_morte.morto()
 
                 if event.key == K_a:
                     if cf.carro_pos_x <= 355:

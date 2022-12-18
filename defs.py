@@ -83,3 +83,17 @@ def missao():
         if cf.contador % 10 == 0:
             cf.VELOCIDADE = int(round(cf.VELOCIDADE + 0.2))
         cf.tela.blit(quadro_de_pontuacao, (135,60))
+
+def menu_skin():
+    if cf.escolha == 0:
+        return cf.carro_amarelo_cortado
+    elif cf.escolha == 1:
+        return cf.carro_preto_cortado
+    elif cf.escolha == 2:
+        return cf.carro_azul_cortado
+    elif cf.escolha == 3:
+        return cf.carro_rosa_cortado
+    elif cf.escolha == 4:
+        return cf.carro_vermelho_cortado
+    elif cf.escolha == 5:
+        return cf.carro_branco_cortado

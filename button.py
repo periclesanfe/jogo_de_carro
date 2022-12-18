@@ -1,6 +1,9 @@
+import pygame
+
 class botao():
-	def __init__(self, image, pos, text_input, font, base_color, hovering_color):
+	def __init__(self, image, pos, text_input, font, base_color, hovering_color, size_x, size_y):
 		self.image = image
+		self.image= pygame.transform.scale(self.image, (size_x, size_y))
 		self.x_pos = pos[0]
 		self.y_pos = pos[1]
 		self.font = font

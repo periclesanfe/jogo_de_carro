@@ -36,6 +36,7 @@ missao = 'tempo'
 contador = 0
 segundo = 1
 minuto = 0
+escolha = 0
 
 
 
@@ -43,7 +44,7 @@ minuto = 0
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 mensagem_morreu = f'GAME OVER'
-tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, PRETO)
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
 tela_reiniciar.get_rect()
 
 pygame.display.set_caption('jogo_de_carro') #Este comando insere um nome ao jogo
@@ -66,3 +67,22 @@ moeda = pygame.transform.scale(moeda, (60, 46))
 
 image_botao = pygame.image.load(os.path.join(diretorio_imagens, "button.png")).convert_alpha()
 image_botao = pygame.transform.scale(image_botao, (300, 101))
+
+#CARROS
+carro_amarelo = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
+carro_amarelo_cortado = carro_amarelo.subsurface((0, 0), (56, 40))
+
+carro_preto = pygame.image.load(os.path.join(diretorio_imagens, 'car_black.png')).convert_alpha()
+carro_preto_cortado = carro_preto.subsurface((0, 0), (56, 40))
+
+carro_azul = pygame.image.load(os.path.join(diretorio_imagens, 'car_blue.png')).convert_alpha()
+carro_azul_cortado = carro_azul.subsurface((0, 0), (56, 40))
+
+carro_rosa = pygame.image.load(os.path.join(diretorio_imagens, 'car_pink.png')).convert_alpha()
+carro_rosa_cortado = carro_rosa.subsurface((0, 0), (56, 40))
+
+carro_vermelho = pygame.image.load(os.path.join(diretorio_imagens, 'car_red.png')).convert_alpha()
+carro_vermelho_cortado = carro_vermelho.subsurface((0, 0), (56, 40))
+
+carro_branco = pygame.image.load(os.path.join(diretorio_imagens, 'car_white.png')).convert_alpha()
+carro_branco_cortado = carro_branco.subsurface((0, 0), (56, 40))
