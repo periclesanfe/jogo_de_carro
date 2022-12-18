@@ -16,4 +16,3 @@ try:
     tela_jogo()
 finally:
     pygame.quit()
-

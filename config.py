@@ -7,9 +7,9 @@ pygame.init()
 
 #DIRETÓRIOS
 
-diretorio_principal = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
-diretorio_imagens = os.path.join(diretorio_principal, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
-diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
+diretorio = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
+diretorio_imagens = os.path.join(diretorio, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
+diretorio_sons = os.path.join(diretorio, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
 
 
 #VARIÁVEIS GLOBAIS DO JOGO
@@ -22,7 +22,8 @@ PRETO = (0,0,0)
 RUA_IMG = 'road.png'
 FPS = 10
 VELOCIDADE = 10
-fonte = pygame.font.SysFont('arial', 40, True, False)
+fonte = pygame.font.SysFont('Arial', 40, True, False)
+fonte_game_over = pygame.font.SysFont('Times New Roman', 100, False, False)
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
@@ -37,11 +38,12 @@ segundo = 1
 minuto = 0
 
 
+
 #TELAS              
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
-mensagem_morreu = f'Você morreu, aperte R para reiniciar'
-tela_reiniciar = fonte.render(mensagem_morreu, False, PRETO)
+mensagem_morreu = f'GAME OVER'
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, PRETO)
 tela_reiniciar.get_rect()
 
 pygame.display.set_caption('jogo_de_carro') #Este comando insere um nome ao jogo
@@ -59,3 +61,8 @@ rua_rect2 = rua_rect.copy()
 sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
 moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
 moeda = pygame.transform.scale(moeda, (60, 46))
+
+#BOTÃO
+
+image_botao = pygame.image.load(os.path.join(diretorio_imagens, "button.png")).convert_alpha()
+image_botao = pygame.transform.scale(image_botao, (300, 101))

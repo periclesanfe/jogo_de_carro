@@ -59,7 +59,6 @@ def reiniciar_jogo():
     cf.VELOCAIDE = 10
 
 def tempo():
-    print(cf.VELOCIDADE, cf.FPS)
     if cf.contador == 60:
         cf.segundo += 1
         cf.contador = 0
