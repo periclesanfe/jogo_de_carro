@@ -2,6 +2,7 @@ import pygame
 from pygame.locals import *
 from sys import exit
 import config as cf
+import defs
 from button import botao
 import tela_de_jogo
 
@@ -25,8 +26,9 @@ def morto():
                 exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if botao_reiniciar.checkForInput(pos_mouse_telaAviso):
-                    cf.morreu = False
+                    defs.reiniciar_jogo()
                     tela_de_jogo.jogar()
+                    cf.morreu = False
 
         
         pygame.display.update()

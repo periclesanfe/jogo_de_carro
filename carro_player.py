@@ -29,7 +29,7 @@ class Carro_Player(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do
         self.index_lista = 0
         self.image = self.imagens_carro[self.index_lista]
         self.rect = self.image.get_rect()
-        self.rect.center = (555, 556)
+        self.rect.center = (cf.carro_pos_x, cf.carro_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
         self.movimentar = False
 

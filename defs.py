@@ -47,16 +47,17 @@ def som_moeda():
 
 #Essa função vai reiniciar os parâmetros do jogo
 def reiniciar_jogo():
-    global contador
-    contador = 0
+    cf.contador = 0
+    cf.segundo = 0
+    cf.minuto = 0
     cf.rua_numero = 0
     cf.morreu = False
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
     cf.car_pos_x = 300
     cf.car_pos_y = 556
-    pygame.display.update()
     cf.VELOCAIDE = 10
+    pygame.display.update()
 
 def tempo():
     if cf.contador == 60:
