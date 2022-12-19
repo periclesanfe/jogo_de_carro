@@ -25,6 +25,7 @@ def jogar():
     player.add(carro_player)
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
     recompensa.add(moeda_recompensa)
+
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
         cf.relogio.tick(cf.FPS*6)
@@ -49,7 +50,6 @@ def jogar():
                     pygame.display.flip()
                     cf.morreu = True
                     tela_de_morte.morto()
-
                 if event.key == K_a:
                     if cf.carro_pos_x <= 355:
                         pass
