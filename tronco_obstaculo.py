@@ -13,7 +13,6 @@ class Tronco_Obstaculo(pygame.sprite.Sprite):
         for i in range (4):
             img = self.sprite_tronco_obstaculo.subsurface((i*40,0), (40,32))
             img = pygame.transform.scale(img, (30*2.5, 32*2.5))
-            img = pygame.transform.flip(img, False, True)
             self.imagens_tronco_obstaculo.append(img)
 
         self.index_lista = 0

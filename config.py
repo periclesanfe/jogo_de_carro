@@ -22,6 +22,7 @@ CINZA = (100,100,100)
 PRETO = (0,0,0)
 RUA_IMG = 'road.png'
 FPS = 10
+VELOCIDADE = 10
 fonte = pygame.font.SysFont('arial', 40, True, False)
 morreu = False
 carro_pos_x = 555
@@ -38,18 +39,39 @@ moeda_pos_x = randrange(360, 760, 100)
 moeda_pos_y = randint(- 3000, - 2800)
 rua_numero = 0
 relogio = pygame.time.Clock()
-missao = 'tempo'
 contador = 0
 segundo = 1
 minuto = 0
+escolha_skin = 0
+modo_de_jogo = 0
+dificuldade = 0
+escolha_missao = 0
+
+if escolha_missao == 0:
+    missao = 'tempo'
+elif escolha_missao == 1:
+    missao = 'moeda'
+
+if dificuldade == 0:
+    nome_dificuldade = 'FACIL'
+elif dificuldade == 1:
+    nome_dificuldade = 'NORMAL'
+elif dificuldade == 2:
+    nome_dificuldade = 'DIFICIL'
+elif dificuldade == 3:
+    nome_dificuldade = 'INFINITO'
 
 
 #TELAS              
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
-mensagem_morreu = f'Você morreu, aperte R para reiniciar'
-tela_reiniciar = fonte.render(mensagem_morreu, False, PRETO)
+mensagem_morreu = f'GAME OVER'
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, PRETO)
 tela_reiniciar.get_rect()
+
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
+tela_reiniciar.get_rect()
+
 
 pygame.display.set_caption('jogo_de_carro') #Este comando insere um nome ao jogo
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
@@ -66,3 +88,28 @@ rua_rect2 = rua_rect.copy()
 sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
 moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
 moeda = pygame.transform.scale(moeda, (60, 46))
+
+#BOTÃO
+
+image_botao = pygame.image.load(os.path.join(diretorio_imagens, "button.png")).convert_alpha()
+image_botao = pygame.transform.scale(image_botao, (300, 75))
+
+#CARROS
+
+carro_amarelo = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
+carro_amarelo_cortado = carro_amarelo.subsurface((0, 0), (56, 40))
+
+carro_preto = pygame.image.load(os.path.join(diretorio_imagens, 'car_black.png')).convert_alpha()
+carro_preto_cortado = carro_preto.subsurface((0, 0), (56, 40))
+
+carro_azul = pygame.image.load(os.path.join(diretorio_imagens, 'car_blue.png')).convert_alpha()
+carro_azul_cortado = carro_azul.subsurface((0, 0), (56, 40))
+
+carro_rosa = pygame.image.load(os.path.join(diretorio_imagens, 'car_pink.png')).convert_alpha()
+carro_rosa_cortado = carro_rosa.subsurface((0, 0), (56, 40))
+
+carro_vermelho = pygame.image.load(os.path.join(diretorio_imagens, 'car_red.png')).convert_alpha()
+carro_vermelho_cortado = carro_vermelho.subsurface((0, 0), (56, 40))
+
+carro_branco = pygame.image.load(os.path.join(diretorio_imagens, 'car_white.png')).convert_alpha()
+carro_branco_cortado = carro_branco.subsurface((0, 0), (56, 40))
