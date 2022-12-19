@@ -8,9 +8,9 @@ pygame.init()
 
 #DIRETÓRIOS
 
-diretorio_principal = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
-diretorio_imagens = os.path.join(diretorio_principal, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
-diretorio_sons = os.path.join(diretorio_principal, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
+diretorio = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
+diretorio_imagens = os.path.join(diretorio, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
+diretorio_sons = os.path.join(diretorio, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
 
 
 #VARIÁVEIS GLOBAIS DO JOGO
@@ -23,7 +23,12 @@ PRETO = (0,0,0)
 RUA_IMG = 'road.png'
 FPS = 10
 VELOCIDADE = 10
+<<<<<<< HEAD
 fonte = pygame.font.SysFont('arial', 40, True, False)
+=======
+fonte = pygame.font.SysFont('Arial', 40, True, False)
+fonte_game_over = pygame.font.SysFont('Times New Roman', 100, False, False)
+>>>>>>> sprint_2
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
@@ -46,6 +51,7 @@ escolha_skin = 0
 modo_de_jogo = 0
 dificuldade = 0
 escolha_missao = 0
+<<<<<<< HEAD
 
 if escolha_missao == 0:
     missao = 'tempo'
@@ -60,13 +66,28 @@ elif dificuldade == 2:
     nome_dificuldade = 'DIFICIL'
 elif dificuldade == 3:
     nome_dificuldade = 'INFINITO'
+=======
+missao = ''
+
+
+>>>>>>> sprint_2
 
 
 #TELAS              
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
+<<<<<<< HEAD
 mensagem_morreu = f'GAME OVER'
 tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, PRETO)
+=======
+
+mensagem_morreu = f'GAME OVER'
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
+tela_reiniciar.get_rect()
+
+
+tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
+>>>>>>> sprint_2
 tela_reiniciar.get_rect()
 
 tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
@@ -95,7 +116,10 @@ image_botao = pygame.image.load(os.path.join(diretorio_imagens, "button.png")).c
 image_botao = pygame.transform.scale(image_botao, (300, 75))
 
 #CARROS
+<<<<<<< HEAD
 
+=======
+>>>>>>> sprint_2
 carro_amarelo = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
 carro_amarelo_cortado = carro_amarelo.subsurface((0, 0), (56, 40))
 

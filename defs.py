@@ -56,6 +56,7 @@ def reiniciar_jogo():
     cf.morreu = False
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
+<<<<<<< HEAD
     cf.car_pos_x = randrange(355, 755, 100)
     cf.car_pos_y = randint(- 350, - 200)
     cf.pedra_pos_x = randrange(360, 760, 100)
@@ -67,6 +68,11 @@ def reiniciar_jogo():
     cf.moeda_pos_x = randrange(360, 760, 100)
     cf.moeda_pos_y = randint(- 3000, 2800)
     cf.VELOCIDADE = 10
+=======
+    cf.car_pos_x = 300
+    cf.car_pos_y = 556
+    cf.VELOCAIDE = 10
+>>>>>>> sprint_2
     pygame.display.update()
 
 def tempo():
@@ -107,5 +113,9 @@ def menu_skin():
     elif cf.escolha_skin == 4:
         return cf.carro_vermelho_cortado
     elif cf.escolha_skin == 5:
+<<<<<<< HEAD
         return cf.carro_branco_cortado
 
+=======
+        return cf.carro_branco_cortado
+>>>>>>> sprint_2

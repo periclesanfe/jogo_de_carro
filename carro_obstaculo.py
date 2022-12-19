@@ -29,7 +29,11 @@ class Carro_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
         self.index_lista += 0.25
         self.image = self.imagens_carro_obstaculo[int(self.index_lista)]
 
+<<<<<<< HEAD
         cf.car_pos_y += cf.FPS//7
+=======
+        cf.car_pos_y += cf.VELOCIDADE//5
+>>>>>>> sprint_2
         if self.rect.y >= 880:
             cf.car_pos_y = randint(- 350, - 200)                                 
             cf.car_pos_x = randrange(355, 755, 100)

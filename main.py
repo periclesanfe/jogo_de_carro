@@ -64,7 +64,11 @@ def menu():
                 if botao_dificuldade.checkForInput(pos_mouse_telaAviso):
                     cf.dificuldade = menu_dificuldades.diciculdade()
                 if botao_Modo_Jogo.checkForInput(pos_mouse_telaAviso):
-                    cf.missao = menu_modo.modo_de_jogo()
+                    modo_de_jogo = menu_modo.modo_de_jogo()
+                    if modo_de_jogo == 0:
+                        cf.missao = 'tempo'
+                    elif modo_de_jogo == 1:
+                        cf.missao = 'moeda'
                 if botao_Sair.checkForInput(pos_mouse_telaAviso):
                     pygame.quit()
                     exit()

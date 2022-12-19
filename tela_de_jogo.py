@@ -9,6 +9,7 @@ import buraco_obstaculo as bo
 import tronco_obstaculo as to
 import moeda_recompensa as mr
 import defs
+import tela_de_morte
 
 def jogar():
     defs.musica_partida()
@@ -47,6 +48,7 @@ def jogar():
                 if event.key == K_r:
                     pygame.display.flip()
                     cf.morreu = True
+                    tela_de_morte.morto()
 
                 if event.key == K_a:
                     if cf.carro_pos_x <= 355:
@@ -104,14 +106,14 @@ def jogar():
                 cf.rua_numero = 1
             else:
                 cf.tela.blit(cf.rua, cf.rua_rect)
-                cf.rua_rect.y += cf.FPS//6
+                cf.rua_rect.y += cf.VELOCIDADE//6
         else:
             if cf.rua_rect2.topleft[1] >= 0:
                 cf.rua_rect2.bottomleft = (300, cf.ALTURA)
                 cf.rua_numero = 0
             else:
                 cf.tela.blit(cf.rua, cf.rua_rect2)
-                cf.rua_rect2.y += cf.FPS//6
+                cf.rua_rect2.y += cf.VELOCIDADE//6
 
         
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
