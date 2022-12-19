@@ -55,20 +55,20 @@ class Carro(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro 
         self.rect = self.image.get_rect()
         self.rect.center = (carro_pos_x, carro_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
-        #self.movimentar = False
+        self.movimentar = False
 
-    #def movimento(self): #Já esta função estará responsavel pela posição que o carro aparece na tela
-       # self.movimentar = True
+    def movimento(self): #Já esta função estará responsavel pela posição que o carro aparece na tela
+        self.movimentar = True
 
-    #def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
-        #if self.movimentar == True:
-            #self.movimentar = False
-            #Wself.rect.center = (carro_pos_x, carro_pos_y)
+    def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
+        if self.movimentar == True:
+            self.movimentar = False
+            self.rect.center = (carro_pos_x, carro_pos_y)
 
-       # if self.index_lista > 1:
-           # self.index_lista = 0
-        #self.index_lista += 0.25
-        #self.image = self.imagens_carro[int(self.index_lista)]
+        if self.index_lista > 1:
+            self.index_lista = 0
+        self.index_lista += 0.25
+        self.image = self.imagens_carro[int(self.index_lista)]
 
 
 class Rua(pygame.sprite.Sprite): #Esta classe vai auxiliar na imagem da tela
@@ -148,7 +148,7 @@ while True: #Esse laço de repetição vai auxiliar no botão de fechar a tela
     obstaculo_y = obstaculo_y + 10
     if obstaculo_vermelho.colliderect(carro):
         som_colisao.play()
-        pass
+        break
 
     obstaculo_verde = pygame.draw.rect(tela, (0, 255, 0), (obstaculo_pos_x, obstaculo_pos_y, 40, 50)) #Adicionando objeto quadrado
     while obstaculo_pos_y >= ALTURA:
@@ -157,7 +157,7 @@ while True: #Esse laço de repetição vai auxiliar no botão de fechar a tela
     obstaculo_pos_y = obstaculo_pos_y + 10
     if obstaculo_verde.colliderect(carro):
         som_colisao.play()
-        pass
+        break
 
 
 
