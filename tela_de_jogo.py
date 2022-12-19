@@ -39,7 +39,6 @@ def jogar():
         if carro_player.rect.colliderect(carro_obstaculo):
             print('BATEUUUUUUUUUUUUUUU')
             cf.morreu = True
-
         if carro_player.rect.colliderect(pedra_obstaculo):
             print('BATEUUUUUUUUUUUUUUU')
             cf.som_colisao.play()
