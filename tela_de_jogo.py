@@ -24,7 +24,6 @@ def jogar():
     moeda_recompensa = mr.moeda_Recompensa()
     player.add(carro_player)
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
-    recompensa.add(moeda_recompensa)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
@@ -36,6 +35,19 @@ def jogar():
         player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
         obstaculos.update()
         recompensa.update()
+
+        if carro_player.rect.colliderect(carro_obstaculo):
+            print('BATEUUUUUUUUUUUUUUU')
+            cf.morreu = True
+
+        if carro_player.rect.colliderect(pedra_obstaculo):
+            print('BATEUUUUUUUUUUUUUUU')
+            cf.som_colisao.play()
+
+        if carro_player.rect.colliderect(buraco_obstaculo):
+            print('BATEUUUUUUUUUUUUUUU')
+            defs.colisao_buraco()
+
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
             
