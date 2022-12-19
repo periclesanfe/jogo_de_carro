@@ -39,20 +39,9 @@ escolha_skin = 0
 modo_de_jogo = 0
 dificuldade = 0
 escolha_missao = 0
+missao = ''
 
-if escolha_missao == 0:
-    missao = 'tempo'
-elif escolha_missao == 1:
-    missao = 'moeda'
 
-if dificuldade == 0:
-    nome_dificuldade = 'FACIL'
-elif dificuldade == 1:
-    nome_dificuldade = 'NORMAL'
-elif dificuldade == 2:
-    nome_dificuldade = 'DIFICIL'
-elif dificuldade == 3:
-    nome_dificuldade = 'INFINITO'
 
 
 #TELAS              
