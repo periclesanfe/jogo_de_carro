@@ -26,6 +26,8 @@ VELOCIDADE = 10
 fonte = pygame.font.SysFont('Arial', 40, True, False)
 fonte_game_over = pygame.font.SysFont('Times New Roman', 100, False, False)
 
+jogando = False
+ganhou = False
 morreu = False
 carro_pos_x = 555
 carro_pos_y = 556
@@ -41,38 +43,34 @@ moeda_pos_x = 360
 moeda_pos_y = randint(- 3000, - 2800)
 rua_numero = 0
 relogio = pygame.time.Clock()
-contador = 0
+contador = 100
 segundo = 1
 minuto = 0
 escolha_skin = 0
 modo_de_jogo = 0
 dificuldade = 0
 escolha_missao = 0
-missao = ''
-
-
+missao = 'moeda'
 
 
 #TELAS              
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 
+
 mensagem_morreu = f'GAME OVER'
 tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
 tela_reiniciar.get_rect()
 
+mensagem_venceu = f'WINNER'
+tela_vitoria = fonte_game_over.render(mensagem_venceu, False, (218,165,32))
+tela_vitoria.get_rect()
 
-tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
-tela_reiniciar.get_rect()
-
-tela_reiniciar = fonte_game_over.render(mensagem_morreu, False, CINZA)
-tela_reiniciar.get_rect()
 
 
 pygame.display.set_caption('jogo_de_carro') #Este comando insere um nome ao jogo
 pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
-
 
 #SPRITES
 
@@ -81,9 +79,9 @@ rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
 rua_rect = rua.get_rect()
 rua_rect.bottomleft = (300, ALTURA)
 rua_rect2 = rua_rect.copy()
-#sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
-#moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
-#moeda = pygame.transform.scale(moeda, (60, 46))
+sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
+moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
+moeda = pygame.transform.scale(moeda, (60, 46))
 
 #BOTÃO
 

@@ -10,8 +10,7 @@ import tronco_obstaculo as to
 import moeda_coin as mc
 import defs
 import tela_de_morte
-
-
+import tela_vitoria
 
 def jogar():
     defs.musica_partida()
@@ -29,14 +28,12 @@ def jogar():
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
     coin.add(moeda_coin)
 
-   
 
-    while cf.morreu == False: 
+    while cf.morreu == False and cf.ganhou == False: 
         cf.tela.fill(cf.CINZA)
         cf.relogio.tick(cf.FPS*6)
 
         defs.missao()
-
 
         player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
         obstaculos.update()
@@ -110,10 +107,15 @@ def jogar():
                     else:
                         cf.carro_pos_y = cf.carro_pos_y + 120
                         carro_player.movimento()
+
         if pygame.sprite.spritecollide(carro_player, grupo_obstaculos, False,  pygame.sprite.collide_mask):
-            pass
-        elif pygame.sprite.spritecollide(carro_player, grupo_coin, True, pygame.sprite.collide_mask):
-            pass
+            cf.morreu = True
+        if pygame.sprite.spritecollide(carro_player, grupo_coin, True, pygame.sprite.collide_mask):
+            defs.moeda_contador()
+            if cf.contador == 100:
+                cf.ganhou = True
+
+
         if cf.rua_numero == 0:
             if cf.rua_rect.topleft[1] >= 0:
                 cf.rua_rect.bottomleft = (300, cf.ALTURA)

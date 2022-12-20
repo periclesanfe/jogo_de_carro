@@ -6,7 +6,7 @@ from random import randrange
 
 class moeda_coin(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
-        self.image = pygame.image.load(os.path.join(cf.diretorio_imagens, 'coin.png')).convert_alpha()
+        self.image = cf.sprite_moeda
         pygame.sprite.Sprite.__init__(self)
         self.imagens_moeda = []
         for i in range(6):

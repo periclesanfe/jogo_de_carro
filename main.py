@@ -2,6 +2,8 @@
 import pygame
 import config as cf
 import tela_de_jogo
+import tela_de_morte
+import tela_vitoria
 import menu_skins
 import menu_dificuldades
 import menu_modo
@@ -12,9 +14,10 @@ from button import botao
 
 
 def menu():
+    
     defs.musica_menu()
 
-    while True:
+    while cf.jogando == False:
         cf.tela.fill(cf.CINZA)
         cf.relogio.tick(cf.FPS)
         skin = defs.menu_skin()
@@ -26,7 +29,7 @@ def menu():
         botao_jogar= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 120), 
                                 text_input="JOGAR", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=80)
         botao_skin= botao(image=cf.image_botao, pos=(cf.LARGURA//2, 220), 
-                                text_input="SKIN   ", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=90)
+                                text_input="SKIN    ", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=240, size_y=90)
         botao_Modo_Jogo= botao(image=cf.image_botao, pos=((cf.LARGURA//2), 320), 
                                 text_input="MODO DE JOGO", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=400, size_y=80)
         botao_dificuldade= botao(image=cf.image_botao, pos=((cf.LARGURA//2), 420), 
@@ -57,7 +60,7 @@ def menu():
                 exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if botao_jogar.checkForInput(pos_mouse_telaAviso):
-                    cf.morreu == False
+                    cf.jogando == True
                     tela_de_jogo.jogar()
                 if botao_skin.checkForInput(pos_mouse_telaAviso):
                     cf.escolha_skin = menu_skins.skin()
@@ -78,6 +81,16 @@ def menu():
 
 
 try:
-    menu()
+    while True:
+        if cf.jogando:
+            if cf.ganhou:
+                tela_vitoria.vitoria()
+            elif cf.ganhou == False and cf.morreu == False:
+                tela_de_jogo.jogar()
+            elif cf.morreu:
+                tela_de_morte.morto()
+        if cf.jogando == False:
+            menu()
+    
 finally:
     pygame.quit()

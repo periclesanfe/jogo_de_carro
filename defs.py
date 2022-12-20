@@ -3,7 +3,6 @@ import config as cf
 import os
 from random import randint
 from random import randrange
-contador = 0
 
 pygame.mixer.init()
 
@@ -56,9 +55,9 @@ def som_moeda():
     pygame.mixer.music.play(-1)
 
 def moeda_contador():
-    contador + 1
+    cf.contador + 1
     som_moeda()
-    if contador // 5 == 0:
+    if cf.contador // 5 == 0:
         cf.VELOCIDADE = cf.VELOCIDADE + 0.05
 
 #Essa função vai reiniciar os parâmetros do jogo
@@ -81,6 +80,9 @@ def reiniciar_jogo():
     cf.moeda_pos_x = randrange(360, 760, 100)
     cf.moeda_pos_y = randint(- 3000, 2800)
     cf.VELOCIDADE = 10
+    cf.jogar = False
+    cf.ganhou = False
+    cf.morreu = False
     pygame.display.update()
 
 def tempo():
