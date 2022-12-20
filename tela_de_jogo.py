@@ -5,19 +5,28 @@ import config as cf
 import carro_obstaculo as co
 import tronco_obstaculo as to
 import carro_player as cp
+import pedra_obstaculo as po
+import buraco_obstaculo as bo
+import tronco_obstaculo as to
+import moeda_recompensa as mr
 import defs
+import tela_de_morte
 
 def jogar():
     defs.aceleracao_carro()
     defs.musica_partida()
     player = pygame.sprite.Group()
     obstaculos = pygame.sprite.Group()
+    recompensa = pygame.sprite.Group()
     carro_player = cp.Carro_Player()
     carro_obstaculo = co.Carro_Obstaculo()
-    tronco_obstaculo = to.Tronco()
+    pedra_obstaculo = po.pedra_Obstaculo()
+    buraco_obstaculo = bo.buraco_Obstaculo()
+    tronco_obstaculo = to.Tronco_Obstaculo()
+    moeda_recompensa = mr.moeda_Recompensa()
     player.add(carro_player)
-    obstaculos.add(carro_obstaculo, tronco_obstaculo)
-    
+    obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
+
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
@@ -28,6 +37,19 @@ def jogar():
 
         player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
         obstaculos.update()
+        recompensa.update()
+
+        if carro_player.rect.colliderect(carro_obstaculo):
+            print('BATEUUUUUUUUUUUUUUU')
+            cf.morreu = True
+
+        if carro_player.rect.colliderect(pedra_obstaculo):
+            print('BATEUUUUUUUUUUUUUUU')
+            cf.som_colisao.play()
+
+        if carro_player.rect.colliderect(buraco_obstaculo):
+            print('BATEUUUUUUUUUUUUUUU')
+            defs.colisao_buraco()
 
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
@@ -42,7 +64,7 @@ def jogar():
                 if event.key == K_r:
                     pygame.display.flip()
                     cf.morreu = True
-
+                    tela_de_morte.morto()
                 if event.key == K_a:
                     if cf.carro_pos_x <= 355:
                         pass
@@ -99,16 +121,17 @@ def jogar():
                 cf.rua_numero = 1
             else:
                 cf.tela.blit(cf.rua, cf.rua_rect)
-                cf.rua_rect.y += cf.FPS//6
+                cf.rua_rect.y += cf.VELOCIDADE//6
         else:
             if cf.rua_rect2.topleft[1] >= 0:
                 cf.rua_rect2.bottomleft = (300, cf.ALTURA)
                 cf.rua_numero = 0
             else:
                 cf.tela.blit(cf.rua, cf.rua_rect2)
-                cf.rua_rect2.y += cf.FPS//6
+                cf.rua_rect2.y += cf.VELOCIDADE//6
 
         
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
         obstaculos.draw(cf.tela)
+        recompensa.draw(cf.tela)
         pygame.display.flip()  #Essa função atualiza a tela do jogo a cada interação

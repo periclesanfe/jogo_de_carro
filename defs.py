@@ -1,6 +1,8 @@
 import pygame
 import config as cf
 import os
+from random import randint
+from random import randrange
 
 pygame.mixer.init()
 
@@ -47,14 +49,24 @@ def som_moeda():
 
 #Essa função vai reiniciar os parâmetros do jogo
 def reiniciar_jogo():
-    global contador
-    contador = 0
+    cf.contador = 0
+    cf.segundo = 0
+    cf.minuto = 0
     cf.rua_numero = 0
     cf.morreu = False
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
-    cf.car_pos_x = 300
-    cf.car_pos_y = 556
+    cf.car_pos_x = randrange(355, 755, 100)
+    cf.car_pos_y = randint(- 350, - 200)
+    cf.pedra_pos_x = randrange(360, 760, 100)
+    cf.pedra_pos_y = randint(- 1100, - 950)
+    cf.buraco_pos_x = randrange(355, 755, 100)
+    cf.buraco_pos_y = randint(- 890, - 750)
+    cf.tronco_pos_x = randrange(360, 760, 100)
+    cf.tronco_pos_y = randint(- 600, - 470)
+    cf.moeda_pos_x = randrange(360, 760, 100)
+    cf.moeda_pos_y = randint(- 3000, 2800)
+    cf.VELOCIDADE = 10
     pygame.display.update()
 
 def tempo():
@@ -65,7 +77,7 @@ def tempo():
             cf.segundo = 0
             cf.minuto += 1
     if (cf.segundo % 10) == 0:
-        cf.FPS = cf.FPS + (0.016*1.5)
+        cf.VELOCIDADE = cf.VELOCIDADE + 0.05
 
 def missao():
     if cf.missao == 'tempo':
@@ -80,5 +92,19 @@ def missao():
         pontuacao = '{:02d}'.format(cf.contador)
         quadro_de_pontuacao = cf.fonte.render(pontuacao, True, cf.BRANCO)
         if cf.contador % 10 == 0:
-            cf.FPS = cf.FPS + (0.016*1.5)
+            cf.VELOCIDADE = int(round(cf.VELOCIDADE + 0.2))
         cf.tela.blit(quadro_de_pontuacao, (135,60))
+
+def menu_skin():
+    if cf.escolha_skin == 0:
+        return cf.carro_amarelo_cortado
+    elif cf.escolha_skin == 1:
+        return cf.carro_preto_cortado
+    elif cf.escolha_skin == 2:
+        return cf.carro_azul_cortado
+    elif cf.escolha_skin == 3:
+        return cf.carro_rosa_cortado
+    elif cf.escolha_skin == 4:
+        return cf.carro_vermelho_cortado
+    elif cf.escolha_skin == 5:
+        return cf.carro_branco_cortado

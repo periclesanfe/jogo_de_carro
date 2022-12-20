@@ -6,21 +6,21 @@ class Carro_Player(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do
    
     #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
     def __init__(self): 
-        escolha = 5
-        if escolha == 0:
-            sprite_carro_player = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_yellow.png')).convert_alpha()
-        if escolha == 1:
-            sprite_carro_player = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_black.png')).convert_alpha()
-        if escolha == 2:
-            sprite_carro_player = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_blue.png')).convert_alpha()
-        if escolha == 3:
-            sprite_carro_player = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_pink.png')).convert_alpha()
-        if escolha == 4:
-            sprite_carro_player = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_red.png')).convert_alpha()
-        if escolha == 5:
-            sprite_carro_player = pygame.image.load(os.path.join(cf.diretorio_imagens, 'car_white.png')).convert_alpha()
+        if cf.escolha_skin == 0:
+            sprite_carro_player = cf.carro_amarelo
+        if cf.escolha_skin == 1:
+            sprite_carro_player = cf.carro_preto
+        if cf.escolha_skin == 2:
+            sprite_carro_player = cf.carro_azul
+        if cf.escolha_skin == 3:
+            sprite_carro_player = cf.carro_rosa
+        if cf.escolha_skin == 4:
+            sprite_carro_player = cf.carro_vermelho
+        if cf.escolha_skin == 5:
+            sprite_carro_player = cf.carro_branco
         pygame.sprite.Sprite.__init__(self)
         self.imagens_carro = []
+       
 
         for i in range(2):
             img = sprite_carro_player.subsurface((56*i, 0), (56, 40))
@@ -30,7 +30,7 @@ class Carro_Player(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do
         self.index_lista = 0
         self.image = self.imagens_carro[self.index_lista]
         self.rect = self.image.get_rect()
-        self.rect.center = (555, 556)
+        self.rect.center = (cf.carro_pos_x, cf.carro_pos_y)
         self.mask = pygame.mask.from_surface(self.image)
         self.movimentar = False
 
@@ -47,4 +47,4 @@ class Carro_Player(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do
         self.index_lista += 0.25
         self.image = self.imagens_carro[int(self.index_lista)]
 
-
+    
