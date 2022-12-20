@@ -21,7 +21,7 @@
 | **IN GAME:**                   | **INTERFACE:**                           |
 |--------------------------------|------------------------------------------|
 | - [ x ] Controle de Movimentação | - [ x ] Restart Game/Menu              |
-| - [ ] Colisão com obstáculos   | - [ x ] Selecionar Modo de Jogo          |
+| - [ x ] Colisão com obstáculos   | - [ x ] Selecionar Modo de Jogo          |
 | - [ x ] Contador de Progresso  | - [ x ] Selecionar dificuldade           |
 | - [ x ] Aceleração gradativa   | - [ x ] Selecionar Skin do carro         |
 | - [ x ] Obstaculos aleatórios  | - [ x ] Fechar o jogo                    |
