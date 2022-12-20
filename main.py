@@ -5,15 +5,11 @@ from pygame.locals import *
 from sys import exit
 import defs
 from button import botao
-import pygame
-from pygame.locals import *
-from sys import exit
 import obstaculo_carro as co
 import player_carro as cp
 import obstaculo_pedra as po
 import obstaculo_buraco as bo
 import obstaculo_tronco as to
-
 
 
 def menu():
