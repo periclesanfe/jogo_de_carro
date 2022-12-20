@@ -10,7 +10,7 @@ def morto():
     while cf.morreu: 
         cf.relogio.tick(cf.FPS)
         cf.tela.fill(cf.BRANCO)
-        cf.musica_partida = pygame.mixer.music.stop()
+        pygame.mixer.music.stop()
         cf.tela.blit(cf.tela_reiniciar, (100, 200))
         pos_mouse_telaAviso = pygame.mouse.get_pos()
         botao_reiniciar= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)+100), 

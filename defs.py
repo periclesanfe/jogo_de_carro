@@ -8,41 +8,49 @@ contador = 0
 pygame.mixer.init()
 
 def musica_partida():
+    pygame.mixer.music.stop()
     musica_partida = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'musica_partida.mp3'))
     pygame.mixer.music.set_volume(0.25)
     pygame.mixer.music.play(-1)
 
 def inicio_partida():
+    pygame.mixer.music.stop()
     inicio_partida = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'inicio_partida.wav'))
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
 
 def musica_menu():
+    pygame.mixer.music.stop()
     musica_menu = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'musica_menu.mp3'))
     pygame.mixer.music.set_volume(0.25)
     pygame.mixer.music.play(-1)
 
 def colisao_buraco():
+    pygame.mixer.music.stop()
     colisao_buraco = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'colisao_buracos.wav'))
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
 
 def colisao_carros():   
+    pygame.mixer.music.stop()
     colisao_carros = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'colisao_carros.wav'))
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
 
 def colisao_troncos():
+    pygame.mixer.music.stop()
     colisao_troncos = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'colisao_troncos.wav'))
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
 
 def aceleracao_carro():
+    pygame.mixer.music.stop()
     aceleracao_carro = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'aceleracao_carro.wav'))
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
 
 def som_moeda():
+    pygame.mixer.music.stop()
     som_moeda = pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'som_moeda.wav'))
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
