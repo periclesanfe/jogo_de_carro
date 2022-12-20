@@ -286,10 +286,9 @@ def jogar():
                         carro_player.movimento()
 
         if pygame.sprite.spritecollide(carro_player, grupo_obstaculos, False,  pygame.sprite.collide_mask):
-            """cf.som_colisao.play()
+            cf.som_colisao.play()
             pygame.time.wait(1000)
-            morto()"""
-            pass
+            morto()
 
 
         if cf.rua_numero == 0:
@@ -308,8 +307,6 @@ def jogar():
                 cf.rua_rect2.y += cf.VELOCIDADE//6
 
         
-        
-
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
         obstaculos.draw(cf.tela)
         cf.tela.blit(cf.quadro_de_pontuacao, (100,60))

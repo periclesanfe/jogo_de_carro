@@ -42,11 +42,11 @@ def reiniciar_jogo():
     cf.car_pos_x = randrange(355, 755, 100)
     cf.car_pos_y = choice((-70, -879))
     cf.pedra_pos_x = randrange(360, 760, 100)
-    cf.pedra_pos_y = choice((-179, -462))
+    cf.pedra_pos_y = choice((-179, -762))
     cf.buraco_pos_x = randrange(355, 755, 100)
-    cf.buraco_pos_y = choice((-339, -570)) 
+    cf.buraco_pos_y = choice((-139, -670)) 
     cf.tronco_pos_x = randrange(360, 760, 100)
-    cf.tronco_pos_y = choice((-243, -759))
+    cf.tronco_pos_y = choice((-243, -619))
     cf.VELOCIDADE = 10
     cf.jogar = False
     cf.ganhou = False
