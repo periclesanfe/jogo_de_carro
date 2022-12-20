@@ -1,8 +1,7 @@
 import pygame
 import os
 import config as cf
-from random import randint
-from random import randrange
+from random import randint, randrange, choice
 
 class buraco_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
@@ -17,7 +16,7 @@ class buraco_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprit
 
     def update(self): #Está tambem estará responsavel pela posição do carrinho na tela, aplicando condições especificas
         cf.buraco_pos_y += cf.VELOCIDADE//7
-        if self.rect.y >= 880:
-            cf.buraco_pos_y = randint(-890, -750)                                 
+        if self.rect.topright[1] > 644:
+            cf.tronco_pos_y = choice((-243, -619))
             cf.buraco_pos_x = randrange(355, 755, 100)
         self.rect.center = (cf.buraco_pos_x), (cf.buraco_pos_y)

@@ -5,15 +5,11 @@ from pygame.locals import *
 from sys import exit
 import defs
 from button import botao
-import pygame
-from pygame.locals import *
-from sys import exit
 import obstaculo_carro as co
 import player_carro as cp
 import obstaculo_pedra as po
 import obstaculo_buraco as bo
 import obstaculo_tronco as to
-
 
 
 def menu():
@@ -209,6 +205,7 @@ def jogar():
 
 
     player.add(carro_player)
+
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
 
 
@@ -310,8 +307,6 @@ def jogar():
                 cf.rua_rect2.y += cf.VELOCIDADE//6
 
         
-        
-
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
         obstaculos.draw(cf.tela)
         cf.tela.blit(cf.quadro_de_pontuacao, (100,60))
