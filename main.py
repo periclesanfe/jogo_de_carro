@@ -10,7 +10,7 @@ from pygame.locals import *
 from sys import exit
 import obstaculo_carro as co
 import player_carro as cp
-import obstaculo_moeda as po
+import obstaculo_pedra as po
 import obstaculo_buraco as bo
 import obstaculo_tronco as to
 
@@ -66,6 +66,7 @@ def menu():
                     cf.escolha_skin = menu_skin()
                 if botao_dificuldade.checkForInput(pos_mouse_telaAviso):
                     cf.dificuldade = diciculdade()
+                    defs.sett_dificuldade()
                 if botao_Sair.checkForInput(pos_mouse_telaAviso):
                     pygame.quit()
                     exit()
@@ -110,16 +111,16 @@ def diciculdade():
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if botao_facil.checkForInput(pos_mouse_telaAviso):
-                    return 1
+                    return 0
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if botao_normal.checkForInput(pos_mouse_telaAviso):
-                    return 2
+                    return 1
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if botao_Dificil.checkForInput(pos_mouse_telaAviso):
-                    return 3
+                    return 2
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if botao_Infinito.checkForInput(pos_mouse_telaAviso):
-                    return 0
+                    return 3
         
         pygame.display.flip()      
 
@@ -309,14 +310,25 @@ def jogar():
                 cf.rua_rect2.y += cf.VELOCIDADE//6
 
         
-        cf.contador += 1
-        defs.tempo()
         
-        cf.tela.blit(cf.quadro_de_pontuacao, (100,60))
 
         player.draw(cf.tela) #Este comando auxilia na exibição das sprites na tela
         obstaculos.draw(cf.tela)
+        cf.tela.blit(cf.quadro_de_pontuacao, (100,60))
         pygame.display.flip()  #Essa função atualiza a tela do jogo a cada interação
+        defs.tempo()
+
+        if cf.condicao_vitoria == 0:
+            if cf.minuto == 1 and cf.segundo == 30:
+                vitoria()
+        elif cf.condicao_vitoria == 1:
+            if cf.minuto == 3 and cf.segundo == 00:
+                vitoria()
+        elif cf.condicao_vitoria == 2:
+            if cf.minuto == 4 and cf.segundo == 30:
+                vitoria()
+        elif cf.condicao_vitoria == 3:
+            pass
 
 
 def vitoria():   
@@ -324,14 +336,14 @@ def vitoria():
         cf.relogio.tick(cf.FPS)
         cf.tela.fill(cf.BRANCO)
         pygame.mixer.music.stop()
-        cf.tela.blit(cf.tela_vitoria, (100, 160))
+        cf.tela.blit(cf.tela_vitoria, (220, 100))
         pos_mouse_telaAviso = pygame.mouse.get_pos()
-        botao_jogar= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)+100), 
-                                text_input="JOGAR NOVAMENTE", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=300, size_y=100)
-        botao_menu= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)+220), 
-                                text_input="MENU", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=300, size_y=100)
-        botao_sair= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)+320), 
-                                text_input="SAIR", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=300, size_y=100)
+        botao_jogar= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)), 
+                                text_input="JOGAR NOVAMENTE", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=500, size_y=100)
+        botao_menu= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)+110), 
+                                text_input="MENU", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=260, size_y=80)
+        botao_sair= botao(image=cf.image_botao, pos=(cf.LARGURA//2, (cf.ALTURA//2)+210), 
+                                text_input="SAIR", font=cf.fonte, base_color='Grey', hovering_color="Black", size_x=260, size_y=80)
 
         for button in [botao_jogar]:
                 button.changeColor(pos_mouse_telaAviso)

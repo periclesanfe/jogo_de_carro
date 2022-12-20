@@ -46,6 +46,9 @@ minuto = 0
 escolha_skin = 0
 modo_de_jogo = 0
 dificuldade = 0
+condicao_vitoria = 1
+pontuacao = ''
+quadro_de_pontuacao = fonte.render(pontuacao, True, BRANCO)
 
 
 
@@ -61,8 +64,7 @@ mensagem_venceu = f'WINNER'
 tela_vitoria = fonte_game_over.render(mensagem_venceu, False, (218,165,32))
 tela_vitoria.get_rect()
 
-pontuacao = '{:02d}:{:02d}'.format(minuto, segundo)
-quadro_de_pontuacao = fonte.render(pontuacao, True, BRANCO)
+
 
 #SONS
 

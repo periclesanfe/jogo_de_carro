@@ -55,6 +55,7 @@ def reiniciar_jogo():
     pygame.display.update()
 
 def tempo():
+    cf.contador += 1
     if cf.contador == 60:
         cf.segundo += 1
         cf.contador = 0
@@ -63,6 +64,21 @@ def tempo():
             cf.minuto += 1
     if (cf.segundo % 10) == 0:
         cf.VELOCIDADE = cf.VELOCIDADE + 0.05
+    cf.pontuacao = '{:02d}:{:02d}'.format(cf.minuto, cf.segundo)
+    cf.quadro_de_pontuacao = cf.fonte.render(cf.pontuacao, True, cf.BRANCO)
+    
+
+
+def sett_dificuldade():
+    if cf.dificuldade == 0:
+        cf.condicao_vitoria = 0
+    if cf.dificuldade == 1:
+        cf.condicao_vitoria = 1
+    if cf.dificuldade == 2:
+        cf.condicao_vitoria = 2
+    else:
+        cf.dificuldade = 3
+    
 
 
 def menu_skin():
