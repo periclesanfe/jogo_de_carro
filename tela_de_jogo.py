@@ -41,6 +41,7 @@ def jogar():
         player.update() #Este comando vai atualizar frequente comandos a tela, auxiliando na fluidez do jogo
         obstaculos.update()
         coin.update()
+
         grupo_obstaculos = pygame.sprite.Group()
         grupo_obstaculos.add(buraco_obstaculo, carro_obstaculo, pedra_obstaculo, tronco_obstaculo)
         grupo_coin = pygame.sprite.Group()
@@ -111,7 +112,7 @@ def jogar():
                         carro_player.movimento()
         if pygame.sprite.spritecollide(carro_player, grupo_obstaculos, False,  pygame.sprite.collide_mask):
             pass
-        if pygame.sprite.spritecollide(carro_player, moeda_coin, True, pygame.sprite.collide_mask):
+        elif pygame.sprite.spritecollide(carro_player, grupo_coin, True, pygame.sprite.collide_mask):
             pass
         if cf.rua_numero == 0:
             if cf.rua_rect.topleft[1] >= 0:
