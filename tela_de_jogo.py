@@ -44,12 +44,6 @@ def jogar():
         recompensa.update()
 
        
-        colisao = pygame.sprite.Group()
-        colisao.add(tronco_obstaculo)
-        bateu = pygame.sprite.spritecollide(carro_player, tronco_obstaculo, False, pygame.sprite.collide_circle)
-
-        if bateu:
-            break
       
         """"
         if carro_player.rect.colliderect(carro_obstaculo):
