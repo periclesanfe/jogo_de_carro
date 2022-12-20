@@ -28,16 +28,14 @@ fonte_game_over = pygame.font.SysFont('Times New Roman', 100, False, False)
 
 carro_pos_x = 555
 carro_pos_y = 556
-car_pos_x = 455
-car_pos_y = randint(- 350, - 200)
-pedra_pos_x = 660
-pedra_pos_y = randint(-1100, - 950)
-buraco_pos_x = 555
-buraco_pos_y = randint(- 890, - 750)
-tronco_pos_x = 760
-tronco_pos_y = randint(- 600, - 470)
-moeda_pos_x = 360
-moeda_pos_y = randint(- 3000, - 2800)
+car_pos_x = 0
+car_pos_y = 0
+pedra_pos_x = 0
+pedra_pos_y = 0
+buraco_pos_x = 0
+buraco_pos_y = 0 
+tronco_pos_x = 0
+tronco_pos_y = 0
 rua_numero = 0
 relogio = pygame.time.Clock()
 contador = 0
@@ -49,6 +47,7 @@ dificuldade = 0
 condicao_vitoria = 1
 pontuacao = ''
 quadro_de_pontuacao = fonte.render(pontuacao, True, BRANCO)
+escolha = 0
 
 
 

@@ -1,8 +1,7 @@
 import pygame
 import os
 import config as cf 
-from random import randint
-from random import randrange #Biblioteca para sortear a posiçaõ em x do tronco
+from random import randrange, choice
 
 class Tronco_Obstaculo(pygame.sprite.Sprite):
     def __init__(self):
@@ -28,7 +27,7 @@ class Tronco_Obstaculo(pygame.sprite.Sprite):
         self.image = self.imagens_tronco_obstaculo[int(self.index_lista)]
 
         cf.tronco_pos_y += cf.VELOCIDADE//7
-        if self.rect.y >= 800:
-            cf.tronco_pos_y = randint(-600, -470)
-            cf.tronco_pos_x = randrange(360, 760, 100)
+        if cf.tronco_pos_y >= 880:
+            cf.tronco_pos_y = choice((-150, -450))  
+            cf.tronco_pos_x = randrange(355, 755, 100)
         self.rect.center = (cf.tronco_pos_x), (cf.tronco_pos_y)

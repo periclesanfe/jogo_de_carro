@@ -205,6 +205,7 @@ def jogar():
 
 
     player.add(carro_player)
+    
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
 
 

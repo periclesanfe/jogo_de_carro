@@ -1,8 +1,7 @@
 import pygame
 import config as cf
 import os
-from random import randint
-from random import randrange
+from random import randrange, choice
 
 pygame.mixer.init()
 
@@ -41,13 +40,13 @@ def reiniciar_jogo():
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
     cf.car_pos_x = randrange(355, 755, 100)
-    cf.car_pos_y = randint(- 350, - 200)
+    cf.car_pos_y = choice((-300, -200))
     cf.pedra_pos_x = randrange(360, 760, 100)
-    cf.pedra_pos_y = randint(- 1100, - 950)
+    cf.pedra_pos_y = choice((-400, -500))
     cf.buraco_pos_x = randrange(355, 755, 100)
-    cf.buraco_pos_y = randint(- 890, - 750)
+    cf.buraco_pos_y = choice((-250, -350))
     cf.tronco_pos_x = randrange(360, 760, 100)
-    cf.tronco_pos_y = randint(- 600, - 470)
+    cf.tronco_pos_y = choice((-150, -450))
     cf.VELOCIDADE = 10
     cf.jogar = False
     cf.ganhou = False
