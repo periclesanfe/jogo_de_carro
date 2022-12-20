@@ -205,7 +205,7 @@ def jogar():
 
 
     player.add(carro_player)
-    
+
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
 
 
@@ -286,9 +286,10 @@ def jogar():
                         carro_player.movimento()
 
         if pygame.sprite.spritecollide(carro_player, grupo_obstaculos, False,  pygame.sprite.collide_mask):
-            cf.som_colisao.play()
+            """cf.som_colisao.play()
             pygame.time.wait(1000)
-            morto()
+            morto()"""
+            pass
 
 
         if cf.rua_numero == 0:
