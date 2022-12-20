@@ -11,6 +11,8 @@ import moeda_recompensa as mr
 import defs
 import tela_de_morte
 
+
+
 def jogar():
     defs.musica_partida()
     player = pygame.sprite.Group()
@@ -22,8 +24,13 @@ def jogar():
     buraco_obstaculo = bo.buraco_Obstaculo()
     tronco_obstaculo = to.Tronco_Obstaculo()
     moeda_recompensa = mr.moeda_Recompensa()
+    recompensa.add(moeda_recompensa)
     player.add(carro_player)
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
+   
+
+    #colisao = pygame.sprite.Group()
+    #colisao.add(carro_obstaculo)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
@@ -36,6 +43,15 @@ def jogar():
         obstaculos.update()
         recompensa.update()
 
+       
+        colisao = pygame.sprite.Group()
+        colisao.add(tronco_obstaculo)
+        bateu = pygame.sprite.spritecollide(carro_player, tronco_obstaculo, False, pygame.sprite.collide_circle)
+
+        if bateu:
+            break
+      
+        """"
         if carro_player.rect.colliderect(carro_obstaculo):
             print('BATEUUUUUUUUUUUUUUU')
             cf.morreu = True
@@ -46,7 +62,7 @@ def jogar():
         if carro_player.rect.colliderect(buraco_obstaculo):
             print('BATEUUUUUUUUUUUUUUU')
             defs.colisao_buraco()
-
+        """
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
             
