@@ -25,8 +25,13 @@ def jogar():
     tronco_obstaculo = to.Tronco_Obstaculo()
     moeda_recompensa = mr.moeda_Recompensa()
     player.add(carro_player)
+<<<<<<< HEAD
     obstaculos.add(carro_obstaculo,pedra_obstaculo, buraco_obstaculo, tronco_obstaculo)
 
+=======
+    obstaculos.add(carro_obstaculo)
+    obstaculos.add(tronco_obstaculo)
+>>>>>>> parent of d6a9c58 (atualizando variáveis do obstáculo)
 
     while cf.morreu == False: 
         cf.tela.fill(cf.CINZA)
