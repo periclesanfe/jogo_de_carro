@@ -27,7 +27,7 @@ class Tronco_Obstaculo(pygame.sprite.Sprite):
         self.index_lista += 0.25
         self.image = self.imagens_tronco_obstaculo[int(self.index_lista)]
 
-        cf.tronco_pos_y += cf.FPS//7
+        cf.tronco_pos_y += cf.VELOCIDADE//7
         if self.rect.y >= 800:
             cf.tronco_pos_y = randint(-600, -470)
             cf.tronco_pos_x = randrange(360, 760, 100)
