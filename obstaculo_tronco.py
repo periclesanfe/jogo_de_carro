@@ -28,6 +28,6 @@ class Tronco_Obstaculo(pygame.sprite.Sprite):
 
         cf.tronco_pos_y += cf.VELOCIDADE//7
         if cf.tronco_pos_y >= 880:
-            cf.tronco_pos_y = choice((-150, -450))  
+            cf.tronco_pos_y = choice((-139, -479))  
             cf.tronco_pos_x = randrange(355, 755, 100)
         self.rect.center = (cf.tronco_pos_x), (cf.tronco_pos_y)
