@@ -4,11 +4,10 @@ import config as cf
 from random import randint
 from random import randrange
 
-class moeda_Recompensa(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
+class moeda_coin(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
         self.image = pygame.image.load(os.path.join(cf.diretorio_imagens, 'coin.png')).convert_alpha()
         pygame.sprite.Sprite.__init__(self)
-        #self.imagens_moeda_recompensa = []
         self.image = self.image.subsurface((56*4, 0), (56, 40))                            
         self.image = pygame.transform.scale(self.image, (90, 46)) 
         self.image = pygame.transform.flip(self.image, False, True)                                  

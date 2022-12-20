@@ -1,7 +1,6 @@
 import pygame
 import os
 from random import randint
-from random import randrange
 
 pygame.init()
 
@@ -82,9 +81,9 @@ rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
 rua_rect = rua.get_rect()
 rua_rect.bottomleft = (300, ALTURA)
 rua_rect2 = rua_rect.copy()
-sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
-moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
-moeda = pygame.transform.scale(moeda, (60, 46))
+#sprite_moeda = pygame.image.load(os.path.join(diretorio_imagens, 'coin.png')).convert_alpha()
+#moeda = sprite_moeda.subsurface((56*4, 0), (56, 40))
+#moeda = pygame.transform.scale(moeda, (60, 46))
 
 #BOTÃO
 
