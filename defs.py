@@ -46,6 +46,11 @@ def som_moeda():
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(-1)
 
+def contador():
+    contador + 1
+    som_moeda()
+    if contador // 5 == 0:
+        cf.VELOCIDADE = cf.VELOCIDADE + 0.05
 
 #Essa função vai reiniciar os parâmetros do jogo
 def reiniciar_jogo():
