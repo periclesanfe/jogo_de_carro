@@ -43,26 +43,9 @@ def jogar():
         obstaculos.update()
         recompensa.update()
 
-       
-        colisao = pygame.sprite.Group()
-        colisao.add(tronco_obstaculo)
-        bateu = pygame.sprite.spritecollide(carro_player, tronco_obstaculo, False, pygame.sprite.collide_circle)
-
-        if bateu:
-            break
-      
-        """"
-        if carro_player.rect.colliderect(carro_obstaculo):
-            print('BATEUUUUUUUUUUUUUUU')
-            cf.morreu = True
-        if carro_player.rect.colliderect(pedra_obstaculo):
-            print('BATEUUUUUUUUUUUUUUU')
-            cf.som_colisao.play()
-
-        if carro_player.rect.colliderect(buraco_obstaculo):
-            print('BATEUUUUUUUUUUUUUUU')
-            defs.colisao_buraco()
-        """
+        grupo_obstaculos = pygame.sprite.Group()
+        grupo_obstaculos.add(buraco_obstaculo, carro_obstaculo, pedra_obstaculo, tronco_obstaculo )
+        
         #Esse loop tem a função de verificar se um evento aconteceu
         for event in pygame.event.get():
             
@@ -125,7 +108,9 @@ def jogar():
                     else:
                         cf.carro_pos_y = cf.carro_pos_y + 120
                         carro_player.movimento()
-
+        colisoes = pygame.sprite.spritecollide(carro_player, grupo_obstaculos, False,  pygame.sprite.collide_mask)
+        if colisoes:
+            pass
 
         if cf.rua_numero == 0:
             if cf.rua_rect.topleft[1] >= 0:
