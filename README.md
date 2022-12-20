@@ -1,7 +1,7 @@
 # **Jogo De Carro**
 
 <p align="center">
-<img src="https://img.shields.io/badge/Versão-b%202.0-blue">
+<img src="https://img.shields.io/badge/Versão-a.1.0-green">
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 <p align="justify">Jogo de carro dos gêneros *Puzzle* ou *Endless Runner* (“Corrida interminável”) no qual o jogador precisa acelerar por uma pista com cinco faixas enquanto desvia de troncos, buracos, outros carros e outros obstáculos que surgem pelo caminho, ao mesmo tempo que tenta cumprir a missão da partida, sobrevivendo a maior quantidade de tempo possível disputando as melhores colocações do ranking, ou cumprir desafios que podem ser: coletar moedas, percorrer longas distâncias e sobreviver por tempo determinado, propostos no início da gameplay.</p>
 
 ## Status do Projeto:
-![status](https://img.shields.io/badge/-Sprint_2-brightgreen)
+![status](https://img.shields.io/badge/-FINALIZADO-brightgreen)
 
 ## Funcionalidades:
 
@@ -29,7 +29,7 @@
 
 
 ## DOWNLOAD:
-![em_breve](https://img.shields.io/badge/-Em%20Breve-red)
+![em_breve](https://img.shields.io/badge/-Em%20Breve-red) 
 
 ## Tecnologias Utilizadas:   
 
