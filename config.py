@@ -1,15 +1,7 @@
 import pygame
-import os
-from random import randint
 
 pygame.init()
 
-
-#DIRETÓRIOS
-
-diretorio = os.path.dirname(__file__)                   #Este diretório é o principal, trabalha com o arquivo em si
-diretorio_imagens = os.path.join(diretorio, 'sprites')  #Este diretório é responsavel pelas sprites do jogo
-diretorio_sons = os.path.join(diretorio, 'songs')       #Este diretório é responsavel pelos sons do jogo(game)
 
 
 #VARIÁVEIS GLOBAIS DO JOGO
@@ -67,16 +59,16 @@ tela_vitoria.get_rect()
 #SONS
 
 
-som_colisao = pygame.mixer.Sound(os.path.join(diretorio_sons, 'colisao_carros.wav'))
+som_colisao = pygame.mixer.Sound('./songs/colisao_carros.wav')
 som_colisao.set_volume(0.35)
 
 pygame.display.set_caption('jogo_de_carro') #Este comando insere um nome ao jogo
-pygame_icon = pygame.image.load(os.path.join(diretorio_imagens, 'icon.png')).convert_alpha() #Este comando auxilia na exibição do icone do jogo
+pygame_icon = pygame.image.load('./sprites/icon.png').convert_alpha() #Este comando auxilia na exibição do icone do jogo
 pygame.display.set_icon(pygame_icon) #Este comando também auxilia nesta exibiçao
 
 #SPRITES
 
-rua = pygame.image.load(os.path.join(diretorio_imagens, 'road.png')) #RUA
+rua = pygame.image.load('./sprites/road.png') #RUA
 rua = pygame.transform.scale(rua, ((LARGURA-300, int(ALTURA*5.36))))
 rua_rect = rua.get_rect()
 rua_rect.bottomleft = (300, ALTURA)
@@ -84,25 +76,25 @@ rua_rect2 = rua_rect.copy()
 
 #BOTÃO
 
-image_botao = pygame.image.load(os.path.join(diretorio_imagens, "button.png")).convert_alpha()
+image_botao = pygame.image.load("./sprites/button.png").convert_alpha()
 image_botao = pygame.transform.scale(image_botao, (300, 75))
 
 #CARROS
 
-carro_amarelo = pygame.image.load(os.path.join(diretorio_imagens, 'car_yellow.png')).convert_alpha()
+carro_amarelo = pygame.image.load('./sprites/car_yellow.png').convert_alpha()
 carro_amarelo_cortado = carro_amarelo.subsurface((0, 0), (56, 40))
 
-carro_preto = pygame.image.load(os.path.join(diretorio_imagens, 'car_black.png')).convert_alpha()
+carro_preto = pygame.image.load('./sprites/car_black.png').convert_alpha()
 carro_preto_cortado = carro_preto.subsurface((0, 0), (56, 40))
 
-carro_azul = pygame.image.load(os.path.join(diretorio_imagens, 'car_blue.png')).convert_alpha()
+carro_azul = pygame.image.load('./sprites/car_blue.png').convert_alpha()
 carro_azul_cortado = carro_azul.subsurface((0, 0), (56, 40))
 
-carro_rosa = pygame.image.load(os.path.join(diretorio_imagens, 'car_pink.png')).convert_alpha()
+carro_rosa = pygame.image.load('./sprites/car_pink.png').convert_alpha()
 carro_rosa_cortado = carro_rosa.subsurface((0, 0), (56, 40))
 
-carro_vermelho = pygame.image.load(os.path.join(diretorio_imagens, 'car_red.png')).convert_alpha()
+carro_vermelho = pygame.image.load('./sprites/car_red.png').convert_alpha()
 carro_vermelho_cortado = carro_vermelho.subsurface((0, 0), (56, 40))
 
-carro_branco = pygame.image.load(os.path.join(diretorio_imagens, 'car_white.png')).convert_alpha()
+carro_branco = pygame.image.load('./sprites/car_white.png').convert_alpha()
 carro_branco_cortado = carro_branco.subsurface((0, 0), (56, 40))

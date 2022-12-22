@@ -6,7 +6,7 @@ from random import randrange, choice
 class Tronco_Obstaculo(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
-        self.sprite_tronco_obstaculo = pygame.image.load(os.path.join(cf.diretorio_imagens, 'tree_Trunk.png')).convert_alpha()
+        self.sprite_tronco_obstaculo = pygame.image.load('./sprites/tree_Trunk.png').convert_alpha()
         self.imagens_tronco_obstaculo = []
         
         for i in range (4):
@@ -29,5 +29,5 @@ class Tronco_Obstaculo(pygame.sprite.Sprite):
         cf.tronco_pos_y += cf.VELOCIDADE//7
         if self.rect.topright[1] > 644:
             cf.tronco_pos_y = choice((-243, -759))  
-            cf.tronco_pos_x = randrange(355, 755, 100)
+            cf.tronco_pos_x = randrange(355, 855, 100)
         self.rect.center = (cf.tronco_pos_x), (cf.tronco_pos_y)

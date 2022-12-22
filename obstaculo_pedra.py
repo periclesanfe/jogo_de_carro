@@ -7,7 +7,7 @@ from random import randrange, choice
 class pedra_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite do carro na tela
     def __init__(self): #Esta função por completo trabalhará com a inserção do carrinho na tela, convertendo a imagem e a inserindo onde bem entender por meio das medidas dadas em comandos abaixo
         pygame.sprite.Sprite.__init__(self)
-        sprite_stone = pygame.image.load(os.path.join(cf.diretorio_imagens, 'stone.png')).convert_alpha()
+        sprite_stone = pygame.image.load('./sprites/stone.png').convert_alpha()
         self.image = sprite_stone.subsurface((0, 0), (46, 40))
         self.image = pygame.transform.scale(self.image, (90, 70))
         self.rect = self.image.get_rect()
@@ -20,5 +20,5 @@ class pedra_Obstaculo(pygame.sprite.Sprite): #Este classe vai auxiliar na sprite
         cf.pedra_pos_y += cf.VELOCIDADE//7
         if self.rect.topright[1] > 644:
             cf.pedra_pos_y = choice((-179, -762))
-            cf.pedra_pos_x = randrange(355, 755, 100)
+            cf.pedra_pos_x = randrange(355, 855, 100)
         self.rect.center = (cf.pedra_pos_x), (cf.pedra_pos_y)

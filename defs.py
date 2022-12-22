@@ -1,25 +1,24 @@
 import pygame
 import config as cf
-import os
 from random import randrange, choice
 
 pygame.mixer.init()
 
 def musica_partida():
     pygame.mixer.music.stop()
-    pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'musica_partida.mp3'))
+    pygame.mixer.music.load('./songs/musica_partida.mp3')
     pygame.mixer.music.set_volume(0.25)
     pygame.mixer.music.play(-1)
 
 def inicio_partida():
     pygame.mixer.music.stop()
-    pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'inicio_partida.wav'))
+    pygame.mixer.music.load('./songs/inicio_partida.wav')
     pygame.mixer.music.set_volume(0.35)
     pygame.mixer.music.play(1)
 
 def musica_menu():
     pygame.mixer.music.stop()
-    pygame.mixer.music.load(os.path.join(cf.diretorio_sons, 'musica_menu.mp3'))
+    pygame.mixer.music.load('./songs/musica_menu.mp3')
     pygame.mixer.music.set_volume(0.25)
     pygame.mixer.music.play(-1)
 
@@ -39,13 +38,13 @@ def reiniciar_jogo():
     cf.morreu = False
     cf.carro_pos_x = 555
     cf.carro_pos_y = 556
-    cf.car_pos_x = randrange(355, 755, 100)
+    cf.car_pos_x = randrange(355, 855, 100)
     cf.car_pos_y = choice((-70, -879))
-    cf.pedra_pos_x = randrange(360, 760, 100)
+    cf.pedra_pos_x = randrange(355, 855, 100)
     cf.pedra_pos_y = choice((-179, -762))
-    cf.buraco_pos_x = randrange(355, 755, 100)
+    cf.buraco_pos_x = randrange(355, 855, 100)
     cf.buraco_pos_y = choice((-139, -670)) 
-    cf.tronco_pos_x = randrange(360, 760, 100)
+    cf.tronco_pos_x = randrange(355, 855, 100)
     cf.tronco_pos_y = choice((-243, -619))
     cf.VELOCIDADE = 10
     cf.jogar = False
