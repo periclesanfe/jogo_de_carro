@@ -28,8 +28,8 @@
 | - [ x ] Menu Principal         | - [ x ] Transformar em .exe                |
 
 
-## DOWNLOAD:
-![em_breve](https://img.shields.io/badge/-Em%20Breve-red) 
+## ![download](https://img.shields.io/badge/-DOWNLOAD-red):
+<p> paça o download do arquivo no link: <a href='https://github.com/periclesanfe/jogo_de_carro/archive/refs/heads/main.zip'>AQUI</a></p>
 
 ## Tecnologias Utilizadas:   
 
