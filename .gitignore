@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Builds (PyInstaller, setuptools)
+build/
+dist/
+*.spec
+
+# Output of tools/screenshots.py (docs/media holds the curated copies)
+shots/
+
+# Review output written by tools/make_assets.py
+tools/contact_sheet.png
+tools/audio_waveforms.png
+
+.DS_Store

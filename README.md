@@ -1,94 +1,127 @@
-# **Jogo De Carro**
+# Jogo de Carro
+
+[![CI](https://github.com/periclesanfe/jogo_de_carro/actions/workflows/ci.yml/badge.svg)](https://github.com/periclesanfe/jogo_de_carro/actions/workflows/ci.yml)
+
+A pixel-art endless runner on a five-lane road: dodge traffic, stones, potholes and rolling logs, grab coins and survive until the clock runs out.
 
 <p align="center">
-<img src="https://img.shields.io/badge/Versão-Alpha_1.0-green">
+  <img src="docs/media/gameplay.gif" alt="Gameplay: the yellow car weaves between traffic, cones and stones on a five-lane road, collecting coins while near-miss popups build a x5 combo." width="640">
 </p>
+
+Originally a 2022 team project at IFAL (Instituto Federal de Alagoas), rebuilt in 2026 on Python 3.14 and pygame-ce with new art, synthesized music, tests and cross-platform releases. The UI is in Brazilian Portuguese.
+
+## Play
+
+**Download:** grab the zip for Windows, macOS (Apple Silicon) or Linux from [Releases](https://github.com/periclesanfe/jogo_de_carro/releases/latest), unzip it and run `jogo-de-carro` (`jogo-de-carro.app` on macOS). The builds are not code-signed, so the first launch needs *More info → Run anyway* on Windows. On macOS, open the app once, then allow it in *System Settings → Privacy & Security → Open Anyway* (or run `xattr -dr com.apple.quarantine jogo-de-carro.app`).
+
+**From source** (Python 3.12+, developed on 3.14; on Windows use `py` instead of `python3`):
+
+```bash
+git clone https://github.com/periclesanfe/jogo_de_carro.git
+cd jogo_de_carro
+python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e .
+jogo-de-carro                                       # or: python -m jogo_de_carro
+```
+
+## Controls
+
+| Action | Keyboard | Gamepad |
+| --- | --- | --- |
+| Change lane | `A` `D` / `←` `→` | Left stick / D-pad |
+| Move up and down | `W` `S` / `↑` `↓` (hold up for +15% score) | Left stick / D-pad |
+| Confirm | `Enter` / `Space` | A |
+| Back / pause | `Esc` / `P` | B / Start |
+| Give up the run | `R` | |
+| Mute / fullscreen | `M` / `F11` | |
+
+Menus also work with the mouse, and there is a clickable pause button in the race HUD.
+
+## Modes
+
+The four difficulties keep the win times of the 2022 version. Normal is the default.
+
+| Mode | Survive for | Road |
+| --- | --- | --- |
+| Fácil | 1:30 | Cars, stones, potholes and cones; vans and rolling logs later on; up to 2 lanes blocked per row |
+| Normal | 3:00 | Adds vans, rolling logs and trucks as the run goes on; up to 3 lanes blocked |
+| Difícil | 4:30 | Everything from the start, higher top speed; up to 4 lanes blocked |
+| Infinito | no limit | Speed keeps climbing; 4 lanes can be blocked after 2:00 |
+
+## Features
+
+- Six cars, each with a record of its own, picked on a turntable in the garage.
+- A spawner that always leaves a reachable free lane, sized for the lane-change time at the current speed and kept close to the lane you are in; a test checks 10,000 rows per mode with an independent solver.
+- Traffic that signals with a blinker before changing lanes, logs that roll across lanes, potholes that only hurt in the middle.
+- Coins, a shield that absorbs one hit, and near misses (dodging at the last moment) that build a combo up to x5.
+- Countdown, slow-motion crash with screen shake and sparks, a victory lap with confetti, pause with a blurred backdrop.
+- Best score per mode and per car saved as JSON in the user data folder; a corrupt save falls back to defaults.
+- Fixed-step simulation (120 Hz) inside an async main loop, so a web build with pygbag is possible later.
+
+## Screenshots
 
 <p align="center">
-<img src="https://github.com/periclesanfe/jogo_de_carro/blob/main/codigo/sprites/icon.png">
+  <img src="docs/media/title.png" alt="Title screen: the JOGO DE CARRO logo with a flaming tire over the road, menu with Jogar, Skin, Dificuldade and Sair." width="49%">
+  <img src="docs/media/race.png" alt="Race: a QUASE! near-miss popup next to the yellow car, the combo pill under the score, timer and speedometer." width="49%">
+  <img src="docs/media/garage.png" alt="Garage: the blue police car on a turntable between the other cars." width="49%">
+  <img src="docs/media/difficulty.png" alt="Difficulty cards for Fácil, Normal, Difícil and Infinito with goal time, speed and obstacle bars and the best score." width="49%">
+  <img src="docs/media/pause.png" alt="Pause menu with Continuar, Reiniciar and Menu over a blurred race." width="49%">
+  <img src="docs/media/results.png" alt="Victory screen: VOCÊ VENCEU!, time, distance, coins, near misses, score and NOVO RECORDE! with confetti around the card." width="49%">
 </p>
 
-##
-<p align="center">
-<img src="https://img.shields.io/badge/DESCRIÇÃO-blue">
-</p>
+## What changed in v2
 
-<p align="justify">Jogo de carro do gênero *Endless Runner* (“Corrida interminável”) no qual o jogador precisa acelerar por uma pista com cinco faixas enquanto desvia de troncos, buracos, outros carros e outros obstáculos que surgem pelo caminho, sobrevivendo a maior quantidade de tempo possível.</p>
+| | 2022 | 2026 |
+| --- | --- | --- |
+| Runtime | Python 3.10, Pygame 2.1.2 | Python 3.14, pygame-ce 2.5.8 |
+| Code | 806 lines, global state in `config.py`, screens that call each other recursively | A package with a scene stack, a fixed-step loop, no mutable globals, type hints |
+| Art and audio | Sprites drawn in Piskel, MP3 music | Pixel art, sound effects and music generated by `tools/make_assets.py`, keeping the six car colors and the flaming-tire icon |
+| Gameplay | Dodge obstacles, survival timer | Adds lane tweening, a fair spawner, coins, shield, near-miss combos, signalling traffic, countdown, pause, records, gamepad |
+| Quality | No tests | 43 pytest tests, Ruff, GitHub Actions |
+| Distribution | A ~110 MB Windows build committed to the repository | Zipped builds for Windows, macOS and Linux attached to each release |
 
-## 
-<p align="center">
-<img src="https://img.shields.io/badge/STATUS-FINALIZADO-yellow">
-</p>
+The 2022 code is still in the git history (up to commit `7f1a41b`).
 
-## 
-<p align="center">
-<img src="https://img.shields.io/badge/-FUNCIONALIDADES-cyan">
-</p>
+## Project structure
 
-<div align='center'>
-  
-| **IN GAME:**                   | **INTERFACE:**                           |
-|--------------------------------|------------------------------------------|
-| - [ x ] Controle de Movimentação | - [ x ] Restart Game/Menu              |
-| - [ x ] Colisão com obstáculos   | - [ x ] Selecionar Modo de Jogo          |
-| - [ x ] Contador de Progresso  | - [ x ] Selecionar dificuldade           |
-| - [ x ] Aceleração gradativa   | - [ x ] Selecionar Skin do carro         |
-| - [ x ] Obstaculos aleatórios  | - [ x ] Fechar o jogo                    |
-| - [ x ] Menu Principal         | - [ x ] Transformar em .exe                |
-</div>
+```
+src/jogo_de_carro/
+  app.py              Game: window, fixed-step async loop, global keys
+  settings.py         constants, asset manifest, difficulty presets
+  assets.py audio.py save.py input.py ui.py tween.py particles.py
+  scenes/             title, garage, difficulty, race, pause, results
+  world/              road, player, traffic, obstacles, pickups, spawner, scoring, autopilot
+  assets/             generated sprites, sounds and music (committed)
+  demo.py             scripted tour used for screenshots and the GIF
+tests/                spawner fairness, rules, assets, input, drivers, headless smoke test
+tools/
+  make_assets.py      deterministic generator for every sprite, sound and track
+  screenshots.py      renders the demo tour to PNGs
+  pyinstaller_entry.py
+.github/workflows/    ci.yml (lint and tests), release.yml (PyInstaller builds on v* tags)
+```
 
+## Development
 
-## 
-<p align="center">
-<img src="https://img.shields.io/badge/-DOWNLOAD-red">
-</p>
-<p>1º Faça o download do arquivo no link: <a href='https://github.com/periclesanfe/jogo_de_carro/archive/refs/heads/main.zip'>AQUI</a></p>
-<p>2º Descompactar o arquivo</p>
-<p>3º Dentro da pasta 'jogo de carro', execute o arquivo: 'jogo_de_carro.exe'</p>
+```bash
+pip install -e ".[dev]"
+pytest                              # runs headless; JOGO_STRICT_ASSETS=1 fails on any missing asset
+ruff check . && ruff format --check .
+python tools/make_assets.py         # regenerate every asset (same seed, same bytes)
+python tools/screenshots.py shots   # scripted demo: one PNG per scene plus GIF frames
+JOGO_AUTOPILOT=1 python -m jogo_de_carro   # watch the demo play itself
+```
 
-## 
-<p align="center">
-<img src="https://img.shields.io/badge/TUTORIAL-purple">
-</p>
+Set `JOGO_SAVE_DIR` to keep the save file somewhere other than the user data folder. Pushing a `v*` tag builds the three platforms and publishes the release.
 
-<div><br>
-<img src='https://img.shields.io/badge/-Controles-pink'>
-<p>- Movimentação acontece tanto em W,A,S,D quanto UP,RIGHT,LEFT,DOWN no teclado</p>
-<p>- A telca ESC fecha o jogo em qualquer tela</p>
-<p>- Na tela de jogo, a tecla R te direciona a tela de morte</p></div>
+## Credits
 
-<div><br>
-<img src='https://img.shields.io/badge/-Dificuldades-violet'> 
-<p>A DIFICULDADE PADRÃO, ao abrir o jogo, está como NORMAL</p>
-<p>- Na dificuldade FACIL, a condição de vitória é sobreviver por 1 minuto e 30 segundos.</p>
-<p>- Na dificuldade NORMAL, a condição de vitória é sobreviver por 3 minutos.</p>
-<p>- Na dificuldade DIFICIL, a condição de vitória é sobreviver por 4 minuto e 30 segundos.</p>
-<p>-  Na dificuldade INFINITO, não existe condição de vitória, o player vai testar suas skills até o limite.</p></div>
+The original 2022 game was made by:
 
-##  
-<p align="center">
-<img src="https://img.shields.io/badge/-TECNOLOGIAS-brown">
-</p>
+- [Adenilson Silva dos Santos](https://github.com/adenilson666)
+- [Eduardo Pedro da Silva](https://github.com/eduardopedro2)
+- [Erimaiken Batista dos Santos](https://github.com/M4iKen)
+- [Ingrid Mônica da Silva Bezerra](https://github.com/ingridmonica)
+- [Péricles Andrade Feitoza](https://github.com/periclesanfe)
 
-<div align='center'>
-<p>
-<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" height="100" width="100">
-<img src="https://www.pygame.org/ftp/pygame-head-party.png" height="100" width="100"><br>
-</p>
-
-![python_version](https://img.shields.io/badge/Python-3.10.8-blue)
-![pygame_version](https://img.shields.io/badge/Pygame-2.1.2-orange)<br>
-</div>
-  
-## 
-<p>
-<img src="https://img.shields.io/badge/-DESENVOLVEDORES-darkblue">
-</p>
-
-<p align='justify'>
-<a href='https://github.com/adenilson666'>Adenilson Silva dos Santos</a><br>
-<a href='https://github.com/eduardopedro2'>Eduardo Pedro da Silva</a><br>
-<a href='https://github.com/M4iKen'>Erimaiken Batista dos Santos</a><br>
-<a href='https://github.com/ingridmonica'>Ingrid Mônica da Silva Bezerra</a><br>
-<a href='https://github.com/periclesanfe'>Péricles Andrade Feitoza</a><br>
-</p>
+v2 modernization by Péricles Feitoza.

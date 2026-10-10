@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jogo-de-carro"
+version = "2.0.0"
+description = "Endless runner de carro em pixel art: 5 faixas, 6 carros, 4 dificuldades."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Adenilson Silva dos Santos" },
+    { name = "Eduardo Pedro da Silva" },
+    { name = "Erimaiken Batista dos Santos" },
+    { name = "Ingrid Mônica da Silva Bezerra" },
+    { name = "Péricles Andrade Feitoza" },
+]
+dependencies = ["pygame-ce>=2.5.8"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff==0.17.0"]  # pinned: CI enforces its formatter and rules
+
+[project.urls]
+Repository = "https://github.com/periclesanfe/jogo_de_carro"
+
+[project.scripts]
+jogo-de-carro = "jogo_de_carro.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+jogo_de_carro = ["assets/**/*.png", "assets/**/*.wav", "assets/*.png"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# Portuguese UI strings legitimately contain characters like "·" and "×".
+ignore = ["RUF001", "RUF002", "RUF003"]

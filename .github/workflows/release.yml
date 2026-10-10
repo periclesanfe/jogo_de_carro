@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: windows }
+          - { os: macos-latest, target: macos-apple-silicon }
+          # PyInstaller bundles need the build host's glibc or newer: build on the oldest supported Ubuntu
+          - { os: ubuntu-22.04, target: linux }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # Pillow only converts the icon into the .ico / .icns PyInstaller needs.
+      - run: python -m pip install . pyinstaller==6.22.3 pillow==12.3.0
+      - name: Icon
+        run: >
+          python -c "import pygame as p; i = p.image.load('src/jogo_de_carro/assets/icon.png');
+          p.image.save(p.transform.scale_by(i, 8), 'icon-512.png')"
+      - run: >
+          pyinstaller --noconfirm --windowed --name jogo-de-carro
+          --icon icon-512.png
+          --osx-bundle-identifier io.github.periclesanfe.jogodecarro
+          --collect-data jogo_de_carro
+          tools/pyinstaller_entry.py
+      - name: Zip
+        run: |
+          zip_name="jogo-de-carro-${GITHUB_REF_NAME}-${{ matrix.target }}.zip"
+          cd dist
+          case "$RUNNER_OS" in
+            macOS) ditto -c -k --keepParent jogo-de-carro.app "../$zip_name" ;;
+            Windows) 7z a "../$zip_name" jogo-de-carro ;;
+            *) zip -r "../$zip_name" jogo-de-carro ;;
+          esac
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-${{ matrix.target }}
+          path: jogo-de-carro-*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: build-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: jogo-de-carro-*.zip
+          generate_release_notes: true
