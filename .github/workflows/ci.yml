@@ -11,6 +11,12 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: "3.14"  # the desktop build
+          - python: "3.12.12"  # the web runtime (pygbag 0.9.3) and the server
+            pygame: pygame-ce==2.5.7
     env:
       SDL_VIDEODRIVER: dummy
       SDL_AUDIODRIVER: dummy
@@ -19,10 +25,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev]" ${{ matrix.pygame }}
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest

@@ -3,7 +3,7 @@
 import pygame
 
 from ..input import Action
-from ..settings import ACCENT, HEIGHT, MODES, MUTED, PANEL, WHITE, WIDTH, Difficulty
+from ..settings import ACCENT, HEIGHT, MODES, MUTED, PANEL, RANKED_CAP_S, WHITE, WIDTH, Difficulty
 from ..tween import approach
 from ..ui import blit_text, clock_text, glow, mix, outlined, panel
 from ..world.difficulty import blocked_cap
@@ -107,7 +107,7 @@ class DifficultyScene(MenuScene):
 
         x, y = rect.x + 22, header.bottom + 26
         blit_text(surface, "META", 24, (x, y - 2), MUTED, anchor="topleft", shadow=False)
-        goal = "SEM FIM" if mode.win_s is None else clock_text(mode.win_s)
+        goal = clock_text(mode.win_s or RANKED_CAP_S)  # Infinito ends at the run cap
         blit_text(surface, goal, 46, (x, y + 20), WHITE, anchor="topleft")
         self._bars(surface, "VELOCIDADE", _speed_bars(mode), 5, x, y + 80, mode.color)
         self._bars(surface, "OBSTÁCULOS", blocked_cap(mode, 1e9), 4, x, y + 130, mode.color)

@@ -18,14 +18,16 @@ from jogo_de_carro.settings import (
     Kind,
     kind_size,
 )
-from jogo_de_carro.world.difficulty import speed_at
+from jogo_de_carro.world.difficulty import speed_at, versus_rows
 from jogo_de_carro.world.spawner import EXIT_Y, LOOKAHEAD, ItemPlacement, Placement, Spawner
 
 ROWS = 10_000
 HALF_LEN = PLAYER_HITBOX[1] / 2
 
 
-def _run(mode, seed):
+def _run(mode, seed, shared=False):
+    if shared:  # as World(shared_road=True) builds it: rows spaced out, and no pull towards the player
+        mode = versus_rows(mode)
     spawner = Spawner(mode, random.Random(seed))
     distance = t = 0.0
     obstacles: list[tuple[Placement, float, float]] = []
@@ -38,7 +40,7 @@ def _run(mode, seed):
         t += 40.0 / v
         samples.append((distance, v))
         before = spawner.rows
-        player_lane = spawner.corridor_lane(distance)  # exercises the bias towards the player's lane
+        player_lane = None if shared else spawner.corridor_lane(distance)  # exercises the player bias
         for p in spawner.update(distance, t, v, player_lane):
             assert p.g > distance + LOOKAHEAD - 40.0, "everything appears above the top of the screen"
             if isinstance(p, Placement):
@@ -116,9 +118,10 @@ def _survivable_until(free, hop_len, end) -> float:
     return reach
 
 
+@pytest.mark.parametrize("shared", [False, True], ids=["solo", "shared"])
 @pytest.mark.parametrize("mode", MODES, ids=lambda m: m.key)
-def test_every_row_is_survivable(mode):
-    obstacles, items, samples, rows = _run(mode, seed=1234)
+def test_every_row_is_survivable(mode, shared):
+    obstacles, items, samples, rows = _run(mode, seed=1234, shared=shared)
     blocked = _blocked_by_lane(obstacles)
 
     # never all lanes blocked at a row centre

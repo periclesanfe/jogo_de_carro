@@ -21,7 +21,7 @@ from ..settings import (
     Kind,
 )
 from ..tween import approach
-from .difficulty import speed_at
+from .difficulty import speed_at, versus_rows
 from .obstacles import Obstacle, Trunk
 from .pickups import Pickup
 from .player import Player
@@ -66,15 +66,25 @@ class Controls:
 
 class World:
     def __init__(
-        self, assets: Assets, mode: Difficulty, skin: str, rng: random.Random, attract: bool = False
+        self,
+        assets: Assets,
+        mode: Difficulty,
+        skin: str,
+        rng: random.Random,
+        attract: bool = False,
+        shared_road: bool = False,  # the road ignores the player: same seed, same road for every driver
     ) -> None:
         self.assets = assets
         self.mode = mode
         self.rng = rng
         self.attract = attract
-        self.road = Road(assets, random.Random(rng.random()))
-        self.spawner = Spawner(mode, random.Random(rng.random()))
-        self.particles = Particles(random.Random(rng.random()))
+        self.shared_road = shared_road
+        # int sub-seeds: Random(float) seeds from hash(), which differs on 32-bit builds (the wasm)
+        self.road = Road(assets, random.Random(rng.getrandbits(64)))
+        if shared_road:
+            mode = versus_rows(mode)
+        self.spawner = Spawner(mode, random.Random(rng.getrandbits(64)))
+        self.particles = Particles(random.Random(rng.getrandbits(64)))
         self.player = Player(assets, skin)
         self.obstacles: list[Obstacle] = []
         self.pickups: list[Pickup] = []
@@ -102,7 +112,8 @@ class World:
                 self.speed = min(target, self.speed + self.mode.base_speed / START_RAMP_S * dt)
         px = self.speed * dt
         self.distance += px
-        for placement in self.spawner.update(self.distance, self.elapsed, self.speed, player.lane):
+        lane = None if self.shared_road else player.lane
+        for placement in self.spawner.update(self.distance, self.elapsed, self.speed, lane):
             self._spawn(placement)
 
         if controls.steer and player.steer(controls.steer):

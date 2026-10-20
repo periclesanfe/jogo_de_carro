@@ -1,5 +1,6 @@
 """Procedural scrolling road: grass verges, gravel shoulders, asphalt, lane dashes and roadside props."""
 
+import functools
 import math
 import random
 from dataclasses import dataclass
@@ -68,10 +69,17 @@ def build_ground(assets: Assets, rng: random.Random) -> pygame.Surface:
     return pygame.transform.scale_by(g, SCALE)
 
 
+@functools.cache
+def ground(assets: Assets) -> pygame.Surface:
+    """One ground tile for every Road (it is only ever blitted): a World costs ~20 KB instead of 6 MB."""
+    return build_ground(assets, random.Random(2022))
+
+
 def _wave(y: int, cycles: int) -> float:
     return math.sin(y / NATIVE_H * cycles * math.tau)
 
 
+@functools.cache
 def build_vignette() -> pygame.Surface:
     small = pygame.Surface((32, 18), pygame.SRCALPHA)
     for y in range(18):
@@ -101,7 +109,7 @@ class Road:
     def __init__(self, assets: Assets, rng: random.Random) -> None:
         self.assets = assets
         self.rng = rng
-        self.ground = build_ground(assets, random.Random(2022))
+        self.ground = ground(assets)
         self.vignette = build_vignette()
         self.scroll = 0.0
         self.props: list[Prop] = []

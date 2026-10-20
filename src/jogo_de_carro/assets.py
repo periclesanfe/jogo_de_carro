@@ -53,6 +53,7 @@ class Assets:
         self._scaled: dict[str, list[pygame.Surface]] = {}
         self._rotated: dict[tuple[str, int, int, bool], pygame.Surface] = {}
         self._masks: dict[tuple[str, int, float, float], pygame.Mask] = {}
+        self._bounds: dict[str, pygame.Rect] = {}
         self._shadows: dict[tuple[str, int], pygame.Surface] = {}
         self._sounds: dict[str, pygame.mixer.Sound | None] = {}
 
@@ -105,6 +106,8 @@ class Assets:
         return self._rotated[key]
 
     def mask(self, name: str, index: int = 0, shrink: tuple[float, float] = (1.0, 1.0)) -> pygame.Mask:
+        if name.startswith("car_"):  # one hitbox for every car colour: a skin never changes the race
+            name = "car_yellow"
         key = (name, index, *shrink)
         if key not in self._masks:
             self._masks[key] = shrunk_mask(self.frame(name, index), *shrink)
@@ -112,8 +115,10 @@ class Assets:
 
     def bounds(self, name: str) -> pygame.Rect:
         """Bounding box of the opaque pixels of frame 0, relative to the frame's top-left corner."""
-        rects = self.mask(name).get_bounding_rects()
-        return rects[0].unionall(rects[1:]) if rects else self.frame(name).get_rect()
+        if name not in self._bounds:  # cached: it is read for every obstacle on every step
+            rects = self.mask(name).get_bounding_rects()
+            self._bounds[name] = rects[0].unionall(rects[1:]) if rects else self.frame(name).get_rect()
+        return self._bounds[name]
 
     def shadow(self, name: str, index: int = 0) -> pygame.Surface:
         """Soft drop-shadow silhouette of a frame."""

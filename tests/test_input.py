@@ -13,9 +13,9 @@ def test_keyboard_actions_and_held_directions():
     inp = Input()
     assert inp.translate(ev(pygame.KEYDOWN, key=pygame.K_a)) == [Action.LEFT]
     assert inp.translate(ev(pygame.KEYDOWN, key=pygame.K_UP)) == [Action.UP]
-    assert inp.vertical() == -1 and inp.held(Action.LEFT)
+    assert inp.held(Action.UP) and inp.held(Action.LEFT)
     inp.translate(ev(pygame.KEYUP, key=pygame.K_UP))
-    assert inp.vertical() == 0
+    assert not inp.held(Action.UP)
     assert inp.translate(ev(pygame.KEYDOWN, key=pygame.K_ESCAPE)) == [Action.BACK]
     assert inp.translate(ev(pygame.KEYDOWN, key=pygame.K_r)) == [Action.GIVE_UP]
     assert inp.translate(ev(pygame.KEYDOWN, key=pygame.K_q)) == []
@@ -35,14 +35,14 @@ def test_gamepad_stick_hat_and_buttons():
     assert inp.held(Action.RIGHT)
     assert inp.translate(ev(pygame.JOYAXISMOTION, axis=0, value=0.1, **pad)) == []
     assert inp.translate(ev(pygame.JOYAXISMOTION, axis=1, value=-0.8, **pad)) == [Action.UP]
-    assert inp.vertical() == -1
+    assert inp.held(Action.UP)
     inp.translate(ev(pygame.JOYAXISMOTION, axis=1, value=0.0, **pad))
     # d-pad (hat y is +1 for up)
     assert inp.translate(ev(pygame.JOYHATMOTION, hat=0, value=(0, -1), **pad)) == [Action.DOWN]
-    assert inp.vertical() == 1
+    assert inp.held(Action.DOWN) and not inp.held(Action.UP)
     assert inp.translate(ev(pygame.JOYHATMOTION, hat=0, value=(-1, 0), **pad)) == [Action.LEFT]
     inp.translate(ev(pygame.JOYDEVICEREMOVED, **pad))
-    assert inp.vertical() == 0
+    assert not inp.held(Action.DOWN)
     assert inp.using_pad
     inp.translate(ev(pygame.KEYDOWN, key=pygame.K_a))
     assert not inp.using_pad

@@ -1,19 +1,33 @@
 """Gameplay: countdown, racing with HUD and juice, crash slow-motion, victory lap."""
 
+import json
 import math
-import random
+import os
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 
 import pygame
 
 from ..input import Action
-from ..settings import ACCENT, COMBO_TIME, CYAN, DANGER, FLAME, HEIGHT, MUTED, SHIELD_TIME, WHITE, WIDTH
+from ..run import Run, Scored
+from ..settings import (
+    ACCENT,
+    COMBO_TIME,
+    CYAN,
+    DANGER,
+    FLAME,
+    HEIGHT,
+    MUTED,
+    NEAR_MISS_POINTS,
+    SHIELD_TIME,
+    WHITE,
+    WIDTH,
+)
 from ..tween import clamp, out_back, out_cubic
 from ..ui import blit_pop, blit_text, clock_text, faded, glow, panel
 from ..world.autopilot import autopilot
-from ..world.scoring import Score
-from ..world.world import Controls, EventKind, World, WorldEvent
+from ..world.world import Controls, EventKind
 from .base import Context, Scene, Transition
 
 COUNT_STEP = 0.75  # seconds per countdown number
@@ -69,11 +83,12 @@ COIN_POPUP_DX = 66
 
 
 class RaceScene(Scene):
-    def __init__(self, ctx: Context) -> None:
+    def __init__(self, ctx: Context, seed: int | None = None, shared_road: bool = False) -> None:
         super().__init__(ctx)
         self.mode = ctx.mode
-        self.world = World(ctx.assets, self.mode, ctx.save.skin, random.Random(ctx.rng.random()))
-        self.score = Score()
+        self.seed = ctx.rng.getrandbits(53) if seed is None else seed  # 53 bits survive JSON in a browser
+        self.run = Run(ctx.assets, self.mode.key, ctx.save.skin, self.seed, shared_road)
+        self.world, self.score = self.run.world, self.run.score
         self.best = ctx.save.best.get(self.mode.key, 0)
         self.phase = Phase.COUNTDOWN
         self.phase_t = 0.0
@@ -87,6 +102,7 @@ class RaceScene(Scene):
         self.clock = 0.0
         self.combo_pop = 0.0
         self.pilot = autopilot  # who drives when ctx.autopilot is on (the demo swaps in a show-off)
+        self.piloted = False  # the pilot drove some ticks, so the input log does not replay this race
 
     def enter(self) -> None:
         self.ctx.audio.stop_music(400)
@@ -147,14 +163,15 @@ class RaceScene(Scene):
                 self.finish(Outcome.WIN)
                 return
 
-        events = self.world.update(world_dt, self._controls())
         if self.phase is Phase.RACING:
-            self.score.drive(self.world.speed * world_dt, self._boosting())
-            self.score.update(world_dt)
-            self._react(events)
-            win = self.mode.win_s
-            if self.phase is Phase.RACING and win is not None and self.world.elapsed >= win:  # not crashed
+            self._react(self._step())
+            if self.run.outcome == "win":
                 self._win()
+            elif self.run.known and self.run.outcome is None and self.run.tick == self.run.known:
+                self.finish(Outcome.GAVE_UP)  # a replayed log ends here: its player gave up
+                return
+        else:  # the countdown, the crash slow-motion and the victory lap: nothing scores
+            self.world.update(world_dt, Controls())
         for popup in self.popups:
             popup.life += dt
             popup.y -= 70 * dt
@@ -162,16 +179,18 @@ class RaceScene(Scene):
                 popup.x = self.world.player.x + COIN_POPUP_DX
         self.popups = [p for p in self.popups if p.life < p.ttl]
 
-    def _controls(self) -> Controls:
-        if self.phase is not Phase.RACING:
-            return Controls()
+    def _step(self) -> Scored:
         if self.ctx.autopilot:
-            return self.pilot(self.world)
-        steer = self.steer.pop(0) if self.steer else 0
-        return Controls(steer=steer, vertical=self.ctx.input.vertical())
+            self.piloted = True
+            return self.run.step(self.pilot(self.world), False)
+        if self.run.known:  # a loaded log drives (--replay)
+            return self.run.advance(self.run.tick + 1)
+        return self.run.play(*self._controls())
 
-    def _boosting(self) -> bool:
-        return not self.ctx.autopilot and self.ctx.input.held(Action.UP)
+    def _controls(self) -> tuple[int, int]:
+        """This tick's lane change and held keys (1 = up, 2 = down), as the input log records them."""
+        held = self.ctx.input.held
+        return self.steer.pop(0) if self.steer else 0, held(Action.UP) | held(Action.DOWN) << 1
 
     def _countdown(self) -> None:
         step = int(self.phase_t / COUNT_STEP)
@@ -183,19 +202,19 @@ class RaceScene(Scene):
                 self.ctx.audio.play("go")
                 self.ctx.audio.music("race")
                 self.phase, self.phase_t = Phase.RACING, 0.0
-                self.world.running = True
 
-    def _react(self, events: list[WorldEvent]) -> None:
-        audio, score, player = self.ctx.audio, self.score, self.world.player
-        for e in events:
+    def _react(self, events: Scored) -> None:
+        """The effects of a tick's events (the Run did the scoring)."""
+        audio, player = self.ctx.audio, self.world.player
+        for e, points in events:
             if e.kind is EventKind.LANE_CHANGE:
                 audio.play("lane_change", 0.5)
             elif e.kind is EventKind.COIN:
-                self._coin_popup(score.coin(), player.x + COIN_POPUP_DX, player.y)
+                self._coin_popup(points, player.x + COIN_POPUP_DX, player.y)
                 audio.play("coin", 0.6)
             elif e.kind is EventKind.NEAR_MISS:
-                points = score.near_miss()
-                label = f"+{points} QUASE!" + (f" x{score.combo}" if score.combo > 1 else "")
+                combo = points // NEAR_MISS_POINTS
+                label = f"+{points} QUASE!" + (f" x{combo}" if combo > 1 else "")
                 self._popup(label, e.x, e.y - 50, WHITE, 34)
                 self.combo_pop = 1.0
                 audio.play("near_miss", 0.8)
@@ -247,7 +266,12 @@ class RaceScene(Scene):
     def finish(self, outcome: Outcome) -> None:
         from .results import RaceStats, ResultsScene
 
-        seconds = min(self.world.elapsed, self.mode.win_s or math.inf)
+        self.run.stop("giveup")  # a crash or a win already ended it
+        if (folder := os.environ.get("JOGO_RECORD")) and not (self.piloted or self.run.known):  # nor a replay
+            path = Path(folder) / f"{self.mode.key}-{self.seed}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(self.run.log(), separators=(",", ":")), encoding="utf-8")
+        seconds = self.run.seconds
         save = self.ctx.save
         record = save.record(self.mode.key, save.skin, self.score.total, seconds)
         self.ctx.persist()
@@ -293,7 +317,7 @@ class RaceScene(Scene):
         blit_text(
             surface, clock_text(self.world.elapsed), 60, (box.x + 16, box.y + 36), WHITE, anchor="topleft"
         )
-        goal = "SEM FIM" if mode.win_s is None else f"/ {clock_text(mode.win_s)}"
+        goal = f"/ {clock_text(self.run.win_s)}"  # Infinito ends at the run cap
         blit_text(surface, goal, 28, (box.right - 18, box.y + 54), MUTED, anchor="topright", shadow=False)
         bar = pygame.Rect(box.x + 18, box.bottom - 18, box.width - 36, 6)
         pygame.draw.rect(surface, (50, 54, 78), bar, border_radius=3)
@@ -378,7 +402,7 @@ class RaceScene(Scene):
             pygame.draw.arc(surface, color, arc, start + sweep * (1 - k), start + sweep, 8)
         blit_text(surface, f"{round(self.world.speed * 0.25)}", 48, (center[0], center[1] + 2), WHITE)
         blit_text(surface, "km/h", 24, (center[0], center[1] + 32), MUTED, shadow=False)
-        if self._boosting() and self.phase is Phase.RACING:
+        if self.run.held == 1 and self.phase is Phase.RACING:
             blit_text(surface, "+15%", 26, (center[0], center[1] - 36), ACCENT)
 
     def _hint_alpha(self) -> float:
