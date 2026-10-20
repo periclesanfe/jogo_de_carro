@@ -22,7 +22,7 @@ if ! command -v uv >/dev/null || [[ $(uv --version) != "uv $UV_VERSION"* ]]; the
     curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
 fi
 # the baseline build, not the _v2/_v3/_v4 variants: the server must simulate exactly like the browser
-UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install cpython-3.12.12-linux-x86_64-gnu
+UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install --no-bin cpython-3.12.12-linux-x86_64-gnu
 
 # /srv/jogo and the key belong to root, so the deploy user (which runs the game's code) cannot change its key;
 # password '*', not '!': key login then works with "UsePAM no" too
