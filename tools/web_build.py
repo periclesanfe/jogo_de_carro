@@ -36,6 +36,22 @@ PYGPI = (
     '<script>history.replaceState(null,"",location.pathname'
     '+(location.search?location.search+"&":"?")+"PYGPI=/cdn/")</script>'
 )
+# pygbag sizes the canvas to its buffer's aspect, starting while the buffer is still 1x1 (a square), and the
+# gray page is the template's. CSS sizes it instead: 16:9, as large as the window allows, centred by pygbag's
+# own inset:0;margin:auto, while SDL keeps drawing 1280x720 (app.py: no RESIZABLE on the web).
+# Nearest-neighbour only when that scales up: scaling down, it drops the thin strokes of the small text.
+FIT = (
+    "<style>body{background:#0b0d18!important;overflow:hidden}"
+    "#canvas{width:min(100vw,100dvh*16/9)!important;height:min(100dvh,100vw*9/16)!important;outline:none}"
+    "@media (min-width:1280px) and (min-height:720px){#canvas{image-rendering:pixelated}}</style>"
+)
+# A CSS-scaled canvas gets its pointer coordinates scaled twice: emscripten maps them to the buffer for any
+# canvas whose getContext("2d") is null (ours holds WebGL), and SDL2 maps them again by the CSS size. So
+# getContext("2d") on our canvas answers {} where it would answer null, and only SDL scales.
+MOUSE = (
+    "<script>{const g=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext="
+    'function(t,...a){return g.call(this,t,...a)||(t=="2d"&&this.id=="canvas"?{}:null)}}</script>'
+)
 
 
 def git(*args: str, stdin: str | None = None) -> str:
@@ -81,6 +97,7 @@ def main() -> None:
             wav.unlink()
         # --no_opt: on Linux pygbag would otherwise re-encode the audio and pngquant the sprites (the masks!)
         pygbag = ["--build", "--no_opt", "--title", "Jogo de Carro", "--cdn", f"/cdn/{PYGBAG}/"]
+        pygbag += ["--can_close", "1"]  # no "leave this page?" prompt when SITE navigates away
         pygbag += ["--template", OUT / "cdn" / PYGBAG / "default.tmpl", "--icon", pkg / "assets" / "icon.png"]
         done = subprocess.run(
             [sys.executable, "-m", "pygbag", *pygbag, app], cwd=app, capture_output=True, text=True
@@ -91,7 +108,9 @@ def main() -> None:
             sys.exit(f"{done.stdout}{done.stderr}\npygbag failed: no index.html loading {RUNTIME_TAG}>")
         shutil.rmtree(dest, ignore_errors=True)
         dest.mkdir(parents=True)
-        (dest / "index.html").write_text(html.replace(RUNTIME_TAG, PYGPI + RUNTIME_TAG), "utf-8")
+        (dest / "index.html").write_text(
+            html.replace(RUNTIME_TAG, PYGPI + FIT + MOUSE + RUNTIME_TAG), "utf-8"
+        )
         for name in ("jogo.tar.gz", "favicon.png"):
             shutil.copy(web / name, dest)
     url = f"jogo/{tree}/"

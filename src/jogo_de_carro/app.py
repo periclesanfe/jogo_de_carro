@@ -12,7 +12,7 @@ from .assets import Assets
 from .audio import Audio
 from .input import Action, Input
 from .save import default_save_path, load
-from .scenes.base import Context, SceneManager, Transition
+from .scenes.base import WEB, Context, SceneManager, Transition
 from .scenes.title import TitleScene
 from .settings import FIXED_DT, FPS, HEIGHT, MUTED, TITLE, WIDTH
 from .ui import blit_text, panel
@@ -63,7 +63,9 @@ class Game:
     def _open_window() -> pygame.Surface:
         if os.environ.get("SDL_VIDEODRIVER") == "dummy":  # headless: no renderer, so no scaling/vsync
             return pygame.display.set_mode((WIDTH, HEIGHT))
-        flags = pygame.SCALED | pygame.RESIZABLE
+        # on the web the page's CSS scales the canvas (tools/web_build.py); RESIZABLE would resize SDL's
+        # buffer to the CSS size, and SCALED's integer scaling would then letterbox the game in it, or crop it
+        flags = pygame.SCALED if WEB else pygame.SCALED | pygame.RESIZABLE
         for kwargs in ({"flags": flags, "vsync": 1}, {"flags": flags}):
             with contextlib.suppress(pygame.error):
                 return pygame.display.set_mode((WIDTH, HEIGHT), **kwargs)
