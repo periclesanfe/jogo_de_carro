@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, web-platform]
   pull_request:
 
 permissions:
@@ -32,3 +32,41 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest
+
+  deploy:
+    # After the tests, on a push: install this commit on the VPS and require that its CPU simulates exactly
+    # like this runner (ops/jogo-deploy). The DEPLOY_* secrets live in the "deploy" environment, limited to
+    # main and web-platform; the job is skipped until they exist.
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    environment: deploy
+    concurrency: deploy
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.HOST != ''
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        if: env.HOST != ''
+        with:
+          python-version: "3.12.12"
+      - if: env.HOST != ''
+        id: golden
+        shell: bash
+        run: |
+          python -m pip install . pygame-ce==2.5.7
+          echo "golden=$(python -I -m jogo_de_carro.golden | awk '$1 == "GOLDEN" {print $2}')" >> "$GITHUB_OUTPUT"
+      - if: env.HOST != ''
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          GOLDEN: ${{ steps.golden.outputs.golden }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ssh://deploy@$HOST" "$GITHUB_SHA $GOLDEN"

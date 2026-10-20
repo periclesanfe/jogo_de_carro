@@ -1,0 +1,41 @@
+#!/bin/bash
+# The only thing the CI deploy key can run (authorized_keys: restrict,command="/usr/local/bin/jogo-deploy").
+# CI calls: ssh deploy@VPS "<commit sha> <golden digest>". This checks out that commit, installs the game on
+# the pinned runtime and refuses the deploy unless the simulation digest computed on this CPU equals CI's.
+# ponytail: no web build or service yet; M1 adds the build upload, M2 the restart with drain (and must install
+# into a fresh venv, switching only after the golden matches: a refused deploy here has already installed).
+set -euo pipefail
+
+read -r sha golden extra <<<"${SSH_ORIGINAL_COMMAND:-}"
+if [[ ! $sha =~ ^[0-9a-f]{40}$ || ! $golden =~ ^[0-9a-f]{64}$ || -n ${extra:-} ]]; then
+    echo "uso: <sha de 40 hex> <golden de 64 hex>" >&2
+    exit 2
+fi
+
+export UV_PYTHON_INSTALL_DIR=/opt/uv-python UV_PYTHON_DOWNLOADS=never UV_CACHE_DIR=/srv/jogo/cache
+export PYGAME_HIDE_SUPPORT_PROMPT=1
+PY=/srv/jogo/venv/bin/python
+
+cd /srv/jogo/app
+exec 9>/srv/jogo/cache/.deploy.lock && flock 9  # one deploy at a time
+git() { command git -c core.hooksPath=/dev/null "$@"; }  # a deployed commit must not leave hooks behind
+# only commits on the deploy branches: GitHub would also serve a fork's commit fetched by its sha
+git fetch --quiet --prune origin
+if [[ -z $(git branch --remotes --contains "$sha" --list origin/main origin/web-platform 2>/dev/null) ]]; then
+    echo "commit $sha não está em main nem em web-platform" >&2
+    exit 2
+fi
+git checkout --quiet --detach "$sha"
+uv venv --quiet --allow-existing --python cpython-3.12.12-linux-x86_64-gnu /srv/jogo/venv
+uv pip install --quiet --python "$PY" --reinstall-package jogo-de-carro . pygame-ce==2.5.7
+
+got=$("$PY" -I -m jogo_de_carro.golden | awk '$1 == "GOLDEN" {print $2}')
+echo "commit  $sha"
+echo "runtime $("$PY" -c 'import platform, pygame; print(platform.python_version(), pygame.version.ver)')"
+echo "cpu     $(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)"
+echo "golden  $got"
+if [[ $got != "$golden" ]]; then
+    echo "GOLDEN DIFERENTE do CI ($golden): esta CPU simula diferente, deploy recusado" >&2
+    exit 1
+fi
+echo "ok: a simulação nesta CPU é idêntica à do CI"
