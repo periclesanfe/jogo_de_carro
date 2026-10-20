@@ -69,4 +69,4 @@ jobs:
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ssh://deploy@$HOST" "$GITHUB_SHA $GOLDEN"
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ssh://jogo@$HOST" "$GITHUB_SHA $GOLDEN"

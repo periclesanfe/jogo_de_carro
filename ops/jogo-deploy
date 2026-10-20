@@ -1,6 +1,6 @@
 #!/bin/bash
 # The only thing the CI deploy key can run (authorized_keys: restrict,command="/usr/local/bin/jogo-deploy").
-# CI calls: ssh deploy@VPS "<commit sha> <golden digest>". This checks out that commit, installs the game on
+# CI calls: ssh jogo@VPS "<commit sha> <golden digest>". This checks out that commit, installs the game on
 # the pinned runtime and refuses the deploy unless the simulation digest computed on this CPU equals CI's.
 # ponytail: no web build or service yet; M1 adds the build upload, M2 the restart with drain (and must install
 # into a fresh venv, switching only after the golden matches: a refused deploy here has already installed).

@@ -2,7 +2,7 @@
 # One-time VPS setup (Ubuntu 24.04), as root, next to a copy of jogo-deploy from the same commit, never the copy
 # in /srv/jogo/app (the deploy user can write it, and this runs as root):
 #   bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'
-# Re-run it after changing anything under ops/. It creates the "deploy" user that the CI logs in as, the pinned
+# Re-run it after changing anything under ops/. It creates the "jogo" user that the CI logs in as, the pinned
 # Python runtime and a checkout of the repo, and installs ops/jogo-deploy as that key's only command.
 set -euo pipefail
 [[ $(realpath "$(dirname "$0")") != /srv/jogo* ]] || { echo "rode de uma cópia fora de /srv/jogo" >&2; exit 2; }
@@ -24,13 +24,19 @@ fi
 # the baseline build, not the _v2/_v3/_v4 variants: the server must simulate exactly like the browser
 UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install --no-bin cpython-3.12.12-linux-x86_64-gnu
 
-# /srv/jogo and the key belong to root, so the deploy user (which runs the game's code) cannot change its key;
-# password '*', not '!': key login then works with "UsePAM no" too
-id deploy &>/dev/null || useradd --system --home-dir /srv/jogo --no-create-home --shell /bin/bash --password '*' deploy
+# A user of its own ("deploy" may already exist on the box for something else). /srv/jogo and the key belong to
+# root, so this user (which runs the game's code) cannot change its key; password '*', not '!': key login then
+# works with "UsePAM no" too
+if id jogo &>/dev/null; then
+    [[ $(getent passwd jogo | cut -d: -f6) == /srv/jogo ]] || { echo "o usuário jogo já existe com outra home" >&2; exit 2; }
+else
+    useradd --system --home-dir /srv/jogo --no-create-home --shell /bin/bash --password '*' jogo
+fi
 install -d -m 755 -o root -g root /srv/jogo /srv/jogo/.ssh
-install -d -m 755 -o deploy -g deploy /srv/jogo/app /srv/jogo/cache /srv/jogo/venv
-[[ -d /srv/jogo/app/.git ]] || runuser -u deploy -- git clone --quiet "$REPO" /srv/jogo/app
-runuser -u deploy -- git -C /srv/jogo/app fetch --quiet origin
+install -d -m 755 -o jogo -g jogo /srv/jogo/app /srv/jogo/cache /srv/jogo/venv
+chown -Rh jogo:jogo /srv/jogo/app /srv/jogo/cache /srv/jogo/venv  # -h: never the interpreter a venv link points at
+[[ -d /srv/jogo/app/.git ]] || runuser -u jogo -- git clone --quiet "$REPO" /srv/jogo/app
+runuser -u jogo -- git -C /srv/jogo/app fetch --quiet origin
 # the deploy script comes from the commit this setup.sh was downloaded from
 install -m 755 -o root -g root "$(dirname "$0")/jogo-deploy" /usr/local/bin/jogo-deploy
 echo "restrict,command=\"/usr/local/bin/jogo-deploy\" $key" >/srv/jogo/.ssh/authorized_keys
