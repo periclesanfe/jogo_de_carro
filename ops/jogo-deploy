@@ -1,9 +1,11 @@
 #!/bin/bash
 # The only thing the CI deploy key can run (authorized_keys: restrict,command="/usr/local/bin/jogo-deploy").
-# CI calls: ssh jogo@VPS "<commit sha> <golden digest>". This checks out that commit, installs the game on
-# the pinned runtime and refuses the deploy unless the simulation digest computed on this CPU equals CI's.
-# ponytail: no web build or service yet; M1 adds the build upload, M2 the restart with drain (and must install
-# into a fresh venv, switching only after the golden matches: a refused deploy here has already installed).
+# CI calls: ssh jogo@VPS "<commit sha> <golden digest>" < www.tgz (tools/web_build.py's build/www, golden.txt
+# filled). This checks out that commit, installs the game on the pinned runtime, refuses the deploy unless the
+# simulation digest computed on this CPU equals CI's (and the browser's), then publishes the web build in
+# /srv/jogo/www for the web server.
+# ponytail: no service yet; M2 adds the restart with drain (and must install into a fresh venv, switching only
+# after the golden matches: a refused deploy here has already installed).
 set -euo pipefail
 
 read -r sha golden extra <<<"${SSH_ORIGINAL_COMMAND:-}"
@@ -39,3 +41,44 @@ if [[ $got != "$golden" ]]; then
     exit 1
 fi
 echo "ok: a simulação nesta CPU é idêntica à do CI"
+
+# The web build. Everything under jogo/<TREE>/ and cdn/ is immutable (cached forever), so only what is missing
+# is added, each by a rename within /srv/jogo (atomic); index.html, which sends players to the new build, goes
+# last, and only for the newest commit of its branch (deploys can finish out of order). ponytail: old builds
+# stay (an open page may still need its jogo.tar.gz); about 0.5 MB each.
+die() { echo "$*" >&2; exit 1; }
+umask 022  # readable by the web server
+# the build's name covers all it is made of (tools/web_build.py computes it the same way)
+tree=$(git rev-parse "$sha:src/jogo_de_carro" "$sha:web" "$sha:tools/web_build.py" | git hash-object --stdin)
+www=/srv/jogo/www
+tmp=$(mktemp -d /srv/jogo/www-tmp/XXXXXX)
+trap 'rm -rf "$tmp"' EXIT
+head -c 100M >"$tmp/www.tgz"
+size=$(stat -c %s "$tmp/www.tgz")
+((size > 0 && size < 100 * 1024 * 1024)) || die "o build (tar.gz no stdin) tem $size bytes"
+# only plain files and folders, with tame relative names (no /, .., spaces or dot files), 300 MB and 1000
+# entries at most (a build has about 30)
+tar -tvzf "$tmp/www.tgz" | awk -v name='^[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*/?$' '
+    NF != 6 || $1 !~ /^[-d]/ || $6 !~ name { print "item recusado: " $0 >"/dev/stderr"; bad = 1 }
+    { size += $3 }
+    END { if (size > 300e6 || NR > 1000) { print "build grande demais" >"/dev/stderr"; bad = 1 }; exit bad }'
+mkdir "$tmp/www"
+tar -xzf "$tmp/www.tgz" -C "$tmp/www" --no-same-permissions
+chmod -R u=rwX,go=rX "$tmp/www"  # the archive's modes could hide a file from the web server
+[[ -f $tmp/www/jogo/$tree/index.html ]] || die "o build não tem jogo/$tree/index.html"
+[[ $(cat "$tmp/www/jogo/$tree/golden.txt") == "$golden" ]] || die "jogo/$tree/golden.txt diferente de $golden"
+grep -q "jogo/$tree/" "$tmp/www/index.html" || die "index.html não aponta para jogo/$tree/"
+mkdir -p "$www/jogo"
+[[ -e $www/jogo/$tree ]] || mv "$tmp/www/jogo/$tree" "$www/jogo/"
+(cd "$tmp/www" && find cdn -type f) | while read -r f; do
+    if [[ ! -e $www/$f ]]; then
+        mkdir -p "$(dirname "$www/$f")"
+        mv "$tmp/www/$f" "$www/$f"
+    fi
+done
+if [[ -z $(git branch --remotes --points-at "$sha" --list origin/main origin/web-platform) ]]; then
+    echo "publicado jogo/$tree/, mas $sha já não é a ponta do ramo: index.html continua como estava"
+    exit 0
+fi
+mv "$tmp/www/index.html" "$www/index.html"
+echo "publicado: jogo/$tree/"

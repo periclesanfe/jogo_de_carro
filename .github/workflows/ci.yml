@@ -33,11 +33,66 @@ jobs:
       - run: ruff format --check .
       - run: pytest
 
-  deploy:
-    # After the tests, on a push: install this commit on the VPS and require that its CPU simulates exactly
-    # like this runner (ops/jogo-deploy). The DEPLOY_* secrets live in the "deploy" environment, limited to
-    # main and web-platform; the job is skipped until they exist.
+  web:
+    # The browser build (tools/web_build.py) and its golden gate: in headless Chrome, with every host but
+    # localhost unreachable (so it boots from our own mirror only), the wasm runtime must simulate exactly like
+    # CPython 3.12.12 + pygame-ce 2.5.7 here. The build, with that digest in golden.txt, is what deploy publishes.
     needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      golden: ${{ steps.gate.outputs.golden }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install pygbag==0.9.3 . pygame-ce==2.5.7
+      - run: command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; }
+      - run: python tools/web_build.py
+      - id: gate
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          tree=$(git rev-parse HEAD:src/jogo_de_carro HEAD:web HEAD:tools/web_build.py | git hash-object --stdin)
+          native=$(python -I -m jogo_de_carro.golden | awk '$1 == "GOLDEN" {print $2}')
+          # any port but 8666, where pygbag's runtime switches to its dev mode
+          python -m http.server 4173 --bind 127.0.0.1 --directory build/www >/dev/null 2>&1 &
+          server=$!
+          google-chrome --headless=new --user-data-dir="$RUNNER_TEMP/chrome" --no-first-run \
+            --autoplay-policy=no-user-gesture-required --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE localhost" \
+            --enable-logging=stderr --v=0 "http://localhost:4173/jogo/$tree/index.html?golden=1" 2>chrome.log &
+          chrome=$!
+          for _ in $(seq 300); do grep -q 'GOLDEN ' chrome.log && break; sleep 1; done
+          kill "$chrome" "$server" || true  # already gone if Chrome crashed: the log below says why
+          browser=$(grep -o 'GOLDEN [0-9a-f]\{64\}' chrome.log | head -n 1 | cut -d' ' -f2 || true)
+          echo "native  $native"
+          echo "browser $browser"
+          if [[ -z $native || $browser != "$native" ]]; then
+            grep -E 'GOLDEN|CONSOLE|ERROR' chrome.log | tail -n 40 || true
+            exit 1
+          fi
+          echo "$browser" >"build/www/jogo/$tree/golden.txt"
+          echo "golden=$browser" >>"$GITHUB_OUTPUT"
+      - run: tar -czf www.tgz -C build/www index.html jogo cdn
+      - uses: actions/upload-artifact@v7
+        with:
+          name: www
+          path: www.tgz
+          retention-days: 7
+
+  deploy:
+    # On a push, after the web build passed its gate: install this commit on the VPS, require that its CPU
+    # simulates exactly like the browser (ops/jogo-deploy) and publish the build. The DEPLOY_* secrets live in the
+    # "deploy" environment, limited to main and web-platform; the job is skipped until they exist. No repo code
+    # runs in this job.
+    needs: web
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     environment: deploy
@@ -45,28 +100,18 @@ jobs:
     env:
       HOST: ${{ secrets.DEPLOY_HOST }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         if: env.HOST != ''
         with:
-          persist-credentials: false
-      - uses: actions/setup-python@v7
-        if: env.HOST != ''
-        with:
-          python-version: "3.12.12"
-      - if: env.HOST != ''
-        id: golden
-        shell: bash
-        run: |
-          python -m pip install . pygame-ce==2.5.7
-          echo "golden=$(python -I -m jogo_de_carro.golden | awk '$1 == "GOLDEN" {print $2}')" >> "$GITHUB_OUTPUT"
+          name: www
       - if: env.HOST != ''
         shell: bash
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          GOLDEN: ${{ steps.golden.outputs.golden }}
+          GOLDEN: ${{ needs.web.outputs.golden }}
         run: |
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ssh://jogo@$HOST" "$GITHUB_SHA $GOLDEN"
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ssh://jogo@$HOST" "$GITHUB_SHA $GOLDEN" < www.tgz

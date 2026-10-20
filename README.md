@@ -51,17 +51,18 @@ The four difficulties keep the win times of the 2022 version. Normal is the defa
 ## Features
 
 - Six cars, each with a record of its own, picked on a turntable in the garage.
+- Contra o bot: the same road side by side against a FÁCIL, MÉDIO or DIFÍCIL bot; whoever lasts longer wins, then points decide. It sets no records.
 - A spawner that always leaves a reachable free lane, sized for the lane-change time at the current speed and kept close to the lane you are in; a test checks 10,000 rows per mode with an independent solver.
 - Traffic that signals with a blinker before changing lanes, logs that roll across lanes, potholes that only hurt in the middle.
 - Coins, a shield that absorbs one hit, and near misses (dodging at the last moment) that build a combo up to x5.
 - Countdown, slow-motion crash with screen shake and sparks, a victory lap with confetti, pause with a blurred backdrop.
 - Best score per mode and per car saved as JSON in the user data folder; a corrupt save falls back to defaults.
-- Fixed-step simulation (120 Hz) inside an async main loop, so a web build with pygbag is possible later.
+- Fixed-step simulation (120 Hz) inside an async main loop, so the same code runs in the browser (pygbag).
 
 ## Screenshots
 
 <p align="center">
-  <img src="docs/media/title.png" alt="Title screen: the JOGO DE CARRO logo with a flaming tire over the road, menu with Jogar, Skin, Dificuldade and Sair." width="49%">
+  <img src="docs/media/title.png" alt="Title screen: the JOGO DE CARRO logo with a flaming tire over the road, menu with Jogar, Skin, Dificuldade, Contra o bot and Sair." width="49%">
   <img src="docs/media/race.png" alt="Race: a QUASE! near-miss popup next to the yellow car, the combo pill under the score, timer and speedometer." width="49%">
   <img src="docs/media/garage.png" alt="Garage: the blue police car on a turntable between the other cars." width="49%">
   <img src="docs/media/difficulty.png" alt="Difficulty cards for Fácil, Normal, Difícil and Infinito with goal time, speed and obstacle bars and the best score." width="49%">
@@ -91,17 +92,20 @@ src/jogo_de_carro/
   assets.py audio.py save.py input.py ui.py tween.py particles.py
   run.py              one race as a pure function of seed and inputs; input logs, replay, validation
   golden.py           determinism digest that the web build and the server must reproduce
-  scenes/             title, garage, difficulty, race, pause, results
+  scenes/             title, garage, difficulty, race, versus (contra o bot), pause, results
   world/              road, player, traffic, obstacles, pickups, spawner, scoring, autopilot
   assets/             generated sprites, sounds and music (committed)
   replays/            input logs replayed by golden.py and the tests
   demo.py             scripted tour used for screenshots and the GIF
-tests/                spawner fairness, rules, assets, input, drivers, runs and replays, headless smoke test
+tests/                spawner fairness, rules, assets, input, drivers, runs and replays, versus, web save, headless smoke test
 tools/
   make_assets.py      deterministic generator for every sprite, sound and track
   screenshots.py      renders the demo tour to PNGs
+  web_build.py        the browser build (pygbag) into build/www
   pyinstaller_entry.py
-.github/workflows/    ci.yml (lint and tests), release.yml (PyInstaller builds on v* tags)
+web/                  main.py (the browser entry point) and cdn.lock (the pinned pygbag runtime)
+ops/                  VPS setup, the deploy script CI runs there, the nginx site
+.github/workflows/    ci.yml (lint, tests, web build and its golden gate, deploy), release.yml (PyInstaller builds on v* tags)
 ```
 
 ## Development
@@ -119,6 +123,24 @@ python -m jogo_de_carro.golden      # print the determinism digest (GOLDEN <sha2
 ```
 
 Set `JOGO_SAVE_DIR` to keep the save file somewhere other than the user data folder. Pushing a `v*` tag builds the three platforms and publishes the release.
+
+## Web build and deploy
+
+The browser version is this package run by [pygbag](https://pygame-web.github.io) 0.9.3 (CPython 3.12.12 and pygame-ce 2.5.7 compiled to WebAssembly), with pygbag's runtime self-hosted:
+
+```bash
+pip install pygbag==0.9.3                          # plus ffmpeg on the PATH (the sounds ship as OGG)
+python tools/web_build.py                          # writes build/www
+python -m http.server 4173 --directory build/www   # open http://localhost:4173/
+```
+
+`build/www` is the whole site: `index.html` redirects to `jogo/<tree>/`, the game, named after everything it is built from (`git rev-parse HEAD:src/jogo_de_carro HEAD:web HEAD:tools/web_build.py | git hash-object --stdin`, or `dev` while those have uncommitted changes), and `cdn/` holds pygbag's runtime, checked against `web/cdn.lock`. Everything but the top `index.html` can be cached forever. In the browser the save lives in localStorage, and `?golden=1` on the game's URL logs `GOLDEN <sha256>` to the browser console instead of starting the game.
+
+On pushes to `main` and `web-platform` and on pull requests, CI builds the site and opens `?golden=1` in headless Chrome with every host but localhost blocked: the digest must equal `python -m jogo_de_carro.golden` on CPython 3.12.12. On a push to `main` or `web-platform` it then sends the build to the VPS, where `ops/jogo-deploy` (the deploy key's only command) installs that commit, refuses it unless the VPS's own digest matches too, and publishes it into `/srv/jogo/www` (the entry page moves to it only while that commit is still its branch's newest). One-time VPS setup, as root, from a copy of `ops/` taken outside `/srv/jogo`:
+
+1. `bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'` creates the `jogo` user, the pinned Python, the checkout and `/srv/jogo/www`. Re-run it whenever `ops/` changes.
+2. Install `ops/nginx/jogo.conf` as `/etc/nginx/sites-available/jogo`, link it into `sites-enabled`, check it with `nginx -t`, reload nginx, then run the `certbot` line at the top of that file.
+3. In the repository's `deploy` environment, set the secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY` (the private half of that key) and `DEPLOY_KNOWN_HOSTS` (the line `setup.sh` prints). The deploy job is skipped until `DEPLOY_HOST` exists.
 
 ## Credits
 

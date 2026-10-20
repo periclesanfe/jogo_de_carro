@@ -1,4 +1,5 @@
-"""Persistent save (best scores, chosen skin and mode, audio settings) as JSON in the user data dir."""
+"""Persistent save (best scores, chosen skin and mode, audio settings) as JSON in the user data dir, or in
+localStorage in the browser."""
 
 import json
 import logging
@@ -78,9 +79,20 @@ def _numbers[T: (int, float)](raw: object, keys: Container[str], kind: type[T]) 
     }
 
 
+def _read(path: Path) -> str:
+    if sys.platform == "emscripten":  # browser (pygbag): the FS is in-memory, localStorage persists
+        import platform
+
+        raw = platform.window.localStorage.getItem(str(path))
+        if raw is None:
+            raise FileNotFoundError(path)
+        return str(raw)
+    return path.read_text(encoding="utf-8")
+
+
 def load(path: Path) -> SaveData:
     try:
-        return SaveData.from_json(json.loads(path.read_text(encoding="utf-8")))
+        return SaveData.from_json(json.loads(_read(path)))
     except FileNotFoundError:
         return SaveData()
     except Exception as exc:  # untrusted input: any surprise means a fresh save, never a crash
@@ -89,11 +101,20 @@ def load(path: Path) -> SaveData:
 
 
 def store(data: SaveData, path: Path) -> None:
-    """Atomic write; a failing disk must never crash the game."""
+    """Atomic write; a failing disk (or a full or blocked localStorage) must never crash the game."""
+    text = json.dumps(asdict(data), indent=2, ensure_ascii=False)
+    if sys.platform == "emscripten":
+        import platform
+
+        try:
+            platform.window.localStorage.setItem(str(path), text)
+        except Exception as exc:
+            log.warning("could not write save %s: %s", path, exc)
+        return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(asdict(data), indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)
     except OSError as exc:
         log.warning("could not write save %s: %s", path, exc)

@@ -1,4 +1,4 @@
-"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Sair."""
+"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Contra o bot, Sair."""
 
 import math
 
@@ -8,7 +8,7 @@ from .. import __version__
 from ..input import Action
 from ..settings import ACCENT, FLAME, MUTED, SKIN_NAMES, WHITE, WIDTH
 from ..ui import Menu, blit_text, glow, gradient_text, panel, text
-from .base import Context, MenuScene, Transition
+from .base import WEB, Context, MenuScene, Transition
 
 CREDITS = "IFAL 2022 · Adenilson · Eduardo · Erimaiken · Ingrid · Péricles"
 
@@ -16,7 +16,9 @@ CREDITS = "IFAL 2022 · Adenilson · Eduardo · Erimaiken · Ingrid · Péricles
 class TitleScene(MenuScene):
     def __init__(self, ctx: Context, focus: int = 0) -> None:
         super().__init__(ctx)
-        self.menu = Menu(["JOGAR", "SKIN", "DIFICULDADE", "SAIR"], (WIDTH // 2, 392), ctx.audio, index=focus)
+        # new items go before SAIR, so the indices the other menus return to (focus=) keep their meaning
+        labels = ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT"] + ([] if WEB else ["SAIR"])
+        self.menu = Menu(labels, (WIDTH // 2, 412), ctx.audio, index=focus)
         self.logo = gradient_text("JOGO DE CARRO", 104, (255, 230, 120), FLAME)
         self.icon = pygame.transform.scale_by(ctx.assets.icon(), 2)
         self.clock = 0.0
@@ -26,8 +28,9 @@ class TitleScene(MenuScene):
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
         if action is Action.BACK:
-            self.menu.index = 3
-            self.ctx.audio.play("ui_back")
+            if not WEB:
+                self.menu.index = 4  # SAIR
+                self.ctx.audio.play("ui_back")
             return
         choice = self.menu.handle(action, event)
         if choice is None:
@@ -46,6 +49,10 @@ class TitleScene(MenuScene):
             from .difficulty import DifficultyScene
 
             scenes.switch(DifficultyScene(self.ctx), Transition.SLIDE_LEFT)
+        elif choice == 3:
+            from .versus import BotScene
+
+            scenes.switch(BotScene(self.ctx), Transition.SLIDE_LEFT)
         else:
             self.ctx.quit()
 
@@ -85,10 +92,9 @@ class TitleScene(MenuScene):
             blit_text(surface, chip, 26, rect.center, WHITE, shadow=False)
             x += w + 10
         pad = self.ctx.input.using_pad
-        hint = (
-            "D-PAD navegar · A confirmar"
-            if pad
-            else "SETAS navegar · ENTER confirmar · F11 tela cheia · M som"
-        )
+        if pad:
+            hint = "D-PAD navegar · A confirmar"
+        else:
+            hint = "SETAS navegar · ENTER confirmar" + ("" if WEB else " · F11 tela cheia") + " · M som"
         blit_text(surface, hint, 24, (WIDTH - 24, 657), MUTED, anchor="midright")
         blit_text(surface, f"{CREDITS} · v{__version__}", 24, (WIDTH // 2, 701), MUTED)

@@ -32,7 +32,14 @@ class BadInput(ValueError):
 
 class Run:
     def __init__(
-        self, assets: Assets, mode_key: str, skin: str, seed: int, shared: bool, driver: Driver | None = None
+        self,
+        assets: Assets,
+        mode_key: str,
+        skin: str,
+        seed: int,
+        shared: bool,
+        driver: Driver | None = None,
+        rival: str | None = None,  # the other driver's skin, for the traffic colours only
     ) -> None:
         if not (type(mode_key) is str and mode_key in MODE_BY_KEY and skin in SKINS and type(shared) is bool):
             raise BadInput("bad run")
@@ -43,7 +50,7 @@ class Run:
         cap_s = VERSUS_CAP_S if shared else RANKED_CAP_S
         self.win_s = self.mode.win_s or cap_s  # Infinito "wins" at the cap
         self.cap = round(cap_s / FIXED_DT) + 1  # input ticks accepted (the clock reaches 600 s on tick 72001)
-        self.world = World(assets, self.mode, skin, random.Random(seed), shared_road=shared)
+        self.world = World(assets, self.mode, skin, random.Random(seed), shared_road=shared, rival=rival)
         # the countdown: the car stands while the first rows are planned; more standing ticks change nothing
         self.world.update(FIXED_DT, Controls())
         self.score = Score()

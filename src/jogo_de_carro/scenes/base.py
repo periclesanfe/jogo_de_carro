@@ -1,6 +1,7 @@
 """Scene protocol, shared services and a stack-based scene manager with fade/slide transitions."""
 
 import random
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -18,6 +19,8 @@ from ..tween import in_out_cubic
 
 if TYPE_CHECKING:
     from .backdrop import Backdrop
+
+WEB = sys.platform == "emscripten"  # pygbag: the page cannot quit, and the browser owns fullscreen
 
 
 @dataclass

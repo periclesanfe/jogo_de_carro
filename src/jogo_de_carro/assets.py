@@ -8,6 +8,7 @@ turn any missing or mis-sized asset into an error instead.
 import importlib.resources
 import logging
 import os
+import sys
 from pathlib import Path
 
 import pygame
@@ -16,6 +17,7 @@ from .settings import ICON_SIZE, MUSIC, SCALE, SOUNDS, SPRITES
 
 log = logging.getLogger(__name__)
 STRICT_ENV = "JOGO_STRICT_ASSETS"
+EXT = "ogg" if sys.platform == "emscripten" else "wav"  # tools/web_build.py converts them for the browser
 
 
 class AssetError(RuntimeError):
@@ -138,10 +140,10 @@ class Assets:
     def sound(self, name: str) -> pygame.mixer.Sound | None:
         """A Sound, a silent Sound for missing files, or None when there is no audio device."""
         if name not in self._sounds:
-            path = self.root / "sounds" / f"{name}.wav"
+            path = self.root / "sounds" / f"{name}.{EXT}"
             found = path.is_file()
             if not found:
-                self._problem(f"missing asset sounds/{name}.wav")
+                self._problem(f"missing asset sounds/{name}.{EXT}")
             if not pygame.mixer.get_init():
                 self._sounds[name] = None
             else:
@@ -151,10 +153,10 @@ class Assets:
         return self._sounds[name]
 
     def music_path(self, name: str) -> Path | None:
-        path = self.root / "music" / f"{name}.wav"
+        path = self.root / "music" / f"{name}.{EXT}"
         if path.is_file():
             return path
-        self._problem(f"missing asset music/{name}.wav")
+        self._problem(f"missing asset music/{name}.{EXT}")
         return None
 
     def preload(self) -> None:

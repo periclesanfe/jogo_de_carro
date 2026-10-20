@@ -36,7 +36,6 @@ CRASH_TO_RESULTS = 1.7
 WIN_CRUISE = 0.6  # the victory lap cruises a moment before zooming off the top
 WIN_TO_RESULTS = 2.0
 HINT_TIME = 4.5  # the controls card shows from the countdown until this long after "JÁ!"
-PAUSE_BUTTON = pygame.Rect(336, 20, 48, 48)
 SHIELD_BOX = pygame.Rect(24, HEIGHT - 84, 230, 60)
 KEY_HINTS = (
     ("SETAS / A D", "trocar de faixa"),
@@ -83,11 +82,16 @@ COIN_POPUP_DX = 66
 
 
 class RaceScene(Scene):
-    def __init__(self, ctx: Context, seed: int | None = None, shared_road: bool = False) -> None:
+    pause_button = pygame.Rect(336, 20, 48, 48)
+    cannons = (0, WIDTH)  # world x of the victory confetti cannons: the screen's bottom corners
+
+    def __init__(
+        self, ctx: Context, seed: int | None = None, shared_road: bool = False, rival: str | None = None
+    ) -> None:
         super().__init__(ctx)
         self.mode = ctx.mode
         self.seed = ctx.rng.getrandbits(53) if seed is None else seed  # 53 bits survive JSON in a browser
-        self.run = Run(ctx.assets, self.mode.key, ctx.save.skin, self.seed, shared_road)
+        self.run = Run(ctx.assets, self.mode.key, ctx.save.skin, self.seed, shared_road, rival=rival)
         self.world, self.score = self.run.world, self.run.score
         self.best = ctx.save.best.get(self.mode.key, 0)
         self.phase = Phase.COUNTDOWN
@@ -103,6 +107,7 @@ class RaceScene(Scene):
         self.combo_pop = 0.0
         self.pilot = autopilot  # who drives when ctx.autopilot is on (the demo swaps in a show-off)
         self.piloted = False  # the pilot drove some ticks, so the input log does not replay this race
+        self.banner: tuple[str, tuple[int, int, int]] | None = None  # replaces VITÓRIA!/BATEU! (versus)
 
     def enter(self) -> None:
         self.ctx.audio.stop_music(400)
@@ -117,7 +122,7 @@ class RaceScene(Scene):
         if (
             event.type == pygame.MOUSEBUTTONDOWN
             and event.button == 1
-            and PAUSE_BUTTON.collidepoint(event.pos)
+            and self.pause_button.collidepoint(event.pos)
         ):
             pause = True
         if pause:
@@ -131,7 +136,11 @@ class RaceScene(Scene):
         from .pause import PauseScene
 
         self.ctx.audio.play("ui_back")
-        self.ctx.scenes.push(PauseScene(self.ctx, self.snapshot()))
+        self.ctx.scenes.push(PauseScene(self.ctx, self.snapshot(), self.again))
+
+    def again(self) -> Scene:
+        """A fresh race like this one (new seed), for REINICIAR and JOGAR DE NOVO."""
+        return RaceScene(self.ctx)
 
     def resume(self) -> None:
         self.ctx.audio.pause_music(False)
@@ -252,16 +261,17 @@ class RaceScene(Scene):
                 y = other.y - 42
         self.popups.append(Popup(label, x, y, color, size, ttl))
 
-    def _win(self) -> None:
+    def _win(self, celebrate: bool = True) -> None:
         self.phase, self.phase_t = Phase.WON, 0.0
         self.world.spawner.enabled = False
         self.world.invulnerable = True
         self.world.player.bounded = False
-        self.world.particles.confetti(140)
-        self.world.particles.cannon(0, HEIGHT, 1)
-        self.world.particles.cannon(WIDTH, HEIGHT, -1)
         self.popups.clear()
-        self.ctx.audio.music("win", loop=False, fade_ms=0)
+        if celebrate:  # a versus finished but lost on points gets the lap without the party
+            self.world.particles.confetti(140)
+            self.world.particles.cannon(self.cannons[0], HEIGHT, 1)
+            self.world.particles.cannon(self.cannons[1], HEIGHT, -1)
+            self.ctx.audio.music("win", loop=False, fade_ms=0)
 
     def finish(self, outcome: Outcome) -> None:
         from .results import RaceStats, ResultsScene
@@ -276,7 +286,7 @@ class RaceScene(Scene):
         record = save.record(self.mode.key, save.skin, self.score.total, seconds)
         self.ctx.persist()
         stats = RaceStats(outcome, self.mode, seconds, self.score, record, self.best)
-        self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot()), Transition.NONE)
+        self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
     def snapshot(self) -> pygame.Surface:
         """The current frame without the big centre text, as a backdrop for pause/results."""
@@ -292,21 +302,34 @@ class RaceScene(Scene):
             shake * math.sin(self.clock * 71.0),
             shake * math.cos(self.clock * 53.0 + 1.3),
         )
+        self._draw_world(surface, offset)
+        hud = 1.0 if self.phase is not Phase.WON else clamp(1 - (self.phase_t - 0.2) / 0.3, 0.0, 1.0)
+        faded(surface, 255 * hud, self._draw_hud)
+        if overlay:
+            self._draw_overlay_text(surface)
+
+    def _draw_world(self, surface: pygame.Surface, offset: tuple[float, float]) -> None:
         self.world.draw(surface, offset)
+        self._draw_juice(surface, offset)
+
+    def _draw_juice(self, surface: pygame.Surface, offset: tuple[float, float], dx: float = 0) -> None:
+        """Popups and the impact flash; ``dx`` moves the popups with a world drawn shifted (versus)."""
         for p in self.popups:
             k = p.life / p.ttl
             scale = out_back(min(1.0, p.life / 0.18))
-            blit_pop(surface, p.label, p.size, p.color, (p.x, p.y), scale, round(255 * (1 - k**3)))
+            blit_pop(surface, p.label, p.size, p.color, (p.x + dx, p.y), scale, round(255 * (1 - k**3)))
         if self.flash > 0:  # a short white impact frame around the hit, over a brief global flash
             surface.fill((round(160 * self.flash),) * 3, special_flags=pygame.BLEND_RGB_ADD)
             if self.impact:
                 light = glow(150, (255, 244, 214), 255 * min(1.0, self.flash * 2.5))
                 at = (round(self.impact[0] + offset[0]), round(self.impact[1] + offset[1]))
                 surface.blit(light, light.get_rect(center=at))
-        hud = 1.0 if self.phase is not Phase.WON else clamp(1 - (self.phase_t - 0.2) / 0.3, 0.0, 1.0)
-        faded(surface, 255 * hud, self._draw_hud)
-        if overlay:
-            self._draw_overlay_text(surface)
+
+    def _draw_pause(self, surface: pygame.Surface) -> None:
+        button = self.pause_button
+        panel(surface, button, alpha=200, radius=12)
+        for dx in (-7, 4):
+            surface.fill(WHITE, (button.centerx + dx, button.centery - 9, 5, 18))
 
     def _draw_hud(self, surface: pygame.Surface) -> None:
         mode, score = self.mode, self.score
@@ -329,10 +352,7 @@ class RaceScene(Scene):
             blit_text(
                 surface, mode.name.upper(), 24, (box.right - 18, box.y + 13), mode.color, anchor="topright"
             )
-        # pause button
-        panel(surface, PAUSE_BUTTON, alpha=200, radius=12)
-        for dx in (-7, 4):
-            surface.fill(WHITE, (PAUSE_BUTTON.centerx + dx, PAUSE_BUTTON.centery - 9, 5, 18))
+        self._draw_pause(surface)
 
         # score panel (top-right)
         box = pygame.Rect(WIDTH - 324, 20, 300, 104)
@@ -388,9 +408,9 @@ class RaceScene(Scene):
         bar.width = round(bar.width * self.world.player.shield / SHIELD_TIME)
         pygame.draw.rect(surface, CYAN, bar, border_radius=4)
 
-    def _draw_speedometer(self, surface: pygame.Surface) -> None:
-        center = (WIDTH - 110, HEIGHT - 96)
-        radius = 70
+    def _draw_speedometer(
+        self, surface: pygame.Surface, center: tuple[int, int] = (WIDTH - 110, HEIGHT - 96), radius: int = 70
+    ) -> None:
         k = min(1.0, self.world.speed / 1000)
         arc = pygame.Rect(0, 0, radius * 2, radius * 2)
         arc.center = center
@@ -442,8 +462,10 @@ class RaceScene(Scene):
         elif self.phase is Phase.WON:
             scale = out_back(min(1.0, self.phase_t / 0.4))
             alpha = round(255 * clamp((WIN_TO_RESULTS - self.phase_t) / 0.2, 0.0, 1.0))
-            blit_pop(surface, "VITÓRIA!", 150, ACCENT, center, scale, alpha, width=6)
+            label, color = self.banner or ("VITÓRIA!", ACCENT)
+            blit_pop(surface, label, 150, color, center, scale, alpha, width=6)
         elif self.phase is Phase.CRASHED and self.phase_t > 0.5:
             k = min(1.0, (self.phase_t - 0.5) / 0.3)
             alpha = round(255 * clamp((CRASH_TO_RESULTS - self.phase_t) / 0.2, 0.0, 1.0))
-            blit_pop(surface, "BATEU!", 140, DANGER, center, out_back(k), alpha, width=6)
+            label, color = self.banner or ("BATEU!", DANGER)
+            blit_pop(surface, label, 140, color, center, out_back(k), alpha, width=6)

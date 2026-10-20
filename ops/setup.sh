@@ -33,7 +33,8 @@ else
     useradd --system --home-dir /srv/jogo --no-create-home --shell /bin/bash --password '*' jogo
 fi
 install -d -m 755 -o root -g root /srv/jogo /srv/jogo/.ssh
-install -d -m 755 -o jogo -g jogo /srv/jogo/app /srv/jogo/cache /srv/jogo/venv
+install -d -m 755 -o jogo -g jogo /srv/jogo/app /srv/jogo/cache /srv/jogo/venv /srv/jogo/www  # www: the web root
+install -d -m 700 -o jogo -g jogo /srv/jogo/www-tmp  # where jogo-deploy unpacks a build before publishing it
 chown -Rh jogo:jogo /srv/jogo/app /srv/jogo/cache /srv/jogo/venv  # -h: never the interpreter a venv link points at
 [[ -d /srv/jogo/app/.git ]] || runuser -u jogo -- git clone --quiet "$REPO" /srv/jogo/app
 runuser -u jogo -- git -C /srv/jogo/app fetch --quiet origin
