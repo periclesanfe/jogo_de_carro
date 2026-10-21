@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from authlib.integrations.starlette_client import OAuth, StarletteOAuth2App
@@ -216,6 +217,10 @@ def site(request: Request) -> dict:
 
 
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[site])  # *.html: autoescaped
+BRT = timezone(timedelta(hours=-3))  # Brasília: no daylight saving since 2019
+templates.env.filters["data"] = lambda t: datetime.fromtimestamp(t, BRT).strftime("%d/%m/%Y %H:%M")
+templates.env.filters["pontos"] = lambda n: "—" if n is None else f"{n:,}".replace(",", ".")  # 12.345
+templates.env.filters["tempo"] = lambda s: f"{int(s) // 60}:{int(s) % 60:02d}"  # 2:05
 
 
 def page(request: Request, name: str, status: int = 200, **context: object) -> Response:
@@ -506,13 +511,49 @@ async def amigo(request: Request, user: sqlite3.Row) -> Response:
     a, b = sorted((me, other))
     if acao == "aceitar":
         conn.execute(ACCEPT, (a, b, me))
-    else:
+    else:  # and the pair's open challenges are void: no more playing an ex-friend's
         conn.execute("DELETE FROM friends WHERE a = ? AND b = ?", (a, b))
+        sql = "UPDATE matches SET state = 'void' WHERE state = 'open' AND a IN (?, ?) AND b IN (?, ?)"
+        conn.execute(sql, (a, b, a, b))
     return go("/amigos")
 
 
 async def privacidade(request: Request) -> Response:
     return page(request, "privacidade.html", contato=request.app.state.cfg.admin_email)
+
+
+PARTIDAS = (  # a player's (:me) races and challenges, newest first, with both runs' points (never the seed)
+    "SELECT matches.id, kind, mode, state, winner, matches.created, expires, a = :me AS desafiou, nick,"
+    " (SELECT score FROM runs WHERE match_id = matches.id AND user_id = :me) AS meus,"
+    " (SELECT score FROM runs WHERE match_id = matches.id AND user_id != :me) AS deles"
+    " FROM matches JOIN users ON users.id = iif(a = :me, b, a)"
+    " WHERE (a = :me OR b = :me)"  # OR: both indexes, IN would scan
+    " AND NOT (b = :me AND kind = 'challenge' AND expires IS NULL AND state != 'done')"  # never offered me
+    " ORDER BY matches.id DESC LIMIT 50"
+)
+CONTRA = (  # wins, losses and draws against each opponent, over every decided race and challenge
+    "SELECT nick, sum(winner IS :me) AS v, sum(winner IS NOT :me AND winner NOT NULL) AS d,"
+    " sum(winner IS NULL) AS e"  # (IS: a draw's NULL winner counts as 0, never NULL)
+    " FROM matches JOIN users ON users.id = iif(a = :me, b, a)"
+    " WHERE (a = :me OR b = :me) AND state = 'done' GROUP BY users.id ORDER BY nick"
+)
+ANALISE = (
+    "SELECT mode, score, seconds, ended FROM runs WHERE user_id = ? AND state = 'review' ORDER BY id DESC"
+)
+
+
+@account()
+async def partidas(request: Request, user: sqlite3.Row) -> Response:
+    conn, me = request.app.state.db, {"me": user["id"]}
+    hub.expire(conn)
+    return page(
+        request,
+        "partidas.html",
+        jogos=conn.execute(PARTIDAS, me).fetchall(),
+        contra=conn.execute(CONTRA, me).fetchall(),
+        analise=conn.execute(ANALISE, (user["id"],)).fetchall(),
+        modos=MODE_BY_KEY,
+    )
 
 
 @account()
@@ -600,6 +641,7 @@ def create_app(cfg: Config | None = None) -> Starlette:
         Route("/sair", sair, methods=["POST"]),
         Route("/amigos", amigos, methods=["GET", "POST"]),
         Route("/amigos/{id:int}/{acao}", amigo, methods=["POST"]),
+        Route("/partidas", partidas),
         Route("/privacidade", privacidade),
         Route("/jogar", jogar),
         Route("/saude", saude),

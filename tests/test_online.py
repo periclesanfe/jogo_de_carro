@@ -13,14 +13,22 @@ import pytest
 from jogo_de_carro.app import NEW_BUILD, Game
 from jogo_de_carro.net import _JS, Net
 from jogo_de_carro.run import MAX_MESSAGE, MAX_STEP, Run
-from jogo_de_carro.scenes import online
+from jogo_de_carro.scenes import online, race, results, versus
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.online import LOST, NO_RESULT, VERIFYING, AmigosScene, ConviteScene, WaitScene
 from jogo_de_carro.scenes.race import NO_PAUSE, Outcome, Phase, RaceScene
 from jogo_de_carro.scenes.results import VERDICTS, ResultsScene
 from jogo_de_carro.scenes.title import TitleScene
-from jogo_de_carro.scenes.versus import CATCH_UP, HOLD_S, LAG, UNSTABLE, LiveScene, VersusScene
-from jogo_de_carro.settings import FIXED_DT, FLAME, MUTED
+from jogo_de_carro.scenes.versus import (
+    CATCH_UP,
+    HOLD_S,
+    LAG,
+    UNSTABLE,
+    LiveScene,
+    RecordingScene,
+    VersusScene,
+)
+from jogo_de_carro.settings import FIXED_DT, FLAME, MODE_BY_KEY, MUTED
 from jogo_de_carro.world.autopilot import autopilot
 
 FRAME = 1 / 60
@@ -164,7 +172,7 @@ def check_stream(game: Game, race: RaceScene, ins: list[dict]) -> Run:
     assert [e for m in ins for e in m["ev"]] == race.run.log()["ev"]
     assert [("fin" in m) for m in ins] == [False] * (len(ins) - 1) + [True]
     assert ins[-1]["fin"] == {"outcome": race.run.outcome, "score": race.run.score.total}
-    server = Run(game.ctx.assets, "normal", "yellow", SEED, False)
+    server = Run(game.ctx.assets, "normal", "yellow", SEED, race.run.shared)
     for m in ins:
         server.feed(m["k"], m["ev"])
         server.advance(m["k"])
@@ -394,15 +402,19 @@ ANA = {"id": 42, "nick": "ana_42"}
 M = 77
 
 
-def welcome(game: Game, window: Window, friends: list = FRIENDS, requests: int = 0) -> None:
+def welcome(
+    game: Game, window: Window, friends: list = FRIENDS, requests: int = 0, challenges: tuple = ()
+) -> None:
     me = {"id": 7, "nick": "pericles"}
-    window.reply(t="welcome", me=me, friends=copy.deepcopy(friends), requests=requests)
+    window.reply(
+        t="welcome", me=me, friends=copy.deepcopy(friends), requests=requests, challenges=list(challenges)
+    )
     frames(game, 2)
 
 
-def amigos(game: Game, window: Window, requests: int = 0) -> AmigosScene:
+def amigos(game: Game, window: Window, requests: int = 0, challenges: tuple = ()) -> AmigosScene:
     """AMIGOS from the title: its 5th item once the socket is up."""
-    welcome(game, window, requests=requests)
+    welcome(game, window, requests=requests, challenges=challenges)
     assert list(game.scenes.top.menu.labels) == [
         "JOGAR",
         "SKIN",
@@ -426,33 +438,48 @@ def invited(game: Game, window: Window, id: str, mode: str = "facil", ttl: int =
 
 @pytest.fixture
 def drawn(monkeypatch) -> list[str]:
-    """Every string the online scenes draw."""
+    """Every string the online and versus scenes draw."""
     seen: list[str] = []
-    real = online.blit_text
-    monkeypatch.setattr(
-        online, "blit_text", lambda surface, s, *a, **k: (seen.append(s), real(surface, s, *a, **k))[1]
-    )
+    for module in (online, versus):
+        real = module.blit_text
+        monkeypatch.setattr(
+            module,
+            "blit_text",
+            lambda surface, s, *a, real=real, **k: (seen.append(s), real(surface, s, *a, **k))[1],
+        )
     return seen
 
 
-def test_amigos_lists_the_friends_online_as_presence_changes(game, window, drawn):
+def buttons(scene: AmigosScene) -> list[tuple[str, str]]:
+    return [(label, scene.rows[i].get("nick", scene.rows[i].get("from"))) for label, i in scene.actions]
+
+
+def test_amigos_lists_every_friend_online_first_as_presence_changes(game, window, drawn):
     scene = amigos(game, window, requests=2)
-    assert [f["nick"] for f in scene.rows] == ["ana_42", "bia"]  # free first; caio is offline
-    assert list(scene.menu.labels) == ["CORRER AGORA", "CORRENDO"]
-    assert "2 pedidos de amizade — veja no site" in drawn
+    assert [row["nick"] for row in scene.rows] == ["ana_42", "bia", "caio"]  # in the menu, racing, off
+    assert buttons(scene) == [
+        ("CORRER AGORA", "ana_42"),  # only to a friend in the menu
+        ("DESAFIAR", "ana_42"),  # to anyone
+        ("DESAFIAR", "bia"),
+        ("DESAFIAR", "caio"),
+    ]
+    assert "2 pedidos de amizade — veja no site" in drawn and "offline" in drawn
     key(game, pygame.K_DOWN, 2)
+    key(game, pygame.K_RIGHT, 2)  # any arrow moves along the buttons
+    assert buttons(scene)[scene.menu.index] == ("DESAFIAR", "bia")
     window.reply(t="presence", id=44, s="menu")
     window.reply(t="presence", id=99, s="menu")  # not a friend (yet): nothing to show
     frames(game, 2)
-    assert [f["nick"] for f in scene.rows] == ["ana_42", "caio", "bia"]
-    assert scene.rows[scene.menu.index]["nick"] == "bia", "the focus stays on its friend"
-    key(game, pygame.K_RETURN, 2)
-    assert game.scenes.top is scene and game._toast[0] == "bia está correndo agora"
+    assert [row["nick"] for row in scene.rows] == ["ana_42", "caio", "bia"]
+    assert buttons(scene)[scene.menu.index] == ("DESAFIAR", "bia"), "the focus stays on its button"
     for id in (42, 43, 44):
         window.reply(t="presence", id=id, s="off")
+    frames(game, 2)
+    assert buttons(scene) == [("DESAFIAR", "ana_42"), ("DESAFIAR", "bia"), ("DESAFIAR", "caio")]
+    welcome(game, window, friends=[])
     drawn.clear()
     frames(game, 2)
-    assert scene.rows == [] and "Nenhum amigo online agora" in drawn
+    assert scene.rows == [] and "Nenhum amigo ainda" in drawn
     key(game, pygame.K_ESCAPE, 40)
     title = game.scenes.top
     assert isinstance(title, TitleScene) and title.menu.labels[title.menu.index] == "AMIGOS"
@@ -789,3 +816,281 @@ def test_a_forfeit_card_shows_the_servers_numbers(game, window):
     stats = game.scenes.top.stats
     assert stats.reason == "Você perdeu: conexão perdida"
     assert (stats.seconds, stats.score.total) == (12.2, there.total)
+
+
+# --- Desafiar amigo (M5) ----------------------------------------------------------------------------------
+
+CHALLENGE = {"id": M, "from": "ana_42", "mode": "facil", "secs": 62.4, "score": 2845}
+
+
+def test_received_challenges_are_listed_first(game, window, drawn):
+    scene = amigos(game, window, challenges=[CHALLENGE])
+    window.reply(t="challenge_new", id=78, **{"from": "bia"}, mode="dificil", secs=125.0, score=12)
+    drawn.clear()
+    frames(game, 2)
+    assert [c["id"] for c in game.ctx.net.challenges] == [M, 78]
+    assert buttons(scene)[:3] == [("JOGAR", "ana_42"), ("JOGAR", "bia"), ("CORRER AGORA", "ana_42")]
+    assert "DESAFIOS RECEBIDOS" in drawn
+    assert "ana_42 fez 2.845 em 1:02 (Fácil)" in drawn and "bia fez 12 em 2:05 (Difícil)" in drawn
+    welcome(game, window)  # a new socket's welcome is the whole list
+    assert game.ctx.net.challenges == [] and buttons(scene)[0] == ("CORRER AGORA", "ana_42")
+
+
+def test_a_challenge_is_a_ranked_like_run_on_the_versus_road(game, window, tmp_path):
+    """DESAFIAR: the challenge, then my run alone on the versus road as a ranked run is played (no pause, R
+    gives up); the server's result says it was sent."""
+    amigos(game, window)
+    key(game, pygame.K_DOWN, 2)
+    key(game, pygame.K_RETURN, 40)  # DESAFIAR ana_42, in the menu's mode
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and window.sent[-1] == {"t": "challenge", "to": 42, "mode": "normal"}
+    window.reply(t="match", m=901, kind="challenge", mode="normal", op=None)
+    frames(game, 1)
+    assert window.sent[-1] == {"t": "ready", "m": 901} and wait.label == "Preparando…"
+    window.reply(t="go", m=901, seed=SEED)
+    frames(game, 1)
+    race = game.scenes.top
+    assert type(race) is RaceScene and race.run.shared and (race.online, race.seed) == (901, SEED)
+    assert race.realtime and race.to == "ana_42" and race.mode.key == "normal"
+    drive(race, 2)
+    until(game, lambda: race.phase is Phase.RACING and race.run.tick > 300, 8)
+    key(game, pygame.K_ESCAPE, 1)
+    assert game.scenes.top is race and game._toast[0] == NO_PAUSE
+    key(game, pygame.K_r, 1)  # gives up
+    results = game.scenes.top
+    assert isinstance(results, ResultsScene) and results.stats.official == VERIFYING
+    check_stream(game, race, inputs(window))
+    assert game.ctx.save.races == 0, "the versus road sets no record"
+    window.reply(t="result", m=901, run=901, state="ok", why=None, outcome="giveup", rank=None)
+    frames(game, 1)
+    assert results.stats.official == "✓ Desafio enviado a ana_42"
+    assert results.menu.labels[0] == "AMIGOS"
+    frames(game, 30)
+    key(game, pygame.K_RETURN, 40)
+    assert isinstance(game.scenes.top, AmigosScene)
+
+
+def test_the_result_line_of_a_challenge(game, window):
+    """Sent once ok; rejected after go it is lost (the friend wins, no second try), a lost socket too."""
+    normal = MODE_BY_KEY["normal"]
+    assert online.official({"state": "ok", "why": None}, normal, "ana_42") == "✓ Desafio enviado a ana_42"
+    rejected = {"state": "rejected", "why": "ritmo"}
+    assert online.official(rejected, normal, "ana_42") == "Desafio perdido: ritmo irregular"
+    race = RaceScene(game.ctx, SEED, True, online=901, mode="normal", skin="yellow", to="ana_42")
+    game.scenes.switch(race, Transition.NONE)
+    window.drop()
+    frames(game, 1)
+    assert game.scenes.top.stats.official == online.CHALLENGE_LOST == "Desafio perdido: conexão perdida"
+
+
+def test_a_challenge_shows_no_record(game, window, monkeypatch):
+    """Its road is the versus road: neither the HUD nor the results card speak of the solo record."""
+    seen: list[str] = []
+    for module in (race, results):
+        real = module.blit_text
+        monkeypatch.setattr(
+            module,
+            "blit_text",
+            lambda surface, s, *a, real=real, **k: (seen.append(s), real(surface, s, *a, **k))[1],
+        )
+    game.ctx.save.best["normal"] = 50
+    scene = RaceScene(game.ctx, SEED, True, online=901, mode="normal", skin="yellow", to="ana_42")
+    game.scenes.switch(scene, Transition.NONE)
+    frames(game, 360)  # the countdown and a few seconds of racing
+    window.drop()
+    frames(game, 120)
+    assert isinstance(game.scenes.top, ResultsScene) and "PONTOS" in seen
+    assert not [s for s in seen if "RECORDE" in s.upper()]
+
+
+def test_jogar_races_the_recorded_run_as_the_server_streams_it(game, window, drawn):
+    scene = amigos(game, window, challenges=[CHALLENGE])
+    game.ctx.save.skin = "blue"  # changed after the hello: playing keeps the socket, and its car
+    key(game, pygame.K_RETURN, 40)  # JOGAR
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and window.sent[-1] == {"t": "challenge_play", "id": M}
+    assert wait.label == "Preparando…" and game.ctx.net.challenges == [], "one attempt: it is used"
+    wait.draw(game.screen)
+    assert "ESC desistir (conta como derrota)" in drawn
+    window.reply(t="match", m=M, kind="challenge", mode="facil", op={"nick": "ana_42", "skin": "red"})
+    frames(game, 1)
+    assert window.sent[-1] == {"t": "ready", "m": M} and len(window.sockets) == 1
+    window.reply(t="go", m=M, seed=SEED)
+    frames(game, 1)
+    race = game.scenes.top
+    assert isinstance(race, RecordingScene) and race.realtime
+    assert (race.mode.key, race.run.skin, race.rival.skin, race.run.shared) == (
+        "facil",
+        "yellow",
+        "red",
+        True,
+    )
+    while race.phase is Phase.COUNTDOWN:
+        race.update(FIXED_DT)
+    race.world.invulnerable = True
+    her = her_inputs(game, 600)  # her run, as stored: given up at tick 600
+    while race.ticks < 650:
+        tick(race, her)  # streamed up to my k + 24, as a live rival's
+    race.on_net({"t": "op_end", "m": M, "k": 600, "why": "giveup"})
+    tick(race)
+    assert (race.rival.tick, race.rival.outcome, race.rival.score) == (600, "giveup", her.score)
+    drawn.clear()
+    race.draw(game.screen)
+    assert "GRAVAÇÃO" in drawn and "AO VIVO" not in drawn and "DESISTIU" in drawn
+    result = {"t": "result", "m": M, "run": M, "state": "ok", "why": None, "outcome": "decided", "score": 9}
+    race.on_net(
+        {**result, "secs": 5.4, "rank": None, "verdict": "win", "op": {"nick": "ana_42", "score": 50}}
+    )
+    until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
+    stats = game.scenes.top.stats
+    assert (VERDICTS[stats.verdict][0], stats.reason) == ("VOCÊ VENCEU!", "ana_42 desistiu aos 0:05")
+    assert game.scenes.top.menu.labels[0] == "AMIGOS"
+    frames(game, 30)
+    key(game, pygame.K_RETURN, 40)
+    assert isinstance(game.scenes.top, AmigosScene) and buttons(game.scenes.top)[0][0] != "JOGAR"
+    assert scene is not game.scenes.top
+
+
+def test_missing_the_ready_deadline_loses_the_challenge(game, window):
+    amigos(game, window, challenges=[CHALLENGE])
+    key(game, pygame.K_RETURN, 40)  # JOGAR
+    window.reply(t="match", m=M, kind="challenge", mode="facil", op={"nick": "ana_42", "skin": "red"})
+    lost = {"state": "rejected", "why": "prazo", "outcome": None, "score": None, "secs": None, "rank": None}
+    window.reply(t="result", m=M, run=M, **lost, verdict="loss", op={"nick": "ana_42", "score": 2845})
+    frames(game, 1)
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and wait.refused and wait.label == "Desafio perdido: prazo esgotado"
+
+
+@pytest.mark.parametrize(("button", "code"), [("JOGAR", "drain"), ("JOGAR", "gone"), ("DESAFIAR", "friend")])
+def test_challenge_refusals_show_the_servers_words(game, window, button, code):
+    scene = amigos(game, window, challenges=[CHALLENGE])
+    scene.menu.index = [label for label, _ in scene.actions].index(button)
+    key(game, pygame.K_RETURN, 40)
+    window.reply(t="error", code=code, msg=f"Recusado: {code}")  # expired, played, too many open, drain...
+    frames(game, 1)
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and wait.refused and wait.label == f"Recusado: {code}"
+    key(game, pygame.K_ESCAPE, 40)
+    assert isinstance(game.scenes.top, AmigosScene)
+    # JOGAR's attempt is used up only once the server took it (gone: played, expired or void)
+    kept = button == "DESAFIAR" or code != "gone"
+    assert game.ctx.net.challenges == ([CHALLENGE] if kept else [])
+
+
+def test_the_challenger_hears_how_it_went_on_the_menus(game, window):
+    welcome(game, window)
+    window.reply(t="challenge_done", id=M, verdict="loss", op={"nick": "ana_42", "score": 4100, "secs": 61.0})
+    frames(game, 1)
+    assert game._toast[0] == "ana_42 aceitou seu desafio: você perdeu"
+    game._toast = ("", 0.0)
+    window.reply(t="challenge_done", id=M, verdict=None, op=None)  # junk: nothing to tell
+    frames(game, 1)
+    assert game._toast[0] == ""
+
+    bot = VersusScene(game.ctx, "medio")
+    game.scenes.switch(bot, Transition.NONE)
+    window.reply(t="challenge_done", id=79, verdict="win", op={"nick": "bia", "score": 12, "secs": 3.1})
+    frames(game, 30)
+    assert game._toast[0] == "", "never over a race"
+    game.scenes.switch(TitleScene(game.ctx), Transition.NONE)
+    frames(game, 1)
+    assert game._toast[0] == "bia aceitou seu desafio: você venceu"
+
+
+def recording(game: Game, window: Window) -> RecordingScene:
+    """JOGAR on ana_42's challenge (Fácil): the server's match and go, through the countdown."""
+    amigos(game, window, challenges=[CHALLENGE])
+    key(game, pygame.K_RETURN, 40)
+    window.reply(t="match", m=M, kind="challenge", mode="facil", op={"nick": "ana_42", "skin": "red"})
+    frames(game, 1)
+    window.reply(t="go", m=M, seed=SEED)
+    frames(game, 1)
+    race = game.scenes.top
+    assert isinstance(race, RecordingScene)
+    while race.phase is Phase.COUNTDOWN:
+        race.update(FIXED_DT)
+    return race
+
+
+def test_a_recording_that_ends_past_my_crash_drives_on(game, window):
+    """I crash first: the server sends how her recorded run ended (a crash at 0:16, far past my gate) with the
+    result. She is not stopped where her inputs got to, as a live rival who forfeited is: she drives on, and
+    only the card says how her run ended."""
+    race = recording(game, window)  # nobody steers me: a crash
+    her = her_inputs(game, 3000)
+    while race.phase is not Phase.CRASHED:
+        tick(race, her)
+    race.on_net({"t": "op_end", "m": M, "k": 2031, "why": "crash"})
+    lost = {
+        "state": "ok",
+        "why": None,
+        "outcome": "crash",
+        "score": 5,
+        "secs": race.run.seconds,
+        "rank": None,
+    }
+    race.on_net(
+        {
+            "t": "result",
+            "m": M,
+            "run": M,
+            **lost,
+            "verdict": "loss",
+            "op": {"nick": "ana_42", "score": 649, "secs": 16.9},
+        }
+    )
+    for _ in range(40):
+        tick(race)
+    rival, distance = race.rival, race.rival.world.distance
+    tick(race)
+    assert rival.outcome is None and rival.world.distance > distance and race.state() is None
+    until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
+    assert game.scenes.top.stats.rival == "ana_42: 649 pontos · bateu aos 0:16"
+
+
+def test_amigos_scrolls_to_every_row(game, window, drawn):
+    """4 challenges and 10 offline friends: 7 rows at a time, a hint for the rest; every button is reached."""
+    friends = [{"id": 100 + i, "nick": f"amigo{i:02d}", "s": "off"} for i in range(10)]
+    challenges = [{**CHALLENGE, "id": 80 + i} for i in range(4)]
+    welcome(game, window, friends=friends, challenges=challenges)
+    game.scenes.switch(AmigosScene(game.ctx), Transition.NONE)
+    frames(game, 2)
+    scene = game.scenes.top
+    assert [label for label, _ in scene.actions] == ["JOGAR"] * 4 + ["DESAFIAR"] * 10
+    scene.draw(game.screen)
+    assert "↓ mais 7" in drawn
+    for n in range(len(scene.actions)):
+        assert scene.menu.index == n and scene.top <= scene.actions[n][1] < scene.top + online.ROWS
+        assert game.screen.get_rect().contains(scene.menu.buttons[n].rect), "the focused button shows"
+        key(game, pygame.K_DOWN, 2)
+    key(game, pygame.K_UP, 2)
+    drawn.clear()
+    scene.draw(game.screen)
+    assert "↑ mais 7" in drawn and "amigo09" in drawn and "amigo02" not in drawn
+    key(game, pygame.K_RETURN, 40)
+    assert window.sent[-1] == {"t": "challenge", "to": 109, "mode": "normal"}
+
+
+def test_jogar_with_the_socket_down(game, window):
+    """JOGAR in the 2 s before the socket reopens: a new socket, whose welcome still lists the challenge being
+    played. Refused before its attempt, it is listed once; the socket lost after the match: lost, it says."""
+    amigos(game, window, challenges=[CHALLENGE])
+    window.drop()
+    frames(game, 1)
+    key(game, pygame.K_RETURN, 40)  # JOGAR
+    window.accept()
+    frames(game, 1)
+    assert [m["t"] for m in window.sent] == ["hello", "challenge_play"]
+    welcome(game, window, challenges=[CHALLENGE])
+    assert game.ctx.net.challenges == []
+    window.reply(t="error", code="drain", msg="Servidor atualizando, tente em 1 min")
+    frames(game, 1)
+    assert game.ctx.net.challenges == [CHALLENGE]
+    key(game, pygame.K_ESCAPE, 40)
+    key(game, pygame.K_RETURN, 40)  # JOGAR again
+    window.reply(t="match", m=M, kind="challenge", mode="facil", op={"nick": "ana_42", "skin": "red"})
+    frames(game, 1)
+    window.drop()
+    frames(game, 1)
+    assert game.scenes.top.label == "Desafio perdido: conexão perdida"

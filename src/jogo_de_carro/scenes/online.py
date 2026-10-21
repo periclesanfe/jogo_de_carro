@@ -1,17 +1,18 @@
-"""Races over the site's socket (the Game routes its messages): JOGAR's ranked run, AMIGOS and the invites
-to a live race, and the wait for the server's go."""
+"""Races over the site's socket (the Game routes its messages): JOGAR's ranked run, AMIGOS with the invites
+to a live race and the challenges, and the wait for the server's go."""
 
 import pygame
 
 from ..input import Action
 from ..settings import ACCENT, HEIGHT, MODE_BY_KEY, MUTED, WHITE, WIDTH, Difficulty
 from ..tween import out_cubic
-from ..ui import Menu, blit_text, fit, outlined, panel
+from ..ui import Menu, blit_text, fit, mss, outlined, panel
 from .base import Context, MenuScene, Scene, Transition, menu_hint
 
 # the results screen's line about the server's word on the run (plan §3)
 VERIFYING = "verificando…"
 LOST = "Corrida invalidada: conexão perdida"  # the socket closed mid-race
+CHALLENGE_LOST = "Desafio perdido: conexão perdida"  # ...in a challenge: the server counts it as a loss
 NO_RESULT = "Conexão perdida antes do resultado"  # ...after the run ended, before the server's result
 WHY = {
     "ritmo": "ritmo irregular",
@@ -28,17 +29,22 @@ GONE = {  # invite_gone, on either side ({} is the friend)
     "offline": "{} saiu do jogo",
     "busy": "{} está ocupado agora",
 }
-ROWS = 6  # friends listed in AMIGOS
+ROWS = 7  # rows AMIGOS shows at a time: the list scrolls to the focused button's row
+BUTTONS = {"JOGAR": (1000, 170), "CORRER AGORA": (790, 220), "DESAFIAR": (1000, 170)}  # centre x, width
+STATUS = {"menu": ("no menu", (99, 199, 77)), "racing": ("correndo", ACCENT), "off": ("offline", MUTED)}
 
 
-def official(result: dict, mode: Difficulty) -> str:
-    """The line for a result message: ok (with the rank), review or rejected (with the reason)."""
+def official(result: dict, mode: Difficulty, to: str = "") -> str:
+    """The line for a result message: ok (with the rank), review or rejected (with the reason). A run that
+    challenges ``to`` (never in review): sent to them once ok; rejected, a loss (they win, no second try)."""
+    why = WHY.get(result.get("why"), result.get("why") or "motivo desconhecido")
+    if to:
+        return f"✓ Desafio enviado a {to}" if result.get("state") == "ok" else f"Desafio perdido: {why}"
     if result.get("state") == "ok":
         return f"✓ #{result.get('rank')} no ranking {mode.name}"
     if result.get("state") == "review":
         return "Em análise — entra no ranking após revisão"
-    why = result.get("why")
-    return f"Corrida invalidada: {WHY.get(why, why or 'motivo desconhecido')}"
+    return f"Corrida invalidada: {why}"
 
 
 def play(ctx: Context) -> Scene:
@@ -52,19 +58,33 @@ class WaitScene(MenuScene):
     """Asks the server for a race and waits for its go (the Game sends ready at the match and starts the
     race at go); Esc cancels. A ranked run (solo): Conectando…, Preparando…, or why it was refused. A live
     race against ``friend``: the invite (Aguardando ana_42…, or why it was turned down), or with ``reply``
-    the yes to one."""
+    the yes to one. A challenge: to ``friend`` (``challenge``), or ``play``ing the one they sent."""
 
     dim, blur = 30, True
 
     def __init__(
-        self, ctx: Context, friend: dict | None = None, mode: str | None = None, reply: str | None = None
+        self,
+        ctx: Context,
+        friend: dict | None = None,
+        mode: str | None = None,
+        reply: str | None = None,
+        *,
+        challenge: bool = False,
+        play: dict | None = None,
     ) -> None:
         super().__init__(ctx)
         self.mode = MODE_BY_KEY[mode] if mode else ctx.mode
-        self.friend = friend  # {"id", "nick"}: a live race
-        self.kind = "live" if friend else "solo"
+        self.friend = friend  # {"id", "nick"}: a live race or a challenge (only "nick" to play one)
+        self.kind = "challenge" if challenge or play else "live" if friend else "solo"
+        self.play = play  # the received challenge played (welcome's challenges)
         if friend is None:
             self.ask: dict = {"t": "solo", "mode": self.mode.key}
+            self.label = "Conectando…"
+        elif play:
+            self.ask = {"t": "challenge_play", "id": play["id"]}
+            self.label = "Preparando…"
+        elif challenge:
+            self.ask = {"t": "challenge", "to": friend["id"], "mode": self.mode.key}
             self.label = "Conectando…"
         elif reply is None:
             self.ask = {"t": "invite", "to": friend["id"], "mode": self.mode.key}
@@ -80,10 +100,12 @@ class WaitScene(MenuScene):
     def enter(self) -> None:
         net, save = self.ctx.net, self.ctx.save
         assert net
-        # the hello names the car: another car needs a new socket (not for a reply: the invite is this one's)
-        if self.ask["t"] != "invite_reply" and (not net.up or net.skin != save.skin):
+        # the hello names the car: another car needs a new socket (not for a reply: the invite is this one's;
+        # nor to play a challenge, as for a reply: its new welcome would list the challenge being played)
+        keep = self.ask["t"] == "invite_reply" or (self.ask["t"] == "challenge_play" and net.up)
+        if not keep and (not net.up or net.skin != save.skin):
             net.connect(save.skin)
-        elif net.me and not self.friend:
+        elif net.me and self.label == "Conectando…":
             self.label = "Aguardando…"
         net.send(self.ask)
 
@@ -93,10 +115,15 @@ class WaitScene(MenuScene):
 
     def on_net(self, msg: dict) -> None:
         t = msg.get("t")
-        if t == "closed" and not self.refused:
-            self.say("Sem conexão com o servidor")
-        elif t == "result" and self.m is not None and msg.get("m") == self.m:
-            self.say("Corrida anulada")  # void before go: someone was not ready
+        if t == "closed" and not self.refused:  # the attempt was used once the match came
+            self.say(CHALLENGE_LOST if self.play and self.m is not None else "Sem conexão com o servidor")
+        elif t == "welcome" and self.play and self.ctx.net:  # a new socket's list: still has the one played
+            self.ctx.net.challenges = [c for c in self.ctx.net.challenges if c["id"] != self.play["id"]]
+        elif t == "result" and self.m is not None and msg.get("m") == self.m:  # before go: one was not ready
+            if msg.get("verdict") == "loss":  # a challenge's one attempt: missing the deadline loses it
+                self.say(f"Desafio perdido: {WHY.get(msg.get('why'), 'prazo esgotado')}")
+            else:
+                self.say("Corrida anulada")
         elif t == "invite_gone" and msg.get("id") == self.invite and self.m is None and self.friend:
             self.say(GONE.get(msg.get("why"), "O convite acabou").format(self.friend["nick"]))
 
@@ -117,15 +144,18 @@ class WaitScene(MenuScene):
     def draw_ui(self, surface: pygame.Surface) -> None:
         heading = outlined(self.label, 72, WHITE, width=4)
         surface.blit(heading, heading.get_rect(center=(WIDTH // 2, 320)))
-        if self.friend:
-            line = f"Ao vivo contra {self.friend['nick']} · modo {self.mode.name}"
-        else:
-            line = f"Corrida valendo ranking · modo {self.mode.name}"
-        blit_text(surface, line, 30, (WIDTH // 2, 400), MUTED)
+        line = {
+            "solo": "Corrida valendo ranking · modo {mode}",
+            "challenge": "Desafio para {nick} · modo {mode}",
+            "challenge_play": "Desafio de {nick} · contra a corrida gravada · modo {mode}",
+        }.get(self.ask["t"], "Ao vivo contra {nick} · modo {mode}")
+        nick = self.friend["nick"] if self.friend else ""
+        blit_text(surface, line.format(nick=nick, mode=self.mode.name), 30, (WIDTH // 2, 400), MUTED)
         back = "B" if self.ctx.input.using_pad else "ESC"
+        cancel = "desistir (conta como derrota)" if self.play else "cancelar"  # the one attempt is used
         blit_text(
             surface,
-            f"{back} {'voltar' if self.refused else 'cancelar'}",
+            f"{back} {'voltar' if self.refused else cancel}",
             24,
             (WIDTH // 2, HEIGHT - 40),
             MUTED,
@@ -133,37 +163,48 @@ class WaitScene(MenuScene):
 
 
 class AmigosScene(MenuScene):
-    """Friends online (the welcome's list, kept by presence): CORRER AGORA invites one to a live race in the
-    current mode. Friends are added on the site."""
+    """Challenges received (JOGAR races the friend's recorded run, once) and every friend, online first:
+    CORRER AGORA invites one in the menu to a live race, DESAFIAR challenges any friend to beat the run you
+    play now; both in the current mode. Friends are added on the site."""
 
     dim, blur = 30, True
 
     def __init__(self, ctx: Context) -> None:
         super().__init__(ctx)
-        self.rows: list[dict] = []
-        self.menu = Menu([], (840, 380), ctx.audio)
-        self.shown: list[tuple] = [()]  # what the menu was built from: rebuilt as presence changes
+        self.rows: list[dict] = []  # the challenges, then the friends
+        self.actions: list[tuple[str, int]] = []  # each button's label and row (its index in rows)
+        self.menu = Menu([], (0, 0), ctx.audio)
+        self.shown: list[tuple] | None = None  # what the rows were built from: rebuilt as it changes
+        self.challenges = 0  # how many of the rows are challenges
+        self.top = 0  # the first row shown
 
-    def online(self) -> list[dict]:
-        """In-menu friends first (they can be invited), then those racing; by nick."""
-        net = self.ctx.net
-        friends = [f for f in (net.friends.values() if net else ()) if f.get("s") in ("menu", "racing")]
-        # ponytail: the first ROWS only; a scrolling list when players have that many friends online at once
-        return sorted(friends, key=lambda f: (f["s"] != "menu", str(f["nick"]).lower()))[:ROWS]
+    def listed(self) -> tuple[list[dict], list[dict]]:
+        """The challenges, then the friends: in the menu, racing, offline; by nick."""
+        net, order = self.ctx.net, {"menu": 0, "racing": 1}
+        friends = sorted(
+            net.friends.values() if net else (), key=lambda f: (order.get(f["s"], 2), f["nick"].lower())
+        )
+        return list(net.challenges) if net else [], friends
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
         if action is Action.BACK:
             self._back()
             return
-        choice = self.menu.handle(action, event) if self.rows else None
-        if choice is None:
+        if action in (Action.LEFT, Action.RIGHT):  # the buttons go in reading order: any arrow moves along
+            action = Action.UP if action is Action.LEFT else Action.DOWN
+        choice = self.menu.handle(action, event) if self.actions else None
+        net = self.ctx.net
+        if choice is None or not net:
             return
-        friend = self.rows[choice]
-        if friend["s"] != "menu":
-            self.ctx.toast(f"{friend['nick']} está correndo agora")
-            return
+        label, i = self.actions[choice]
+        row = self.rows[i]
         self.ctx.audio.play("ui_select")
-        self.ctx.scenes.switch(WaitScene(self.ctx, friend), Transition.FADE)
+        if label == "JOGAR":  # the one attempt starts now
+            net.challenges = [c for c in net.challenges if c["id"] != row["id"]]
+            wait = WaitScene(self.ctx, {"nick": row["from"]}, row["mode"], play=row)
+        else:
+            wait = WaitScene(self.ctx, row, challenge=label == "DESAFIAR")
+        self.ctx.scenes.switch(wait, Transition.FADE)
 
     def _back(self) -> None:
         from .title import TitleScene
@@ -176,32 +217,74 @@ class AmigosScene(MenuScene):
         if not self.ctx.net:  # logged out meanwhile: offline play has no friends
             self._back()
             return
-        rows = self.online()
-        shown = [(f["id"], f["s"]) for f in rows]
+        challenges, friends = self.listed()
+        shown = [("c", c["id"]) for c in challenges] + [("f", f["id"], f["s"]) for f in friends]
         if shown != self.shown:
-            focused = self.shown[self.menu.index] if self.rows else None
-            index = next((i for i, row in enumerate(shown) if focused and row[0] == focused[0]), 0)
-            labels = ["CORRER AGORA" if f["s"] == "menu" else "CORRENDO" for f in rows]
-            self.menu = Menu(labels, (840, 380), self.ctx.audio, size=(260, 52), gap=20, index=index)
-            self.rows, self.shown = rows, shown
+            self._build(challenges, friends)
+            self.shown = shown
+        self._scroll()
         self.menu.update(dt)
+
+    def _build(self, challenges: list[dict], friends: list[dict]) -> None:
+        """The rows and their buttons, keeping the focus on its button."""
+        focused = self.ids()[self.menu.index] if self.actions else None
+        self.rows, self.actions, self.challenges = challenges + friends, [], len(challenges)
+        for i, row in enumerate(self.rows):
+            if i < self.challenges:
+                labels = ["JOGAR"]
+            else:  # CORRER AGORA to a friend in the menu only
+                labels = ["CORRER AGORA"] * (row["s"] == "menu") + ["DESAFIAR"]
+            self.actions += [(label, i) for label in labels]
+        self.menu = Menu([label for label, _ in self.actions], (0, 0), self.ctx.audio)
+        self.menu.index = self.ids().index(focused) if focused in self.ids() else 0
+        for button in self.menu.buttons:
+            button.size = 28
+
+    def ids(self) -> list[tuple[str, int]]:
+        return [(label, self.rows[i]["id"]) for label, i in self.actions]
+
+    def y(self, i: int) -> int:
+        """Where row i is drawn while shown (a gap between the challenges and the friends)."""
+        return 212 + (i - self.top) * 58 + 12 * (self.top < self.challenges <= i)
+
+    def _scroll(self) -> None:
+        """ROWS rows from top, which follows the focused button; the hidden rows' buttons go off screen."""
+        focus = self.actions[self.menu.index][1] if self.actions else 0
+        self.top = max(0, min(self.top, focus, len(self.rows) - ROWS), focus - ROWS + 1)
+        for (label, i), button in zip(self.actions, self.menu.buttons, strict=True):
+            x, w = BUTTONS[label]
+            y = self.y(i) if self.top <= i < self.top + ROWS else -100
+            button.rect = pygame.Rect(x - w // 2, y - 21, w, 42)
 
     def draw_ui(self, surface: pygame.Surface) -> None:
         net = self.ctx.net
         heading = outlined("AMIGOS", 80, WHITE, width=4)
         surface.blit(heading, heading.get_rect(center=(WIDTH // 2, 74)))
-        line = f"Corrida ao vivo no modo {self.ctx.mode.name}: quem durar mais vence"
+        line = f"Modo {self.ctx.mode.name}: corra ao vivo, ou desafie a bater a corrida que você fizer agora"
         blit_text(surface, line, 28, (WIDTH // 2, 126), MUTED)
-        for friend, button in zip(self.rows, self.menu.buttons, strict=True):
-            y = button.rect.centery
-            panel(surface, pygame.Rect(300, y - 34, 680, 68), alpha=200, radius=18)
-            blit_text(surface, fit(str(friend["nick"]), 34, 230), 34, (328, y), WHITE, anchor="midleft")
-            free = friend["s"] == "menu"
-            pygame.draw.circle(surface, (99, 199, 77) if free else ACCENT, (574, y), 7)
-            blit_text(surface, "no menu" if free else "correndo", 26, (590, y), MUTED, "midleft", False)
+        if self.top < self.challenges:
+            blit_text(surface, "DESAFIOS RECEBIDOS", 24, (200, 172), ACCENT, anchor="midleft", shadow=False)
+        shown = range(self.top, min(len(self.rows), self.top + ROWS))
+        for i in shown:
+            row, y = self.rows[i], self.y(i)
+            panel(surface, pygame.Rect(180, y - 27, 920, 54), alpha=200, radius=18)
+            if i < self.challenges:
+                mode, secs = MODE_BY_KEY[row["mode"]].name, mss(row["secs"])
+                score = f"{row['score']:,}".replace(",", ".")  # 2.845
+                said = fit(f"{row['from']} fez {score} em {secs} ({mode})", 28, 660)
+                blit_text(surface, said, 28, (208, y), WHITE, anchor="midleft")
+                continue
+            status, color = STATUS.get(row["s"], STATUS["off"])
+            nick = fit(str(row["nick"]), 32, 240)
+            blit_text(surface, nick, 32, (208, y), MUTED if row["s"] == "off" else WHITE, anchor="midleft")
+            pygame.draw.circle(surface, color, (470, y), 7)
+            blit_text(surface, status, 26, (486, y), MUTED, "midleft", False)
         self.menu.draw(surface)
+        above, below = self.top, len(self.rows) - shown.stop
+        if more := " · ".join([f"↑ mais {above}"] * bool(above) + [f"↓ mais {below}"] * bool(below)):
+            blit_text(surface, more, 24, (1100, 172), MUTED, anchor="midright", shadow=False)  # it scrolls
         if not self.rows:
-            empty = "Conectando…" if not (net and net.me) else "Nenhum amigo online agora"
+            empty = "Conectando…" if not (net and net.me) else "Nenhum amigo ainda"
             blit_text(surface, empty, 40, (WIDTH // 2, 330), WHITE)
             blit_text(surface, "Adicione amigos pelo apelido no site", 28, (WIDTH // 2, 386), MUTED)
         if net and net.requests:

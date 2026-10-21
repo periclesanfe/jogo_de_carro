@@ -17,7 +17,7 @@ from .scenes.base import WEB, Context, SceneManager, Transition
 from .scenes.online import ConviteScene, WaitScene
 from .scenes.race import RaceScene
 from .scenes.title import TitleScene
-from .scenes.versus import LiveScene
+from .scenes.versus import LiveScene, RecordingScene
 from .settings import FIXED_DT, FPS, HEIGHT, MUTED, TITLE, WIDTH
 from .ui import blit_text, panel, text
 
@@ -27,6 +27,7 @@ TOAST_TIME = 1.4
 RETRY = 2.0  # seconds before a closed socket is opened again (only outside races)
 NEW_BUILD = "Nova versão — recarregue"
 FINAL = ("login", "version", "busy")  # the server's refusals after which no socket reopens by itself
+DONE = {"win": "você venceu", "loss": "você perdeu", "draw": "deu empate"}  # challenge_done: my verdict
 
 
 class Game:
@@ -72,6 +73,7 @@ class Game:
         self._retry: float | None = None  # a closed socket opens again when this runs out
         self._reload: float | None = None  # a new build: the page reloads when this runs out
         self._invite: tuple[dict, float] | None = None  # an invite held over a race or a wait, and its age
+        self._done: list[str] = []  # how my challenges went, toasted once no race nor wait is up
         if net:
             net.connect(save.skin)
 
@@ -144,6 +146,9 @@ class Game:
                 self.scenes.push(ConviteScene(self.ctx, {**msg, "ttl": left}))
             else:
                 self._invite = (msg, age + frame_dt)
+        free = not (self._racing() or isinstance(self.scenes.top, WaitScene))
+        if self._done and free and self._toast[1] <= 0:
+            self.toast(self._done.pop(0), 3.0)
         if self._retry is not None and not self._racing():  # a bot race or a paused one is left alone
             self._retry -= frame_dt
             if self._retry <= 0:
@@ -171,11 +176,18 @@ class Game:
             else:  # cancelled meanwhile
                 net.send({"t": "leave", "m": msg["m"]})
         elif t == "go":
-            if waiting and top.m == msg["m"]:  # the race starts now: its countdown is the start sync
-                if top.friend and top.match:
-                    race: RaceScene = LiveScene(self.ctx, top.match, top.friend, msg["seed"])
+            if waiting and top.m == msg["m"] and top.match:  # the race starts now: its countdown syncs it
+                m, mode, seed = msg["m"], top.match["mode"], msg["seed"]
+                if top.ask["t"] == "challenge":  # my run, alone on the versus road, for the friend to race
+                    to = top.friend["nick"]
+                    race: RaceScene = RaceScene(
+                        self.ctx, seed, True, online=m, mode=mode, skin=net.skin, to=to
+                    )
+                elif top.friend:  # a live race, or the friend's recorded one
+                    live = RecordingScene if top.ask["t"] == "challenge_play" else LiveScene
+                    race = live(self.ctx, top.match, top.friend, seed)
                 else:
-                    race = RaceScene(self.ctx, msg["seed"], online=msg["m"])
+                    race = RaceScene(self.ctx, seed, online=m)
                 self.scenes.switch(race, Transition.NONE)
         elif t == "waiting":  # my invite is out
             if waiting and top.ask["t"] == "invite" and top.invite is None:
@@ -184,6 +196,9 @@ class Game:
                 net.send({"t": "invite_cancel", "id": msg["id"]})
         elif t == "invited":  # held over a race or a wait (see _network): unanswered, it expires
             self._invite = (msg, 0.0)
+        elif t == "challenge_done" and msg.get("verdict") in DONE:  # a friend raced my recorded run
+            nick = (msg.get("op") or {}).get("nick") or "Seu amigo"
+            self._done.append(f"{nick} aceitou seu desafio: {DONE[msg['verdict']]}")
         elif t == "error" and msg.get("code") == "version":
             self._reload = 2.0
             self._refused(NEW_BUILD, 2.0)
@@ -194,6 +209,8 @@ class Game:
                 offline = RaceScene(self.ctx) if top.kind == "solo" else TitleScene(self.ctx)
                 self.scenes.switch(offline, Transition.FADE)
         elif t == "error":  # full, drain, rate, busy...: the server's own words
+            if waiting and top.play and msg.get("code") != "gone":  # refused before its attempt: still open
+                net.challenges.insert(0, top.play)
             self._refused(str(msg.get("msg") or f"Erro do servidor: {msg.get('code')}"))
         else:
             if t == "closed":

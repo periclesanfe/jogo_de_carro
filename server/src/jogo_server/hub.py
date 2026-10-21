@@ -1,12 +1,13 @@
-"""The match hub (plan §5, §6): the one WebSocket, /ws, ranked solo runs and live races between friends, every
-run verified live.
+"""The match hub (plan §5, §6): the one WebSocket, /ws, ranked solo runs, live races and challenges between
+friends, every run verified live.
 
 JSON text frames. Any frame that is not exactly one of these, or comes out of place, voids the run in
 progress (invalido) and closes the socket with 1008:
 
     C→S {"t":"hello","build":"<tree>","py":"3.12.12","pg":"2.5.7","skin":"yellow"}      first, and once
     S→C {"t":"welcome","me":{"id":7,"nick":"pericles"},"requests":2,     requests: friend requests to answer
-         "friends":[{"id":42,"nick":"ana_42","s":"off|menu|racing"}]}
+         "friends":[{"id":42,"nick":"ana_42","s":"off|menu|racing"}],
+         "challenges":[{"id":77,"from":"ana_42","mode":"normal","secs":83.2,"score":5321}]}    open, to me
       | {"t":"error","code":"login|version|busy|bad|rate","msg":"<pt-BR>"}, then the socket closes (rate: 20
          sockets a minute, each one's presence goes to every friend)
     S→C {"t":"presence","id":42,"s":"off|menu|racing"}      a friend's new status (menu: said hello, no run;
@@ -26,6 +27,18 @@ progress (invalido) and closes the socket with 1008:
     S→C {"t":"invite_gone","id":"i_9f2c…","why":"declined|expired|cancelled|offline|busy"}
     S→C {"t":"match","m":903,"kind":"live","mode":"normal","op":{"nick":"ana_42","skin":"red"}}  to both, on
          ok | {"t":"error","code":"full|drain",...} to both
+    C→S {"t":"challenge","to":42,"mode":"normal"}   to a friend, online or not; at most 10 open
+    S→C {"t":"match","m":904,"kind":"challenge","mode":"normal","op":null}     then as solo, on a shared road
+      | {"t":"error","code":"drain|full|racing|rate|friend","msg":"<pt-BR>"}   (rate: starts, or 10 open)
+    S→C {"t":"challenge_new","id":77,"from":"ana_42","mode":"normal","secs":83.2,"score":5321}   to the
+         friend, once the challenger's run is ok: it is open for 7 days
+    C→S {"t":"challenge_play","id":77}               the friend only (anyone else's: a violation), once
+    S→C {"t":"match","m":905,"kind":"challenge","mode":"normal","op":{"nick":"ana_42","skin":"red"}}  no seed
+      | {"t":"error","code":"drain|full|racing|gone","msg":"<pt-BR>"}    gone: played, expired, void or none
+         then as a live race: the stored run's inputs come as op (the messages it was sent in), gated by my
+         own k, then its op_end; it is decided against the stored run; any forfeit (prazo included) loses
+    S→C {"t":"challenge_done","id":77,"verdict":"win|loss|draw","op":{"nick":"bia","score":4100,"secs":61.0}}
+         to the challenger, if in the game (verdict: theirs; score and secs null: the friend never started)
     C→S {"t":"ready","m":901}                       within 10 s, or the attempt is used up (prazo)
     S→C {"t":"go","m":901,"seed":6004799503160661}  the seed, at last; tick 0 is 2.25 s later (a race: to both
          at once, one seed)
@@ -47,14 +60,25 @@ else's invite. k is a multiple of 12 but with fin. Only the server's simulation 
 (desync).
 
 A live race is decided by run.verdict after every step, or at once by a forfeit (give-up, leave, 5 s of
-silence, a lost socket, pacing, a bad frame: that player loses); then both get their result together. The run
+silence, a lost socket, pacing, a bad frame: that player loses; a give-up past the end of a rival's run that
+ended first wins, by run.verdict); then both get their result together. The run
 still going then ends with outcome "decided". A pair that misses its ready deadline (or loses a player before
 go) is void: the late one's why is prazo (conexao), the other's anulada. Live runs never rank nor wait for
 review. A handler never awaits the other player's socket while the race is on: its slowness would be this
 player's lateness (pacing).
+
+A challenge is a matches row: racing (the challenger's run), open, playing_b (the friend's one attempt), then
+done, expired (7 days, marked when read) or void. The challenger's run rejected before go (prazo: no seed
+seen) voids it; after go it is a forfeit, as in a race: the friend wins without playing, so a run going badly
+cannot be thrown away and tried again. Void too: a restart, the admin rejecting any ok run of a match (trigger
+runs_void; a race's too), a ban (the open ones), an unfriending (the pair's open ones); a deleted challenger
+takes it along. The friend's run is decided against the stored one as against a live rival that has ended, so
+early; voided meanwhile, the result has no verdict. The friend's turn holds two MAX_ATIVAS places: the
+recording is in memory too. Challenge runs never rank nor wait for review either.
 """
 
 import asyncio
+import bisect
 import contextlib
 import itertools
 import json
@@ -67,6 +91,8 @@ from array import array
 from collections import deque
 from dataclasses import dataclass, field
 from functools import cache
+from operator import itemgetter
+from types import SimpleNamespace
 from typing import Any
 
 from starlette.websockets import WebSocket
@@ -92,6 +118,7 @@ INVITES, INVITES_S = 10, 600.0  # invites per player, every 10 min
 INVITE_S = 30.0  # an invite waits this long for its answer
 SOCKETS = 20  # sockets per player a minute: each one's presence goes to every friend in the game
 AHEAD = 24  # a rival's inputs reach a player up to this many ticks past the player's own last k
+CHALLENGES, CHALLENGE_S = 10, 7 * 86400.0  # open challenges per challenger at most; how long one stays open
 VERDICTS = {1: "win", 0: "draw", -1: "loss"}
 REFUSED = {
     "login": "Entre no site para jogar online.",
@@ -106,8 +133,11 @@ REFUSED = {
     "racing": "Sua corrida anterior ainda não acabou",
     "invites": "Convites demais, tente em alguns minutos",
     "sockets": "Conexões demais, tente em 1 min",
+    "friend": "Só dá para desafiar amigos",
+    "challenges": "Você já tem 10 desafios em aberto",
+    "gone": "Esse desafio não está mais disponível",
 }
-CODES = {"nick": "login", "ended": "login", "invites": "rate", "sockets": "rate"}  # sent under another code
+CODES = {"nick": "login", "ended": "login", "invites": "rate", "sockets": "rate", "challenges": "rate"}
 # each message's fields: a JSON type (exactly: true is no int), or the strings allowed
 SHAPES: dict[str, dict[str, Any]] = {
     "hello": {"build": str, "py": str, "pg": str, "skin": SKINS},
@@ -115,13 +145,32 @@ SHAPES: dict[str, dict[str, Any]] = {
     "invite": {"to": int, "mode": tuple(MODE_BY_KEY)},
     "invite_reply": {"id": str, "ok": bool},
     "invite_cancel": {"id": str},
+    "challenge": {"to": int, "mode": tuple(MODE_BY_KEY)},
+    "challenge_play": {"id": int},
     "ready": {"m": int},
     "in": {"m": int, "k": int, "ev": list},
     "leave": {"m": int},
 }
 FRIEND = "SELECT 1 FROM friends WHERE a = ? AND b = ? AND accepted"  # (a, b) sorted
+OPEN = "SELECT count(*) FROM matches WHERE a = ? AND kind = 'challenge'"
+OPEN += " AND state IN ('racing', 'open', 'playing_b')"  # a challenger's, not over yet
+OFFERS = (  # the challenges open to a player (b), with the challenger's run: offer()'s arguments
+    "SELECT matches.id, nick, matches.mode, seconds, score FROM matches"
+    " JOIN runs ON match_id = matches.id AND user_id = a JOIN users ON users.id = a"
+    " WHERE b = ? AND matches.state = 'open' ORDER BY matches.id"
+)
 FIN = {"outcome": ("crash", "win", "giveup"), "score": int}
 log = logging.getLogger("jogo")
+
+
+def expire(db: sqlite3.Connection) -> None:
+    """Open challenges past their 7 days are expired: run before any read of them."""
+    db.execute("UPDATE matches SET state = 'expired' WHERE state = 'open' AND expires <= ?", (time.time(),))
+
+
+def offer(mid: int, nick: str, mode: str, secs: float, score: int) -> dict:
+    """A challenge open to the friend, as welcome and challenge_new list it."""
+    return {"id": mid, "from": nick, "mode": mode, "secs": round(secs, 1), "score": score}
 
 
 @cache
@@ -153,7 +202,9 @@ def parse(text: str) -> dict | None:
         shape = {**shape, "fin": FIN}
     if not (shape and fits(d, {"t": str, **shape})):
         return None
-    return d if 0 <= d.get("fin", {}).get("score", 0) < 2**53 else None  # it is stored: SQLite holds 64 bits
+    if any(type(v) is int and not -(2**63) <= v < 2**63 for v in d.values()):  # SQLite holds 64 bits: an id
+        return None  # (to, id) is looked up
+    return d if 0 <= d.get("fin", {}).get("score", 0) < 2**53 else None  # it is stored
 
 
 def error(code: str) -> dict:
@@ -234,8 +285,10 @@ class Live:
     mode: str
     seed: int
     deadline: float  # for ready
-    match: int | None = None  # a live race: the matches row, and the rival's run
-    op: "Live | None" = field(default=None, repr=False)
+    match: int | None = None  # a live race or a challenge: the matches row
+    kind: str = "solo"  # solo | live | challenge
+    op: "Live | None" = field(default=None, repr=False)  # a live race: the rival's run
+    rec: Any = None  # a challenge's friend's turn: the stored run raced, as run.verdict reads a Run
     ready: bool = False
     run: Run | None = None  # from go
     t0: float = 0.0  # loop time of tick 0
@@ -263,7 +316,7 @@ class Hub:
         self.marks = deque([(self.ticked, 0.0)])  # (tick, self.stall): the last CREDIT_S s, and one older
         sql = "UPDATE runs SET state = 'rejected', why = 'reinicio', ended = ? WHERE state = 'live'"
         self.db.execute(sql, (time.time(),))  # a restart dropped them
-        self.db.execute("UPDATE matches SET state = 'void' WHERE state = 'racing'")
+        self.db.execute("UPDATE matches SET state = 'void' WHERE state IN ('racing', 'playing_b')")
 
     # --- the clock: a server stall is never the player's lag ------------------------------------------
 
@@ -347,8 +400,8 @@ class Hub:
             del self.socks[sock.uid]
         if sock.invite:
             self.spawn(self.send(*self.withdraw(sock, "offline")))
-        if sock.live and sock.live.op:
-            self.spawn(self.finish(sock.live, "conexao"))  # the rival must hear of it
+        if sock.live and (sock.live.op or sock.live.rec):
+            self.spawn(self.finish(sock.live, "conexao"))  # the rival (the challenger) must hear of it
         elif sock.live:
             self.end(sock.live, "conexao")
         self.announce(sock.uid)  # (a race undecided: still racing, so nothing yet)
@@ -391,7 +444,8 @@ class Hub:
             return "drain"
         if self.racing(*uids):
             return "racing"
-        return "full" if len(self.live) + runs > self.cfg.max_ativas else None
+        held = len(self.live) + sum(x.rec is not None for x in self.live.values())  # a friend's turn: 2
+        return "full" if held + runs > self.cfg.max_ativas else None
 
     # --- friends ----------------------------------------------------------------------------------------
 
@@ -456,35 +510,96 @@ class Hub:
         ]
         requests = sum(not (f["accepted"] or f["mine"]) for f in rows)  # the ones asked of me
         me = {"id": sock.uid, "nick": sock.nick}
-        await self.send(sock, {"t": "welcome", "me": me, "friends": friends, "requests": requests})
+        expire(self.db)
+        challenges = [offer(*r) for r in self.db.execute(OFFERS, (sock.uid,))]
+        welcome = {"t": "welcome", "me": me, "friends": friends, "requests": requests}
+        await self.send(sock, {**welcome, "challenges": challenges})
         self.announce(sock.uid)
 
-    def start(self, sock: Sock, mode: str, seed: int, now: float, match: int | None = None) -> Live:
+    def start(
+        self, sock: Sock, mode: str, seed: int, now: float, match: int | None = None, kind: str = "solo"
+    ) -> Live:
         """A new run, stored live until its result, waiting for ready."""
-        kind, build = "live" if match else "solo", self.state.build
         rid = self.db.execute(
             "INSERT INTO runs(user_id, kind, match_id, mode, skin, seed, shared, build, started, state)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'live') RETURNING id",
-            (sock.uid, kind, match, mode, sock.skin, seed, bool(match), build, time.time()),
+            (sock.uid, kind, match, mode, sock.skin, seed, kind != "solo", self.state.build, time.time()),
         ).fetchone()[0]
-        sock.m, sock.live = rid, Live(rid, sock, mode, seed, now + READY_S, match)
+        sock.m, sock.live = rid, Live(rid, sock, mode, seed, now + READY_S, match, kind)
         self.live[rid] = sock.live
         self.announce(sock.uid)
         return sock.live
 
+    def new_match(self, kind: str, mode: str, seed: int, a: int, b: int) -> int:
+        sql = (
+            "INSERT INTO matches(kind, mode, seed, a, b, state, created) VALUES (?, ?, ?, ?, ?, 'racing', ?)"
+        )
+        return self.db.execute(sql + " RETURNING id", (kind, mode, seed, a, b, time.time())).fetchone()[0]
+
     async def on_solo(self, sock: Sock, d: dict, now: float) -> None:
+        """A ranked run; or (challenge, to a friend) the challenger's run: as solo, but on the shared road and
+        never ranked; once it is ok, the friend's turn (on_challenge_play)."""
         if sock.live:  # one run at a time
             return await self.violate(sock)
         if not await self.signed_in(sock):
             return
         await self.walk_away(sock)
-        code = self.refusal(1, sock.uid)
-        if code is None and not self.state.limits.allow((f"solo:{sock.uid}", STARTS, 3600)):
+        to, code = d.get("to"), self.refusal(1, sock.uid)
+        if code is None and to is not None:
+            expire(self.db)
+            if not self.db.execute(FRIEND, sorted((sock.uid, to))).fetchone():
+                code = "friend"  # (themselves too)
+            elif self.db.execute(OPEN, (sock.uid,)).fetchone()[0] >= CHALLENGES:
+                code = "challenges"
+        if code is None and not self.state.limits.allow((f"solo:{sock.uid}", STARTS, 3600)):  # either kind
             code = "rate"
         if code:
             return await self.send(sock, error(code))
-        live = self.start(sock, d["mode"], new_seed(), now)
-        await self.send(sock, {"t": "match", "m": live.id, "kind": "solo", "mode": live.mode, "op": None})
+        seed, kind = new_seed(), d["t"]  # solo | challenge
+        with db.tx(self.db):
+            mid = None if to is None else self.new_match(kind, d["mode"], seed, sock.uid, to)
+            live = self.start(sock, d["mode"], seed, now, mid, kind)
+        await self.send(sock, {"t": "match", "m": live.id, "kind": kind, "mode": live.mode, "op": None})
+
+    on_challenge = on_solo
+
+    async def on_challenge_play(self, sock: Sock, d: dict, now: float) -> None:
+        """The friend's one attempt: the stored run comes to them as a live rival's inputs would, message by
+        message, never past their own k + AHEAD (flush), so they never hold the whole of it."""
+        if sock.live:
+            return await self.violate(sock)
+        mt = self.db.execute(
+            "SELECT b FROM matches WHERE id = ? AND kind = 'challenge'", (d["id"],)
+        ).fetchone()
+        if mt and mt["b"] != sock.uid:  # someone else's (the challenger's own included)
+            return await self.violate(sock)
+        if not await self.signed_in(sock):
+            return
+        await self.walk_away(sock)
+        expire(self.db)
+        mt, code = None, self.refusal(2, sock.uid)  # the recording, in memory, takes a place too
+        if not code:  # the attempt is used up here (only challenges are ever open), whatever happens next
+            sql = (
+                "UPDATE matches SET state = 'playing_b' WHERE id = ? AND b = ? AND state = 'open' RETURNING *"
+            )
+            mt = self.db.execute(sql, (d["id"], sock.uid)).fetchone()
+        if not mt:
+            return await self.send(sock, error(code or "gone"))  # played, expired, void, or no such
+        sql = "SELECT runs.*, nick FROM runs JOIN users ON users.id = user_id WHERE match_id = ?"
+        a = self.db.execute(sql + " AND user_id = ?", (mt["id"], mt["a"])).fetchone()  # ok: or it is void
+        live = self.start(sock, mt["mode"], mt["seed"], now, mt["id"], "challenge")
+        score = SimpleNamespace(total=a["score"])
+        live.rec = SimpleNamespace(uid=a["user_id"], nick=a["nick"], skin=a["skin"], outcome=a["outcome"],
+                                   tick=a["ticks"], score=score, secs=round(a["seconds"], 1))  # fmt: skip
+        stored = json.loads(zlib.decompress(a["log"]))
+        ev, i = stored["ev"], 0
+        for k, _ in stored["arr"]:  # its messages' k: its inputs, as they were sent (as simulated)
+            j = bisect.bisect_left(ev, k, i, key=itemgetter(0))
+            live.inbox.append({"t": "op", "m": live.id, "k": k, "ev": ev[i:j]})
+            i = j
+        live.inbox.append({"t": "op_end", "m": live.id, "k": a["ticks"], "why": a["outcome"]})
+        op = {"nick": a["nick"], "skin": a["skin"]}
+        await self.send(sock, {"t": "match", "m": live.id, "kind": "challenge", "mode": live.mode, "op": op})
 
     async def on_invite(self, sock: Sock, d: dict, now: float) -> None:
         if sock.live:
@@ -549,12 +664,8 @@ class Hub:
             return
         seed = new_seed()  # one road for both
         with db.tx(self.db):
-            mid = self.db.execute(
-                "INSERT INTO matches(kind, mode, seed, a, b, state, created)"
-                " VALUES ('live', ?, ?, ?, ?, 'racing', ?) RETURNING id",
-                (inv.mode, seed, inv.a.uid, inv.b.uid, time.time()),
-            ).fetchone()[0]
-            a, b = (self.start(x, inv.mode, seed, now, mid) for x in pair)
+            mid = self.new_match("live", inv.mode, seed, inv.a.uid, inv.b.uid)
+            a, b = (self.start(x, inv.mode, seed, now, mid, "live") for x in pair)
         a.op, b.op = b, a
         for x, y in ((a, b), (b, a)):
             op = {"nick": y.sock.nick, "skin": y.sock.skin}
@@ -571,8 +682,8 @@ class Hub:
         if not all(x.ready and not x.sock.closed for x in both):  # a lost socket: its end voids the match
             return
         for x in both:  # a race: the shared road, both started at once on one clock
-            rival = x.op and x.op.sock.skin  # (traffic never wears a driver's colour)
-            x.run = Run(assets(), x.mode, x.sock.skin, x.seed, x.op is not None, rival=rival)
+            rival = x.op.sock.skin if x.op else x.rec and x.rec.skin  # traffic never wears it
+            x.run = Run(assets(), x.mode, x.sock.skin, x.seed, x.kind != "solo", rival=rival)
             x.t0, x.stall0, x.heard = now + COUNTDOWN_S, self.stalled(now), now
             self.spawn(self.send(x.sock, {"t": "go", "m": x.id, "seed": x.seed}))  # both, next iteration
 
@@ -602,7 +713,7 @@ class Hub:
         if run.outcome or "fin" in d:
             live.fin = d.get("fin")
             await self.finish(live)
-        elif live.op:
+        elif live.op or live.rec:
             await self.decide(live)
 
     async def on_leave(self, sock: Sock, d: dict, now: float) -> None:
@@ -612,19 +723,22 @@ class Hub:
     # --- the end of a run -----------------------------------------------------------------------------
 
     async def finish(self, live: Live, why: str | None = None) -> None:
-        """Ends a run (why: a rejection). Solo: its result. A race before go: void. In a race: the run stops
-        there, the rival hears of it (op_end), and the verdict may end both."""
+        """Ends a run (why: a rejection). Solo (a challenger's run too): its result. A race before go: void.
+        In a race: the run stops there, the rival hears of it (op_end), and the verdict may end both. A
+        challenge's friend: the verdict against the stored run (before go: a loss, as any forfeit)."""
         b = live.op
-        if b is None:
+        if b is None and live.rec is None:
             return await self.send(live.sock, self.end(live, why))
         if self.live.get(live.id) is not live or live.gone:  # the race is over, or this run is
             return
-        if live.run is None:
+        if live.run is None and b:
             late = not b.ready and self.clock() > b.deadline
             return await self.settle(live, why, "prazo" if late else "anulada", None)
-        live.run.stop("giveup")  # not over by itself: given up (or cut off) here, a forfeit
-        live.gone = why or live.run.outcome
-        b.inbox.append({"t": "op_end", "m": b.id, "k": live.run.tick, "why": live.gone})
+        if live.run:
+            live.run.stop("giveup")  # not over by itself: given up (or cut off) here, a forfeit
+        live.gone = why or live.run.outcome  # (no run: why is prazo, conexao or invalido)
+        if b:
+            b.inbox.append({"t": "op_end", "m": b.id, "k": live.run.tick, "why": live.gone})
         await self.decide(live, why)
 
     async def flush(self, live: Live) -> None:
@@ -633,38 +747,51 @@ class Hub:
             await self.send(live.sock, live.inbox.popleft())
 
     async def decide(self, a: Live, why: str | None = None) -> None:
-        """After every step of a's: who won, if anyone yet. A forfeit (given up, cut off or rejected: a crash
-        or a win is a result, for run.verdict) loses at once, so b's would have ended the race already."""
+        """After every step of a's: who won, if anyone yet. A forfeit (cut off or rejected: a crash or a win
+        is a result, for run.verdict) loses at once, so b's would have ended the race already; a give-up too,
+        unless the rival's run had ended before it (a fin a few ticks past their crash: run.verdict)."""
         b = a.op
-        v = -1 if a.gone not in (None, "crash", "win") else verdict(a.run, b.run)
+        v = -1 if a.gone not in (None, "crash", "win", "giveup") else verdict(a.run, b.run if b else a.rec)
+        if v is None and a.gone == "giveup":
+            v = -1
         if v is None:
             await self.flush(a)
-            self.spawn(self.flush(b))  # (a pop, then a wait on the FIFO lock: the order holds)
+            if b:
+                self.spawn(self.flush(b))  # (a pop, then a wait on the FIFO lock: the order holds)
         else:
             await self.settle(a, why, None, v)
 
     async def settle(self, a: Live, wa: str | None, wb: str | None, v: int | None) -> None:
-        """Ends both runs of a race and its match, a's verdict v (None: void) and each one's why."""
-        b = a.op
+        """Ends both runs of a race and its match, a's verdict v (None: void) and each one's why. A
+        challenge: a is the friend's run, raced against the stored one (rec); the challenger hears of it if in
+        the game."""
+        b, rec = a.op, a.rec
+        them = b.sock if b else rec  # .uid, .nick
         for x in (a, b):
-            if x.run:
+            if x and x.run:
                 x.run.stop("decided")  # still going: the race ends here
-        ra, rb = self.end(a, wa), self.end(b, wb)
+        winner = a.sock.uid if v == 1 else them.uid if v == -1 else None  # done and None: a draw
+        sql = "UPDATE matches SET state = ?, winner = ? WHERE id = ? AND state IN ('racing', 'playing_b')"
+        if not self.db.execute(sql, ("void" if v is None else "done", winner, a.match)).rowcount:
+            v = None  # a challenge voided meanwhile: the admin rejected its stored run, or its account went
+        ra = self.end(a, wa)
+        rb = self.end(b, wb) if b else {"score": rec.score.total, "secs": rec.secs}
         if v is not None:
             ra["verdict"], rb["verdict"] = VERDICTS[v], VERDICTS[-v]
-            ra["op"] = {"nick": b.sock.nick, "score": rb["score"], "secs": rb["secs"]}
+            ra["op"] = {"nick": them.nick, "score": rb["score"], "secs": rb["secs"]}
             rb["op"] = {"nick": a.sock.nick, "score": ra["score"], "secs": ra["secs"]}
-        winner = a.sock.uid if v == 1 else b.sock.uid if v == -1 else None  # done and None: a draw
-        sql = "UPDATE matches SET state = ?, winner = ? WHERE id = ?"
-        self.db.execute(sql, ("void" if v is None else "done", winner, a.match))
 
         async def tell(x: Live, result: dict) -> None:
-            await self.flush(x)  # what it may see of the rival first, then the end
-            if x.inbox and x.inbox[-1]["t"] == "op_end":  # past the gate, but the race is over: how theirs
-                await self.send(x.sock, x.inbox.pop())  # ended (its ops past the gate are dropped)
+            if x.run:  # (before go nothing of the rival's, a stored run's inbox included)
+                await self.flush(x)  # what it may see of the rival first, then the end
+                if x.inbox and x.inbox[-1]["t"] == "op_end":  # past the gate, but the race is over: how
+                    await self.send(x.sock, x.inbox.pop())  # theirs ended (ops past the gate are dropped)
             await self.send(x.sock, result)
 
-        await asyncio.gather(tell(a, ra), tell(b, rb))
+        if rec and v is not None and (sock := self.socks.get(rec.uid)) and sock.skin:
+            done = {"t": "challenge_done", "id": a.match, "verdict": rb["verdict"], "op": rb["op"]}
+            self.spawn(self.send(sock, done))
+        await asyncio.gather(tell(a, ra), *([tell(b, rb)] if b else []))
 
     def end(self, live: Live, why: str | None = None) -> dict:
         """Stores the run as the server simulated it and returns its result. why: a rejection."""
@@ -678,7 +805,7 @@ class Hub:
             run.stop("giveup")  # not over by its last input: given up (or cut off) there
             arr = list(itertools.batched(live.arr, 2))  # [k, ms] pairs
             score, f = run.score.total, live.watch.features(arr)
-            if not why and live.op is None:  # ranked: the board, and its holds
+            if not why and live.kind == "solo":  # ranked: the board, and its holds
                 best = self.db.execute(BEST, (live.mode, uid)).fetchone()[0]
                 held = self.db.execute(HELD, (live.mode, uid)).fetchone()[0]  # the player's run in review
                 at = place(self.db, uid, live.mode, score) if best is None or score > best else None
@@ -704,13 +831,23 @@ class Hub:
                 "log": zlib.compress(log_json.encode()),
             }
             out = {"outcome": run.outcome, "score": score, "secs": round(run.seconds, 1), "rank": None}
-            if row["state"] == "ok" and live.op is None:
+            if row["state"] == "ok" and live.kind == "solo":
                 out["rank"] = at or place(self.db, uid, live.mode, best)
         row["why"] = why
         sets = ", ".join(f"{column} = ?" for column in row)  # the columns are the literals above
         self.db.execute(f"UPDATE runs SET {sets} WHERE id = ?", (*row.values(), live.id))
         state = row["state"]
-        kind = "ao vivo" if live.op else "ranqueada"
+        if live.kind == "challenge" and live.rec is None:  # a challenger's: the friend's turn, or no turn
+            if state == "ok":
+                sql = "UPDATE matches SET state = 'open', expires = ? WHERE id = ? AND state = 'racing'"
+                b = self.db.execute(sql + " RETURNING b", (time.time() + CHALLENGE_S, live.match)).fetchone()
+                if b and (to := self.socks.get(b[0])) and to.skin:
+                    new = offer(live.match, live.sock.nick, live.mode, out["secs"], out["score"])
+                    self.spawn(self.send(to, {"t": "challenge_new", **new}))
+            else:  # before go nothing was seen: void; after it, a forfeit (no redoing a bad run): theirs
+                ends = "state = 'void'" if run is None else "state = 'done', winner = b"
+                self.db.execute(f"UPDATE matches SET {ends} WHERE id = ? AND state = 'racing'", (live.match,))
+        kind = {"solo": "ranqueada", "live": "ao vivo", "challenge": "desafio"}[live.kind]
         log.info("corrida %d %s %s %s %s max_lag %.2f", live.id, kind, live.mode, state, why, live.max_lag)
         out |= {"verdict": None, "op": None}  # a race: settle() fills them
         return {"t": "result", "m": live.id, "run": live.id, "state": state, "why": why, **out}

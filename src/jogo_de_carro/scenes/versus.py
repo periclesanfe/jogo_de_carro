@@ -1,5 +1,6 @@
 """Versus: two roads from one seed side by side. Contra o bot: the bot stepped in lockstep, decided by
-run.verdict. Ao vivo: a friend's inputs relayed by the server, decided by the server's result."""
+run.verdict. Ao vivo: a friend's inputs relayed by the server, decided by the server's result. Desafio: the
+same, with the friend's recorded run as the server streams it."""
 
 import contextlib
 import random
@@ -24,12 +25,12 @@ from ..settings import (
     WIDTH,
 )
 from ..tween import clamp, out_cubic
-from ..ui import Color, Menu, blit_pop, blit_text, clock_text, fit, outlined, panel
+from ..ui import Color, Menu, blit_pop, blit_text, clock_text, fit, mss, outlined, panel
 from ..world.autopilot import BOT_LEVELS, Bot
 from ..world.scoring import Score
 from ..world.world import Controls
 from .base import Context, MenuScene, Scene, Transition, menu_hint
-from .online import LOST, NO_RESULT, WHY
+from .online import CHALLENGE_LOST, LOST, NO_RESULT, WHY
 from .race import REPORT, Outcome, Phase, RaceScene
 
 BOT_NAMES = {"facil": "FÁCIL", "medio": "MÉDIO", "dificil": "DIFÍCIL"}
@@ -53,10 +54,6 @@ UNSTABLE = 60  # live: ticks the rival may fall behind its place before "conexã
 # drawn behind me for late inputs (a jitter buffer: one-way latency up to about 200 ms stays smooth)
 HOLD_S = 12.0  # live: my run is over; the race waits this long at most for the server's result
 VERDICTS = {"win": 1, "draw": 0, "loss": -1}
-
-
-def mss(seconds: float) -> str:
-    return clock_text(seconds).removeprefix("0")
 
 
 def bar(surface: pygame.Surface, rect: pygame.Rect, k: float, color: tuple[int, int, int]) -> None:
@@ -134,7 +131,7 @@ class VersusScene(RaceScene):
             why or self.reason(),
             self.line(),
             self.official,
-            rematch=self.realtime,
+            button=self.button,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
@@ -242,6 +239,10 @@ class LiveScene(VersusScene):
     the rival is the friend's inputs as the server relays them (op), replayed at least LAG ticks behind me.
     The server's result decides and ends both runs; when mine ends first, the race stays up until it comes."""
 
+    button = "REVANCHE"
+    lost = LOST  # the socket closed mid-race: the server counts it as my forfeit
+    stops_short = True  # her op_end past my gate: she stops where her inputs got to
+
     def __init__(self, ctx: Context, match: dict, friend: dict, seed: int) -> None:
         net, op = ctx.net, match["op"]
         assert net
@@ -284,7 +285,7 @@ class LiveScene(VersusScene):
         rival = self.rival
         rival.advance(min(rival.known, self.ticks - self.lag, rival.tick + CATCH_UP))
         caught_up = self.result is not None and rival.tick == rival.known  # decided: no more of hers comes
-        if self.end and (rival.tick >= self.end[0] or caught_up):  # (an end past my gate: where she got to)
+        if self.end and (rival.tick >= self.end[0] or (caught_up and self.stops_short)):
             rival.stop(self.end[1])
         elif caught_up and rival.outcome is None:  # she won: she cruises on, for show, as the bot does
             rival.world.invulnerable = True
@@ -304,7 +305,7 @@ class LiveScene(VersusScene):
         t = msg.get("t")
         if t == "closed":
             if self.result is None:  # nobody will say who won
-                self.official = NO_RESULT if self.run.outcome else LOST
+                self.official = NO_RESULT if self.run.outcome else self.lost
                 self.reported = True
                 self.finish(self._outcome(), "Conexão perdida")
             return
@@ -386,6 +387,26 @@ class LiveScene(VersusScene):
         panel(surface, pygame.Rect(COLUMN.x + 24, 516, COLUMN.width - 48, 30), alpha=240, radius=15)
         pygame.draw.circle(surface, DANGER, (COLUMN.centerx - 38, 531), 6)
         blit_text(surface, "AO VIVO", 22, (COLUMN.centerx - 26, 531), WHITE, anchor="midleft", shadow=False)
+
+
+class RecordingScene(LiveScene):
+    """Desafio: the rival is a friend's recorded run. The server streams it as op, through the same gate as a
+    live rival's inputs (never ahead of my own k + 24, so the recording is never here whole), and its result
+    decides against the stored run. One attempt: the results go back to AMIGOS."""
+
+    button = "AMIGOS"
+    lost = CHALLENGE_LOST  # the one attempt
+    stops_short = False  # her recording went on past where it got to here: she cruises on, its end in line()
+
+    def again(self) -> Scene:
+        from .online import AmigosScene
+
+        return AmigosScene(self.ctx)
+
+    def _draw_hud(self, surface: pygame.Surface) -> None:
+        VersusScene._draw_hud(self, surface)  # no AO VIVO: it was played before
+        panel(surface, pygame.Rect(COLUMN.x + 20, 516, COLUMN.width - 40, 30), alpha=240, radius=15)
+        blit_text(surface, "GRAVAÇÃO", 22, (COLUMN.centerx, 531), MUTED, shadow=False)
 
 
 class BotScene(MenuScene):

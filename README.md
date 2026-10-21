@@ -182,9 +182,15 @@ The replay is the server's own simulation, so replay it with game code equal to 
 
 Setting `MAX_ATIVAS`: while the site is quiet (the test competes with the live server for the VPS's two vCPUs), run `ssh meuhubprod jogo-admin load --n 100` (then other values of `--n`). It plays that many real-time ranked runs against a scratch copy of the server and reports the event loop's lag, the CPU used and every result: take the largest `n` whose p99 lag stays well under 500 ms with no run rejected for `ritmo` or `adiantado`, leave room for the other sites, and put `MAX_ATIVAS=<n>` in `/etc/jogo/env`. Memory bounds it too: a worst-case run holds about 6.5 MB, so keep `n` at 100 or below unless `MemoryMax=1G` in `jogo.service` grows. The next deploy applies it, draining first; `systemctl restart jogo` applies it at once but drops the races in progress.
 
-## Live races with friends (M4)
+## Live races and challenges with friends (M4, M5)
 
-Logged in on the web, AMIGOS on the title lists your friends (added on the site) who are in the game: CORRER AGORA invites one to a live race in the current mode, side by side on the same road, and the invite shows over their game for 30 s. The server simulates both runs from the inputs, relays each player's inputs to the other no further ahead than the receiver's own position, and decides the race (the first to crash or give up loses; if both reach the end, the points). REVANCHE is a new invite. Live races never enter `/ranking`; `MAX_ATIVAS` and `/saude`'s `ativas` count both runs of a race, and the drain refuses new invites too. Protocol and decisions: `docs/web-platform-plan.md`, (I).
+Logged in on the web, AMIGOS on the title lists the challenges you received, then every friend (added on the site), those in the game first and offline ones greyed; the list scrolls. Everything happens in the current mode:
+
+- **CORRER AGORA** (friends in the menu) invites one to a live race, side by side on the same road; the invite shows over their game for 30 s. The server simulates both runs from the inputs, relays each player's inputs to the other no further ahead than the receiver's own position, and decides the race (the first to crash or give up loses; if both reach the end, the points). REVANCHE is a new invite.
+- **DESAFIAR** (any friend, online or not) records your run on the versus road. Once it ends well, the friend has 7 days and one attempt to beat it: JOGAR races your run, streamed by the server at their own pace as a live rival's inputs are, and the server decides against the stored run. You get a toast if you are in the game. Your run cannot be thrown away once it has started: a lost connection or a rejected run counts as your loss (giving up just sends the shorter run). The friend's attempt is used as soon as they press JOGAR: missing the start, leaving or a lost connection loses it. At most 10 open challenges each.
+- **`/partidas`** on the site lists your last 50 races and challenges, wins/losses/draws against each friend, and your runs "em análise".
+
+Neither kind enters `/ranking`. `MAX_ATIVAS` counts both runs of a race, and a friend's challenge turn as two places (the recording is in memory too); `/saude`'s `ativas` counts runs. The drain refuses new invites and challenges. Protocol and decisions: `docs/web-platform-plan.md`, (I) and (J).
 
 ## Credits
 

@@ -94,3 +94,13 @@ CREATE INDEX matches_a ON matches(a);
 CREATE INDEX matches_b ON matches(b);
 ALTER TABLE runs ADD COLUMN match_id INTEGER REFERENCES matches ON DELETE CASCADE;  -- kind 'live': its race
 CREATE INDEX runs_match ON runs(match_id);
+
+-- migration 4
+CREATE INDEX matches_open ON matches(expires) WHERE state = 'open';  -- hub.expire
+-- admin rejeitar (the only way from ok to rejected) of any run of a race or a challenge: the match is void.
+-- The hub's own rejections (live to rejected) are forfeits or voids it decides itself.
+CREATE TRIGGER runs_void AFTER UPDATE OF state ON runs
+  WHEN NEW.match_id IS NOT NULL AND OLD.state = 'ok' AND NEW.state = 'rejected'
+BEGIN
+  UPDATE matches SET state = 'void', winner = NULL WHERE id = NEW.match_id;
+END;

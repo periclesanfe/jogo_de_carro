@@ -13,7 +13,7 @@
   <nav>
     <a href="/ranking">Ranking</a>
     {% if user %}
-      {% if user.nick %}<a href="/amigos">Amigos</a>{% endif %}
+      {% if user.nick %}<a href="/amigos">Amigos</a><a href="/partidas">Partidas</a>{% endif %}
       <a href="/conta">{{ user.nick or "Conta" }}</a>
     {% else %}
       <a href="/entrar">Entrar</a>

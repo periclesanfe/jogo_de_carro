@@ -209,6 +209,11 @@ def clock_text(seconds: float) -> str:
     return f"{s // 60:02d}:{s % 60:02d}"
 
 
+def mss(seconds: float) -> str:
+    """m:ss, for a time in a sentence ("bateu aos 1:02")."""
+    return clock_text(seconds).removeprefix("0")
+
+
 def mix(a: Color, b: Color, k: float) -> Color:
     return (round(lerp(a[0], b[0], k)), round(lerp(a[1], b[1], k)), round(lerp(a[2], b[2], k)))
 

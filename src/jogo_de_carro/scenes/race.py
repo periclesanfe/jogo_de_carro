@@ -31,7 +31,7 @@ from ..ui import blit_pop, blit_text, clock_text, faded, glow, panel
 from ..world.autopilot import autopilot
 from ..world.world import Controls, EventKind
 from .base import Context, Scene, Transition
-from .online import LOST, NO_RESULT, VERIFYING, official
+from .online import CHALLENGE_LOST, LOST, NO_RESULT, VERIFYING, official
 
 COUNT_STEP = 0.75  # seconds per countdown number
 SLOWMO_TIME, SLOWMO_SCALE = 0.35, 0.25
@@ -88,6 +88,7 @@ COIN_POPUP_DX = 66
 
 class RaceScene(Scene):
     pause_button = pygame.Rect(336, 20, 48, 48)
+    button = "JOGAR DE NOVO"  # the results' first button, which plays again()
     cannons = (0, WIDTH)  # world x of the victory confetti cannons: the screen's bottom corners
 
     def __init__(
@@ -99,9 +100,12 @@ class RaceScene(Scene):
         online: int | None = None,  # the server's match: a ranked run, created at its go
         mode: str | None = None,  # a live race: the match's mode, not the menu's
         skin: str | None = None,  # ...and the car its hello named, which the rival sees
+        to: str = "",  # a challenge to this friend: the run they will race against
     ) -> None:
         super().__init__(ctx)
-        self.online = online
+        self.online, self.to = online, to
+        if to:
+            self.button = "AMIGOS"
         self.realtime = online is not None
         self.official = VERIFYING if online is not None else None  # the server's word on the run
         self.sent = 0  # run.ev entries sent
@@ -160,8 +164,10 @@ class RaceScene(Scene):
 
     def again(self) -> Scene:
         """A fresh race like this one (new seed), for REINICIAR and JOGAR DE NOVO."""
-        from .online import play
+        from .online import AmigosScene, play
 
+        if self.to:
+            return AmigosScene(self.ctx)
         return play(self.ctx) if self.online is not None else RaceScene(self.ctx)
 
     def resume(self) -> None:
@@ -238,9 +244,10 @@ class RaceScene(Scene):
             return
         racing = self.phase in (Phase.COUNTDOWN, Phase.RACING)
         if msg.get("t") == "result" and msg.get("m") == self.online:
-            self.official, why = official(msg, self.mode), "Corrida encerrada pelo servidor"
+            self.official, why = official(msg, self.mode, self.to), "Corrida encerrada pelo servidor"
         elif msg.get("t") == "closed":
-            self.official, why = LOST if racing else NO_RESULT, "Conexão perdida"
+            lost = CHALLENGE_LOST if self.to else LOST  # (a challenge: the friend wins it)
+            self.official, why = lost if racing else NO_RESULT, "Conexão perdida"
         else:
             return
         self.reported = True
@@ -334,10 +341,20 @@ class RaceScene(Scene):
             path.write_text(json.dumps(self.run.log(), separators=(",", ":")), encoding="utf-8")
         seconds = self.run.seconds
         save = self.ctx.save
-        record = save.record(self.mode.key, save.skin, self.score.total, seconds)
+        # a challenge's run is on the versus road: no record (its road is not the solo road)
+        record = not self.run.shared and save.record(self.mode.key, save.skin, self.score.total, seconds)
         self.ctx.persist()
         stats = RaceStats(
-            outcome, self.mode, seconds, self.score, record, self.best, reason=why, official=self.official
+            outcome,
+            self.mode,
+            seconds,
+            self.score,
+            record,
+            self.best,
+            reason=why,
+            official=self.official,
+            button=self.button,
+            to=self.to,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
@@ -420,17 +437,18 @@ class RaceScene(Scene):
         panel(surface, box, alpha=225)
         blit_text(surface, "PONTOS", 24, (box.x + 18, box.y + 13), MUTED, anchor="topleft", shadow=False)
         blit_text(surface, f"{score.total}", 60, (box.right - 16, box.y + 36), WHITE, anchor="topright")
-        beat = score.total > self.best > 0
-        best_label = "NOVO RECORDE!" if beat else f"RECORDE {self.best}"
-        blit_text(
-            surface,
-            best_label,
-            24,
-            (box.right - 18, box.y + 13),
-            ACCENT if beat else MUTED,
-            anchor="topright",
-            shadow=False,
-        )
+        if not self.run.shared:  # a challenge's run is on the versus road: no record to chase
+            beat = score.total > self.best > 0
+            best_label = "NOVO RECORDE!" if beat else f"RECORDE {self.best}"
+            blit_text(
+                surface,
+                best_label,
+                24,
+                (box.right - 18, box.y + 13),
+                ACCENT if beat else MUTED,
+                anchor="topright",
+                shadow=False,
+            )
         coin = self.ctx.assets.frame("coin")
         surface.blit(coin, coin.get_rect(midleft=(box.x + 16, box.bottom - 22)))
         blit_text(surface, f"x {score.coins}", 26, (box.x + 58, box.bottom - 22), ACCENT, anchor="midleft")

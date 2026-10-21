@@ -40,13 +40,15 @@ class Net:
         self.me: dict | None = None  # {"id", "nick"} once welcomed
         self.friends: dict[int, dict] = {}  # id -> {"id", "nick", "s": "menu|racing|off"}, kept by presence
         self.requests = 0  # friend requests waiting on the site
+        self.challenges: list[dict] = []  # received, open: {"id", "from", "mode", "secs", "score"}
         self._out: list[str] = []
 
     def connect(self, skin: str) -> None:
         """A new socket (any open one is closed); its hello goes first."""
         py = ".".join(map(str, sys.version_info[:3]))
         hello = {"t": "hello", "build": BUILD, "py": py, "pg": pygame.version.ver, "skin": skin}
-        self.up, self.skin, self.error, self.me, self.friends = True, skin, None, None, {}
+        self.up, self.skin, self.error, self.me = True, skin, None, None
+        self.friends, self.challenges = {}, []
         self._out = [json.dumps(hello)]
         platform.window.eval("window.jopen()")
 
@@ -68,6 +70,9 @@ class Net:
             elif msg.get("t") == "welcome":
                 self.me, self.requests = msg.get("me"), msg.get("requests", 0)
                 self.friends = {f["id"]: f for f in msg.get("friends", [])}
+                self.challenges = list(msg.get("challenges", []))
+            elif msg.get("t") == "challenge_new":
+                self.challenges.append(msg)
             elif msg.get("t") == "presence" and msg.get("id") in self.friends:
                 self.friends[msg["id"]]["s"] = msg.get("s")
             msgs.append(msg)

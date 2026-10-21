@@ -794,3 +794,93 @@ M4 is "Jogar com amigos (live)" only; "Desafiar amigo" and `/partidas` are M5. T
 - GOLDEN unchanged.
 
 **Not checked:** a real two-browser playtest (the list above), a pygbag build of this code, gamepads, Infinito's 600 s cap in a live race, and load with live pairs (`jogo-admin load` plays solo runs only).
+
+---
+
+# (J) M5 notes: challenges and /partidas (2026-10-21)
+
+"Desafiar amigo" (§5) and `/partidas` (§4). The wire protocol as built is the docstring at the top of `server/src/jogo_server/hub.py`.
+
+**Protocol, changed from §5 or decided where it was silent:**
+- **`challenge {to, mode}`** goes to an accepted friend, online or not. Yourself or anyone else gets the new `error friend`, and the socket stays open.
+  - It shares solo's handler (`on_challenge = on_solo`) and solo's 60 starts an hour.
+  - At most 10 of a challenger's matches can be `racing`, `open` or `playing_b` at once (`error rate` with its own text).
+  - The challenger gets `match {kind: "challenge", op: null}`. The run is played like solo, but on the shared road, and is stored as `runs.kind = 'challenge'`.
+  - It never ranks and never waits for review, so §5's "ok (or review)" is only ever `ok`.
+- **Opening:** an `ok` run makes the match `open`, with `expires` set 7 days ahead.
+  - B gets `challenge_new {id, from, mode, secs, score}` if B is in the game.
+  - `welcome.challenges` lists B's open challenges in the same shape (`hub.offer`). §5's `rec` flag in `match.op` was dropped: the client knows it asked to play.
+  - Expiry is marked whenever matches are read (hello, `challenge`, `challenge_play`, `/partidas`). There is no sweeper and no pass at startup.
+- **The challenger's run rejected by the hub:**
+  - **Before `go`** (prazo, or a socket lost before `go`): no seed was seen, so the match is `void`.
+  - **After `go`** (conexao, ritmo, adiantado, invalido, a kick, a second tab): **a forfeit**, as in a race. The match is `done` with B as the winner, and B gets no `challenge_new` (B sees it as a win on `/partidas`).
+  - §5/§8 said "A's run rejected → void". That let A throw away a run that was going badly: the client knows of a crash up to 12 ticks before the server does, so closing the tab or sending a bad frame voided it. A could then try again, up to 60 starts an hour, while B gets one try.
+  - A give-up stays `ok` and opens the challenge with the shorter run.
+- **Void** also comes from:
+  - a restart, for `racing` and `playing_b` matches;
+  - `admin rejeitar` of any `ok` run of a match, B's and live races' included (trigger `runs_void`, migration 4; only the admin moves a run from `ok` to `rejected`);
+  - `admin banir`, for the banned player's `open` challenges;
+  - unfriending on the site, for the pair's `open` challenges.
+
+  A deleted account takes its matches with it (cascade, no row). `ponytail:` a ban that lands during the challenger's run lets that run open its challenge afterwards (the admin CLI is another process); `banir` again voids it.
+- **`challenge_play {id}`:**
+  - Someone else's challenge closes the socket (1008). A missing, played, expired or void one gets the new `error gone`, and the socket stays open.
+  - `drain`, `full` and `racing` leave the attempt unused. Otherwise one statement uses it up: `UPDATE … SET state = 'playing_b' WHERE id = ? AND b = me AND state = 'open'`. There is no `kind` condition, because only challenges are ever `open`.
+  - B gets `match {kind: "challenge", op: {nick, skin}}` with no seed, then the 10 s `ready`, then `go {seed}`.
+- **The stream:**
+  - A's stored log comes as `op` messages, one per message A sent (with the same `k`), each released only once B's own last k + 24 reaches its `k`. Then comes `op_end {k: A's ticks, why: A's outcome}`.
+  - `op.ev` is rebuilt from the server's stored log, not from A's raw frames; they are equal for any accepted frame.
+  - Before `go`, B gets nothing of it. Once the race is decided, the stored `op_end` goes out with the result, and ops past the gate are dropped.
+- **The decision** works as in a live race against a rival who has already ended: `run.verdict` after each `in`, so it can come early.
+  - All of B's forfeits lose at once: missing `ready`, `leave` before or after `go`, silence, a lost socket, pacing, a bad frame.
+  - **A give-up**, in any race, still loses at once, **unless the rival's run had already ended before it**. A `fin` give-up a few ticks past the rival's crash, before the next 12-tick report, now wins by `run.verdict`. Before this it lost, although it had lasted longer; this was true in M4 too. Every other M4 forfeit rule is unchanged.
+- **Results:**
+  - B's `result` carries `verdict` and `op {nick, score, secs}` with A's numbers.
+  - A gets `challenge_done {id, verdict (A's side), op: B's {nick, score, secs}}` if A is in the game. If B forfeited before `go`, B's score and secs are null.
+  - If the admin voids the match during B's turn, B's result has no verdict and A hears nothing.
+  - A restart during B's turn voids the match (it is not counted as B's loss): B's run is `rejected/reinicio`.
+- **Admission:** B's turn counts as **two** `MAX_ATIVAS` places (`Hub.refusal`).
+  - The decoded recording holds up to about 8.8 MB (Infinito at the 600 s cap: 54k events in 6000 messages), next to B's own run (about 6.3 MB, (H)).
+  - At most 50 turns therefore take about 750 MB, plus the server's 61 MB, under `MemoryMax=1G`.
+  - `/saude`'s `ativas` still counts runs.
+
+**`/partidas`** (§4):
+- It shows my last 50 races and challenges: opponent, kind, mode, date (Brasília time), result, and both scores. The seed never appears.
+- "Contra cada amigo" counts wins, losses and draws over `done` matches.
+- It lists my runs "em análise".
+- B never sees a challenge before it was offered: rows with `expires IS NULL` that are not `done` are hidden from B (A still playing, or voided before opening). A challenge A forfeited after `go` shows as B's win.
+- The nav gets "Partidas", and the header wraps on phones, which affects every page. The Jinja filters `pontos` and `tempo` serve it and the ranking's table.
+
+**Client, changed from §3:**
+- **AMIGOS** lists the received challenges first ("ana_42 fez 2.845 em 1:02 (Fácil)", with JOGAR), then every friend: in the menu, racing, then offline (greyed).
+  - CORRER AGORA is only for friends in the menu; DESAFIAR is for any friend.
+  - It shows 7 rows at a time. The list scrolls with the focus, with "↑ mais N · ↓ mais N" at the top right.
+  - Any arrow moves through the buttons in reading order.
+- **DESAFIAR** plays a ranked-like run on the shared road: no pause, R gives up, no local record.
+  - The card says "✓ Desafio enviado a <nick>", or "Desafio perdido: <why>" when the run was rejected after `go` or the socket was lost.
+  - Its first button is AMIGOS.
+- **JOGAR** sends `challenge_play` on the current socket.
+  - Only a socket that is down gets a new one. That socket's welcome still lists the challenge being played, and the waiting screen drops it.
+  - A refusal that leaves the attempt unused (drain, full, racing) puts the challenge back in the list; `gone` does not.
+  - Esc while waiting says "(conta como derrota)".
+- **`RecordingScene(LiveScene)`:** the rival is fed by `op`/`op_end` as a live rival is.
+  - The card shows a "GRAVAÇÃO" pill. "<nick> · gravação" would be 134 px in a 124 px card.
+  - When B's run ends first, a stored `op_end` past B's gate does **not** stop the recording where its inputs reached (a live rival who forfeited is stopped there). The recording cruises on, and only the card's line says how it ended ("ana_42: 649 pontos · bateu aos 0:16").
+  - A socket lost during the attempt shows "Desafio perdido: conexão perdida", and a missed `ready` shows "Desafio perdido: prazo esgotado".
+- **`challenge_done`** shows the toast "<nick> aceitou seu desafio: você venceu | você perdeu | deu empate", held until no race and no wait is up.
+  - B gets no toast when a challenge arrives; it only shows in AMIGOS.
+
+**Two-browser playtest** (friends ana and bia, both on `/jogar`):
+1. bia closes the game. ana: AMIGOS → DESAFIAR bia, drives, then crashes or presses R. Her card says "✓ Desafio enviado a bia".
+2. bia opens the game: AMIGOS lists "ana fez … em …". JOGAR starts the race on ana's road, with ana's car a little behind and the "GRAVAÇÃO" pill. The verdict comes as soon as one of them has outlasted the other. ana, back on a menu, gets the toast.
+3. bia JOGAR, then Esc while waiting: a loss, and the challenge is gone from AMIGOS. ana's toast says "você venceu".
+4. ana challenges again and closes her tab mid-run: bia's AMIGOS shows nothing, and bia's `/partidas` shows a win.
+5. With 8 or more friends, AMIGOS scrolls and every DESAFIAR can be reached. `/partidas` at 390 px wide.
+
+**Checked:**
+- 173 server tests, 25 of them in `test_challenge.py` (5 runs in a row, and 3 runs of challenge plus live under full CPU load).
+- Mutation runs: undoing each review fix fails its test (forfeit after `go`, `runs_void` on any match run, two places for a turn, a give-up past the rival's end, `/partidas` hiding unoffered challenges, ban and unfriend voids, the recording cruising on, the welcome during JOGAR, AMIGOS scrolling, the challenge result line).
+- Game tests on both runtimes (124 each). GOLDEN unchanged.
+- A one-off end-to-end run: two real `Game` clients against the real hub on the tests' fake clock.
+
+**Not checked:** a real two-browser playtest (above), a pygbag build of this code, migration 4 on the production database, a challenge recording at Infinito's 600 s cap streamed for real, and load with challenge turns (`jogo-admin load` plays solo runs only).

@@ -2,8 +2,9 @@
 
     revisar             as corridas em análise, da mais antiga à mais nova
     aprovar <corrida>   entra no ranking
-    rejeitar <corrida>  sai do ranking (em análise ou já aprovada)
-    banir <apelido>     sai de todas as sessões e do ranking; as corridas em análise são rejeitadas
+    rejeitar <corrida>  sai do ranking (em análise ou já aprovada); de uma partida, anula a partida
+    banir <apelido>     sai de todas as sessões e do ranking; as corridas em análise são rejeitadas e
+                        os desafios dele em aberto, anulados
     export <corrida>    o log de entradas (v1), para: python -m jogo_de_carro --replay run.json
 
 O banco é $JOGO_DB (/var/lib/jogo/jogo.db). Banido, o jogo aberto cai na próxima corrida que tentar começar.
@@ -51,6 +52,9 @@ def main(args: list[str]) -> int:
                     auth.end_sessions(conn, user["id"])
                     sql = "UPDATE runs SET state = 'rejected' WHERE user_id = ? AND state = 'review'"
                     conn.execute(sql, (user["id"],))
+                    conn.execute(
+                        "UPDATE matches SET state = 'void' WHERE a = ? AND state = 'open'", (user["id"],)
+                    )
             print(f"{nick}: banido" if user else f"{nick}: ninguém com esse apelido")
             return 0 if user else 1
         case ["export", run] if run.isdigit():

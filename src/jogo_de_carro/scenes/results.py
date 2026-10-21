@@ -36,7 +36,8 @@ class RaceStats:
     reason: str = ""  # a versus: why it was decided; a run the server or the network ended: why
     rival: str = ""  # a versus: the rival's line
     official: str | None = None  # a ranked run: the server's word on it (online.VERIFYING until it comes)
-    rematch: bool = False  # a live race: JOGAR DE NOVO is REVANCHE, a new invite to the same friend
+    button: str = "JOGAR DE NOVO"  # the first button (REVANCHE: a new invite to the same friend; AMIGOS)
+    to: str = ""  # a challenge's run: the friend it goes to (the official line says it was sent)
 
     @property
     def won(self) -> bool:
@@ -58,7 +59,7 @@ class ResultsScene(Scene):
         self.again = again  # JOGAR DE NOVO: a fresh race of the same kind
         self.background = blurred(frame)
         self.menu = Menu(
-            ["REVANCHE" if stats.rematch else "JOGAR DE NOVO", "MENU", "SITE" if WEB else "SAIR"],
+            [stats.button, "MENU", "SITE" if WEB else "SAIR"],
             (WIDTH // 2, CARD.bottom - 66),
             ctx.audio,
             size=(232, 56),
@@ -101,7 +102,7 @@ class ResultsScene(Scene):
         if self.stats.official != VERIFYING:
             return
         if msg.get("t") == "result":
-            self.stats = replace(self.stats, official=official(msg, self.stats.mode))
+            self.stats = replace(self.stats, official=official(msg, self.stats.mode, self.stats.to))
         elif msg.get("t") == "closed":
             self.stats = replace(self.stats, official=NO_RESULT)
 
@@ -192,6 +193,8 @@ class ResultsScene(Scene):
     def _draw_record(self, surface: pygame.Surface, box: pygame.Rect) -> None:
         stats = self.stats
         y = box.y + 468
+        if stats.to:  # a challenge's run sets no record either: the official line says it was sent
+            return
         if stats.rival:  # a versus sets no records: its road is not the solo road
             blit_text(surface, stats.rival, 30, (WIDTH // 2, y), WHITE)
         elif stats.new_record and self.celebrated:

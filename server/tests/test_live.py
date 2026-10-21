@@ -203,7 +203,7 @@ def test_presence(s):
         ana.connect(stack)
         assert ana.welcome == {
             "t": "welcome", "me": {"id": ana.uid, "nick": "ana"},
-            "friends": [{"id": bia.uid, "nick": "bia", "s": "off"}], "requests": 1,
+            "friends": [{"id": bia.uid, "nick": "bia", "s": "off"}], "requests": 1, "challenges": [],
         }  # fmt: skip
         bia.connect(stack)
         assert bia.welcome["friends"] == [{"id": ana.uid, "nick": "ana", "s": "menu"}]
