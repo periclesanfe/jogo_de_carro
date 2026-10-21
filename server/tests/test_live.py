@@ -72,6 +72,17 @@ def idle(s, cond=lambda: True) -> None:
         p.read()
 
 
+def heard(p: "Player", cond) -> None:
+    """Waits until p has read a message for which cond holds: a send the hub spawns can trail what idle() sees
+    from this thread (a socket already gone, no task spawned yet)."""
+
+    def check() -> bool:
+        p.read()
+        return any(cond(m) for m in p.got)
+
+    until(check)
+
+
 class Player:
     def __init__(self, s, nick: str, skin: str = "yellow") -> None:
         self.s, self.nick, self.skin = s, nick, skin
@@ -203,7 +214,7 @@ def test_presence(s):
         bia.send({"t": "solo", "mode": "normal"})
         bia.send({"t": "leave", "m": bia.of("match")[0]["m"]})
         bia.ws.close()
-        idle(s, lambda: bia.uid not in s.hub.socks)
+        heard(ana, lambda m: m == {"t": "presence", "id": bia.uid, "s": "off"})
         statuses = [(m["id"], m["s"]) for m in ana.of("presence")]
         assert statuses == [(bia.uid, s_) for s_ in ("menu", "racing", "menu", "off")]
         assert bia.of("presence") == caio.of("presence") == duda.of("presence") == []
@@ -289,7 +300,7 @@ def test_offline_and_busy(s, clock):
         assert gone(caio, invite(caio, bia)) == ["busy"]  # bia has an invite open
         assert gone(caio, invite(caio, ana)) == ["busy"]  # and so has ana
         bia.ws.close()
-        idle(s, lambda: bia.uid not in s.hub.socks)
+        heard(ana, lambda m: m["t"] == "invite_gone" and m["id"] == iid)
         assert gone(ana, iid) == ["offline"] and s.hub.invites == {}
 
         caio.send({"t": "solo", "mode": "normal"})
@@ -614,7 +625,7 @@ def test_presence_reaches_friends_of_a_deleted_account(s):
     with contextlib.ExitStack() as stack:
         ana, bia = friends(s, stack, "ana", "bia")
         assert bia.client.post("/conta/excluir", data={"confirmar": "bia"}).status_code == 200
-        idle(s, lambda: bia.uid not in s.hub.socks)
+        heard(ana, lambda m: m == {"t": "presence", "id": bia.uid, "s": "off"})
         assert ana.of("presence")[-1] == {"t": "presence", "id": bia.uid, "s": "off"}
 
 
