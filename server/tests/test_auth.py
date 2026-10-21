@@ -2,6 +2,7 @@
 Google, deletion, /jogar, /saude and the startup check."""
 
 import asyncio
+import re
 import threading
 import time
 import timeit
@@ -14,7 +15,7 @@ from starlette.testclient import TestClient
 
 from conftest import BASE, BUILD, config
 from jogo_server import app as site
-from jogo_server import auth
+from jogo_server import auth, mail
 
 PASSWORD = "segredo123"
 
@@ -30,8 +31,9 @@ def test_link_flow_creates_the_account_and_logs_in(s):
     c = s.client()
     r = c.post("/cadastro", data={"email": "ana@x.test"})
     assert r.status_code == 200 and "Se o e-mail puder ser usado" in r.text
-    [(to, subject, body)] = s.outbox
-    assert to == "ana@x.test" and f"{BASE}/senha?t=" in body and "senha" in subject
+    [(to, msg)] = s.outbox
+    assert to == "ana@x.test" and f"{BASE}/senha?t=" in msg.get_body(("plain",)).get_content()
+    assert "senha" in msg["Subject"]
     token = s.link()
     assert s.count("users") == 0  # nothing exists until the link is used
 
@@ -72,6 +74,30 @@ def test_link_expires_after_an_hour(s):
     assert c.get("/senha", params={"t": token}).status_code == 400
     assert c.post("/senha", data={"t": token, "senha": PASSWORD, "senha2": PASSWORD}).status_code == 400
     assert s.count("users") == 0
+
+
+@pytest.mark.parametrize("links", [True, False])
+def test_link_email_is_text_then_the_same_in_html(monkeypatch, links):
+    monkeypatch.setattr(mail, "LINKS", links)
+    token = "Ab-_" * 11  # token_urlsafe(32) is 43 characters
+    link = f"{BASE}/senha?t={token}"
+    msg = mail.link_message(BASE, token)
+    assert msg.get_content_type() == "multipart/alternative"
+    text, html = msg.iter_parts()
+    assert (text.get_content_type(), html.get_content_type()) == ("text/plain", "text/html")
+    text, html = text.get_content(), html.get_content()
+    assert text.count(token) == text.count(link) == 1
+    assert re.findall(r'href="([^"]*)"', html) == ([link] if links else [])  # the button
+    assert html.count(f">{link}<") == 1 and html.count(token) == 1 + links  # the address, shown as text only
+    assert re.findall(r'src="([^"]*)"', html) == [f"{BASE}/icone.png"]
+    assert all(says in html for says in ("1 hora", "uma vez", "Se não foi você"))
+    assert not any(token in str(value) for part in msg.walk() for value in part.values())  # headers
+    assert len(msg.as_bytes()) < 12_000
+
+
+def test_link_email_escapes_html():
+    html = mail.link_message(BASE, '"><img src=x>').get_body(("html",)).get_content()
+    assert '"><img' not in html and f"{BASE}/senha?t=&#34;&gt;&lt;img src=x&gt;" in html
 
 
 def test_same_reply_for_known_and_unknown_emails(s):

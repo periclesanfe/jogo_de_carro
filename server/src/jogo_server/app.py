@@ -250,7 +250,7 @@ def send_link(request: Request, email: str) -> bool:
     ):
         return False
     if not state.db.execute("SELECT 1 FROM users WHERE email = ? AND role = 'banned'", (email,)).fetchone():
-        state.send_mail(email, *mail.link_message(state.cfg.base, auth.new_link(state.db, email)))
+        state.send_mail(email, mail.link_message(state.cfg.base, auth.new_link(state.db, email)))
     return True
 
 
@@ -549,7 +549,7 @@ def create_app(cfg: Config | None = None) -> Starlette:
     app.state.cfg = cfg
     app.state.google = google_client(cfg)
     mail_pool = ThreadPoolExecutor(2, "mail")
-    app.state.send_mail = lambda to, subject, body: mail_pool.submit(mail.send, cfg, to, subject, body)
+    app.state.send_mail = lambda to, msg: mail_pool.submit(mail.send, cfg, to, msg)
     return app
 
 

@@ -3,6 +3,7 @@ import dataclasses
 import os
 import re
 import time
+from email.message import EmailMessage
 
 import pytest
 
@@ -43,7 +44,7 @@ def config(tmp_path, **changes) -> site.Config:
 class Site:
     def __init__(self, app) -> None:
         self.app = app
-        self.outbox: list[tuple[str, str, str]] = []  # (to, subject, body) instead of SMTP
+        self.outbox: list[tuple[str, EmailMessage]] = []  # (to, message) instead of SMTP
         app.state.send_mail = lambda *message: self.outbox.append(message)
 
     @property
@@ -75,7 +76,7 @@ class Site:
 
     def link(self) -> str:
         """The token in the last email sent."""
-        return re.search(r"/senha\?t=(\S+)", self.outbox[-1][2])[1]
+        return re.search(r"/senha\?t=(\S+)", self.outbox[-1][1].get_body(("plain",)).get_content())[1]
 
     def count(self, sql: str, *args) -> int:
         return self.db.execute(f"SELECT count(*) FROM {sql}", args).fetchone()[0]
