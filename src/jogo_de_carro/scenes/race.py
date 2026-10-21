@@ -1,20 +1,37 @@
-"""Gameplay: countdown, racing with HUD and juice, crash slow-motion, victory lap."""
+"""Gameplay: countdown, racing with HUD and juice, crash slow-motion, victory lap; online, the inputs stream
+to the server (plan §5), which scores the run itself."""
 
+import json
 import math
-import random
+import os
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 
 import pygame
 
 from ..input import Action
-from ..settings import ACCENT, COMBO_TIME, CYAN, DANGER, FLAME, HEIGHT, MUTED, SHIELD_TIME, WHITE, WIDTH
+from ..run import Run, Scored
+from ..settings import (
+    ACCENT,
+    COMBO_TIME,
+    CYAN,
+    DANGER,
+    FLAME,
+    HEIGHT,
+    MODE_BY_KEY,
+    MUTED,
+    NEAR_MISS_POINTS,
+    SHIELD_TIME,
+    WHITE,
+    WIDTH,
+)
 from ..tween import clamp, out_back, out_cubic
 from ..ui import blit_pop, blit_text, clock_text, faded, glow, panel
 from ..world.autopilot import autopilot
-from ..world.scoring import Score
-from ..world.world import Controls, EventKind, World, WorldEvent
+from ..world.world import Controls, EventKind
 from .base import Context, Scene, Transition
+from .online import CHALLENGE_LOST, LOST, NO_RESULT, VERIFYING, official
 
 COUNT_STEP = 0.75  # seconds per countdown number
 SLOWMO_TIME, SLOWMO_SCALE = 0.35, 0.25
@@ -22,7 +39,6 @@ CRASH_TO_RESULTS = 1.7
 WIN_CRUISE = 0.6  # the victory lap cruises a moment before zooming off the top
 WIN_TO_RESULTS = 2.0
 HINT_TIME = 4.5  # the controls card shows from the countdown until this long after "JÁ!"
-PAUSE_BUTTON = pygame.Rect(336, 20, 48, 48)
 SHIELD_BOX = pygame.Rect(24, HEIGHT - 84, 230, 60)
 KEY_HINTS = (
     ("SETAS / A D", "trocar de faixa"),
@@ -38,6 +54,8 @@ PAD_HINTS = (
 )
 COUNT_COLORS = (DANGER, FLAME, ACCENT)
 GO_COLOR = (99, 199, 77)
+REPORT = 12  # online: the inputs go to the server every this many ticks (10 times a second)
+NO_PAUSE = "Sem pausa no online · R desiste"
 
 
 class Phase(Enum):
@@ -69,11 +87,34 @@ COIN_POPUP_DX = 66
 
 
 class RaceScene(Scene):
-    def __init__(self, ctx: Context) -> None:
+    pause_button = pygame.Rect(336, 20, 48, 48)
+    button = "JOGAR DE NOVO"  # the results' first button, which plays again()
+    cannons = (0, WIDTH)  # world x of the victory confetti cannons: the screen's bottom corners
+
+    def __init__(
+        self,
+        ctx: Context,
+        seed: int | None = None,
+        shared_road: bool = False,
+        rival: str | None = None,
+        online: int | None = None,  # the server's match: a ranked run, created at its go
+        mode: str | None = None,  # a live race: the match's mode, not the menu's
+        skin: str | None = None,  # ...and the car its hello named, which the rival sees
+        to: str = "",  # a challenge to this friend: the run they will race against
+    ) -> None:
         super().__init__(ctx)
-        self.mode = ctx.mode
-        self.world = World(ctx.assets, self.mode, ctx.save.skin, random.Random(ctx.rng.random()))
-        self.score = Score()
+        self.online, self.to = online, to
+        if to:
+            self.button = "AMIGOS"
+        self.realtime = online is not None
+        self.official = VERIFYING if online is not None else None  # the server's word on the run
+        self.sent = 0  # run.ev entries sent
+        self.reported = online is None  # nothing more goes to the server (fin sent, or it decided)
+        self.mode = MODE_BY_KEY[mode] if mode else ctx.mode
+        self.seed = ctx.rng.getrandbits(53) if seed is None else seed  # 53 bits survive JSON in a browser
+        skin = skin or ctx.save.skin
+        self.run = Run(ctx.assets, self.mode.key, skin, self.seed, shared_road, rival=rival)
+        self.world, self.score = self.run.world, self.run.score
         self.best = ctx.save.best.get(self.mode.key, 0)
         self.phase = Phase.COUNTDOWN
         self.phase_t = 0.0
@@ -87,6 +128,8 @@ class RaceScene(Scene):
         self.clock = 0.0
         self.combo_pop = 0.0
         self.pilot = autopilot  # who drives when ctx.autopilot is on (the demo swaps in a show-off)
+        self.piloted = False  # the pilot drove some ticks, so the input log does not replay this race
+        self.banner: tuple[str, tuple[int, int, int]] | None = None  # replaces VITÓRIA!/BATEU! (versus)
 
     def enter(self) -> None:
         self.ctx.audio.stop_music(400)
@@ -101,10 +144,12 @@ class RaceScene(Scene):
         if (
             event.type == pygame.MOUSEBUTTONDOWN
             and event.button == 1
-            and PAUSE_BUTTON.collidepoint(event.pos)
+            and self.pause_button.collidepoint(event.pos)
         ):
             pause = True
-        if pause:
+        if pause and self.realtime:
+            self.ctx.toast(NO_PAUSE)
+        elif pause:
             self.open_pause()
         elif action is Action.GIVE_UP and self.phase is Phase.RACING:
             self.finish(Outcome.GAVE_UP)
@@ -115,7 +160,15 @@ class RaceScene(Scene):
         from .pause import PauseScene
 
         self.ctx.audio.play("ui_back")
-        self.ctx.scenes.push(PauseScene(self.ctx, self.snapshot()))
+        self.ctx.scenes.push(PauseScene(self.ctx, self.snapshot(), self.again))
+
+    def again(self) -> Scene:
+        """A fresh race like this one (new seed), for REINICIAR and JOGAR DE NOVO."""
+        from .online import AmigosScene, play
+
+        if self.to:
+            return AmigosScene(self.ctx)
+        return play(self.ctx) if self.online is not None else RaceScene(self.ctx)
 
     def resume(self) -> None:
         self.ctx.audio.pause_music(False)
@@ -147,14 +200,16 @@ class RaceScene(Scene):
                 self.finish(Outcome.WIN)
                 return
 
-        events = self.world.update(world_dt, self._controls())
         if self.phase is Phase.RACING:
-            self.score.drive(self.world.speed * world_dt, self._boosting())
-            self.score.update(world_dt)
-            self._react(events)
-            win = self.mode.win_s
-            if self.phase is Phase.RACING and win is not None and self.world.elapsed >= win:  # not crashed
+            self._react(self._step())
+            self._report()
+            if self.run.outcome == "win":
                 self._win()
+            elif self.run.known and self.run.outcome is None and self.run.tick == self.run.known:
+                self.finish(Outcome.GAVE_UP)  # a replayed log ends here: its player gave up
+                return
+        else:  # the countdown, the crash slow-motion and the victory lap: nothing scores
+            self.world.update(world_dt, Controls())
         for popup in self.popups:
             popup.life += dt
             popup.y -= 70 * dt
@@ -162,16 +217,47 @@ class RaceScene(Scene):
                 popup.x = self.world.player.x + COIN_POPUP_DX
         self.popups = [p for p in self.popups if p.life < p.ttl]
 
-    def _controls(self) -> Controls:
-        if self.phase is not Phase.RACING:
-            return Controls()
+    def _step(self) -> Scored:
         if self.ctx.autopilot:
-            return self.pilot(self.world)
-        steer = self.steer.pop(0) if self.steer else 0
-        return Controls(steer=steer, vertical=self.ctx.input.vertical())
+            self.piloted = True
+            return self.run.step(self.pilot(self.world), False)
+        if self.run.known:  # a loaded log drives (--replay)
+            return self.run.advance(self.run.tick + 1)
+        return self.run.play(*self._controls())
 
-    def _boosting(self) -> bool:
-        return not self.ctx.autopilot and self.ctx.input.held(Action.UP)
+    def _report(self) -> None:
+        """Online: the inputs not sent yet, every REPORT ticks, and with fin once the run is over."""
+        run = self.run
+        if self.reported or not (run.outcome or run.tick % REPORT == 0):
+            return
+        msg: dict = {"t": "in", "m": self.online, "k": run.tick, "ev": run.ev[self.sent :]}
+        if run.outcome:
+            msg["fin"] = {"outcome": run.outcome, "score": run.score.total}
+            self.reported = True
+        self.sent = len(run.ev)
+        if self.ctx.net:
+            self.ctx.net.send(msg)
+
+    def on_net(self, msg: dict) -> None:
+        """Online: the server's result, or a closed socket, ends a run that is still on."""
+        if self.official != VERIFYING:  # offline, or settled
+            return
+        racing = self.phase in (Phase.COUNTDOWN, Phase.RACING)
+        if msg.get("t") == "result" and msg.get("m") == self.online:
+            self.official, why = official(msg, self.mode, self.to), "Corrida encerrada pelo servidor"
+        elif msg.get("t") == "closed":
+            lost = CHALLENGE_LOST if self.to else LOST  # (a challenge: the friend wins it)
+            self.official, why = lost if racing else NO_RESULT, "Conexão perdida"
+        else:
+            return
+        self.reported = True
+        if racing:
+            self.finish(Outcome.GAVE_UP, why)
+
+    def _controls(self) -> tuple[int, int]:
+        """This tick's lane change and held keys (1 = up, 2 = down), as the input log records them."""
+        held = self.ctx.input.held
+        return self.steer.pop(0) if self.steer else 0, held(Action.UP) | held(Action.DOWN) << 1
 
     def _countdown(self) -> None:
         step = int(self.phase_t / COUNT_STEP)
@@ -183,19 +269,19 @@ class RaceScene(Scene):
                 self.ctx.audio.play("go")
                 self.ctx.audio.music("race")
                 self.phase, self.phase_t = Phase.RACING, 0.0
-                self.world.running = True
 
-    def _react(self, events: list[WorldEvent]) -> None:
-        audio, score, player = self.ctx.audio, self.score, self.world.player
-        for e in events:
+    def _react(self, events: Scored) -> None:
+        """The effects of a tick's events (the Run did the scoring)."""
+        audio, player = self.ctx.audio, self.world.player
+        for e, points in events:
             if e.kind is EventKind.LANE_CHANGE:
                 audio.play("lane_change", 0.5)
             elif e.kind is EventKind.COIN:
-                self._coin_popup(score.coin(), player.x + COIN_POPUP_DX, player.y)
+                self._coin_popup(points, player.x + COIN_POPUP_DX, player.y)
                 audio.play("coin", 0.6)
             elif e.kind is EventKind.NEAR_MISS:
-                points = score.near_miss()
-                label = f"+{points} QUASE!" + (f" x{score.combo}" if score.combo > 1 else "")
+                combo = points // NEAR_MISS_POINTS
+                label = f"+{points} QUASE!" + (f" x{combo}" if combo > 1 else "")
                 self._popup(label, e.x, e.y - 50, WHITE, 34)
                 self.combo_pop = 1.0
                 audio.play("near_miss", 0.8)
@@ -233,26 +319,51 @@ class RaceScene(Scene):
                 y = other.y - 42
         self.popups.append(Popup(label, x, y, color, size, ttl))
 
-    def _win(self) -> None:
+    def _win(self, celebrate: bool = True) -> None:
         self.phase, self.phase_t = Phase.WON, 0.0
         self.world.spawner.enabled = False
         self.world.invulnerable = True
         self.world.player.bounded = False
-        self.world.particles.confetti(140)
-        self.world.particles.cannon(0, HEIGHT, 1)
-        self.world.particles.cannon(WIDTH, HEIGHT, -1)
         self.popups.clear()
-        self.ctx.audio.music("win", loop=False, fade_ms=0)
+        if celebrate:  # a versus finished but lost on points gets the lap without the party
+            self.world.particles.confetti(140)
+            self.world.particles.cannon(self.cannons[0], HEIGHT, 1)
+            self.world.particles.cannon(self.cannons[1], HEIGHT, -1)
+            self.ctx.audio.music("win", loop=False, fade_ms=0)
 
-    def finish(self, outcome: Outcome) -> None:
+    def finish(self, outcome: Outcome, why: str = "") -> None:
         from .results import RaceStats, ResultsScene
 
-        seconds = min(self.world.elapsed, self.mode.win_s or math.inf)
+        self._stop()
+        if (folder := os.environ.get("JOGO_RECORD")) and not (self.piloted or self.run.known):  # nor a replay
+            path = Path(folder) / f"{self.mode.key}-{self.seed}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(self.run.log(), separators=(",", ":")), encoding="utf-8")
+        seconds = self.run.seconds
         save = self.ctx.save
-        record = save.record(self.mode.key, save.skin, self.score.total, seconds)
+        # a challenge's run is on the versus road: no record (its road is not the solo road)
+        record = not self.run.shared and save.record(self.mode.key, save.skin, self.score.total, seconds)
         self.ctx.persist()
-        stats = RaceStats(outcome, self.mode, seconds, self.score, record, self.best)
-        self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot()), Transition.NONE)
+        stats = RaceStats(
+            outcome,
+            self.mode,
+            seconds,
+            self.score,
+            record,
+            self.best,
+            reason=why,
+            official=self.official,
+            button=self.button,
+            to=self.to,
+        )
+        self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
+
+    def _stop(self) -> None:
+        """End my run on this tick (a crash or a win already ended it); online, its fin goes out."""
+        if not self.reported and self.run.tick % REPORT == 0:  # a give-up on a tick already sent: every
+            self.run.play(0, self.run.held)  # message must move k on, so one more tick, with no new input
+        self.run.stop("giveup")
+        self._report()
 
     def snapshot(self) -> pygame.Surface:
         """The current frame without the big centre text, as a backdrop for pause/results."""
@@ -268,21 +379,34 @@ class RaceScene(Scene):
             shake * math.sin(self.clock * 71.0),
             shake * math.cos(self.clock * 53.0 + 1.3),
         )
+        self._draw_world(surface, offset)
+        hud = 1.0 if self.phase is not Phase.WON else clamp(1 - (self.phase_t - 0.2) / 0.3, 0.0, 1.0)
+        faded(surface, 255 * hud, self._draw_hud)
+        if overlay:
+            self._draw_overlay_text(surface)
+
+    def _draw_world(self, surface: pygame.Surface, offset: tuple[float, float]) -> None:
         self.world.draw(surface, offset)
+        self._draw_juice(surface, offset)
+
+    def _draw_juice(self, surface: pygame.Surface, offset: tuple[float, float], dx: float = 0) -> None:
+        """Popups and the impact flash; ``dx`` moves the popups with a world drawn shifted (versus)."""
         for p in self.popups:
             k = p.life / p.ttl
             scale = out_back(min(1.0, p.life / 0.18))
-            blit_pop(surface, p.label, p.size, p.color, (p.x, p.y), scale, round(255 * (1 - k**3)))
+            blit_pop(surface, p.label, p.size, p.color, (p.x + dx, p.y), scale, round(255 * (1 - k**3)))
         if self.flash > 0:  # a short white impact frame around the hit, over a brief global flash
             surface.fill((round(160 * self.flash),) * 3, special_flags=pygame.BLEND_RGB_ADD)
             if self.impact:
                 light = glow(150, (255, 244, 214), 255 * min(1.0, self.flash * 2.5))
                 at = (round(self.impact[0] + offset[0]), round(self.impact[1] + offset[1]))
                 surface.blit(light, light.get_rect(center=at))
-        hud = 1.0 if self.phase is not Phase.WON else clamp(1 - (self.phase_t - 0.2) / 0.3, 0.0, 1.0)
-        faded(surface, 255 * hud, self._draw_hud)
-        if overlay:
-            self._draw_overlay_text(surface)
+
+    def _draw_pause(self, surface: pygame.Surface) -> None:
+        button = self.pause_button
+        panel(surface, button, alpha=200, radius=12)
+        for dx in (-7, 4):
+            surface.fill(WHITE, (button.centerx + dx, button.centery - 9, 5, 18))
 
     def _draw_hud(self, surface: pygame.Surface) -> None:
         mode, score = self.mode, self.score
@@ -293,7 +417,7 @@ class RaceScene(Scene):
         blit_text(
             surface, clock_text(self.world.elapsed), 60, (box.x + 16, box.y + 36), WHITE, anchor="topleft"
         )
-        goal = "SEM FIM" if mode.win_s is None else f"/ {clock_text(mode.win_s)}"
+        goal = f"/ {clock_text(self.run.win_s)}"  # Infinito ends at the run cap
         blit_text(surface, goal, 28, (box.right - 18, box.y + 54), MUTED, anchor="topright", shadow=False)
         bar = pygame.Rect(box.x + 18, box.bottom - 18, box.width - 36, 6)
         pygame.draw.rect(surface, (50, 54, 78), bar, border_radius=3)
@@ -305,27 +429,26 @@ class RaceScene(Scene):
             blit_text(
                 surface, mode.name.upper(), 24, (box.right - 18, box.y + 13), mode.color, anchor="topright"
             )
-        # pause button
-        panel(surface, PAUSE_BUTTON, alpha=200, radius=12)
-        for dx in (-7, 4):
-            surface.fill(WHITE, (PAUSE_BUTTON.centerx + dx, PAUSE_BUTTON.centery - 9, 5, 18))
+        if not self.realtime:  # online has no pause
+            self._draw_pause(surface)
 
         # score panel (top-right)
         box = pygame.Rect(WIDTH - 324, 20, 300, 104)
         panel(surface, box, alpha=225)
         blit_text(surface, "PONTOS", 24, (box.x + 18, box.y + 13), MUTED, anchor="topleft", shadow=False)
         blit_text(surface, f"{score.total}", 60, (box.right - 16, box.y + 36), WHITE, anchor="topright")
-        beat = score.total > self.best > 0
-        best_label = "NOVO RECORDE!" if beat else f"RECORDE {self.best}"
-        blit_text(
-            surface,
-            best_label,
-            24,
-            (box.right - 18, box.y + 13),
-            ACCENT if beat else MUTED,
-            anchor="topright",
-            shadow=False,
-        )
+        if not self.run.shared:  # a challenge's run is on the versus road: no record to chase
+            beat = score.total > self.best > 0
+            best_label = "NOVO RECORDE!" if beat else f"RECORDE {self.best}"
+            blit_text(
+                surface,
+                best_label,
+                24,
+                (box.right - 18, box.y + 13),
+                ACCENT if beat else MUTED,
+                anchor="topright",
+                shadow=False,
+            )
         coin = self.ctx.assets.frame("coin")
         surface.blit(coin, coin.get_rect(midleft=(box.x + 16, box.bottom - 22)))
         blit_text(surface, f"x {score.coins}", 26, (box.x + 58, box.bottom - 22), ACCENT, anchor="midleft")
@@ -364,9 +487,9 @@ class RaceScene(Scene):
         bar.width = round(bar.width * self.world.player.shield / SHIELD_TIME)
         pygame.draw.rect(surface, CYAN, bar, border_radius=4)
 
-    def _draw_speedometer(self, surface: pygame.Surface) -> None:
-        center = (WIDTH - 110, HEIGHT - 96)
-        radius = 70
+    def _draw_speedometer(
+        self, surface: pygame.Surface, center: tuple[int, int] = (WIDTH - 110, HEIGHT - 96), radius: int = 70
+    ) -> None:
         k = min(1.0, self.world.speed / 1000)
         arc = pygame.Rect(0, 0, radius * 2, radius * 2)
         arc.center = center
@@ -378,7 +501,7 @@ class RaceScene(Scene):
             pygame.draw.arc(surface, color, arc, start + sweep * (1 - k), start + sweep, 8)
         blit_text(surface, f"{round(self.world.speed * 0.25)}", 48, (center[0], center[1] + 2), WHITE)
         blit_text(surface, "km/h", 24, (center[0], center[1] + 32), MUTED, shadow=False)
-        if self._boosting() and self.phase is Phase.RACING:
+        if self.run.held == 1 and self.phase is Phase.RACING:
             blit_text(surface, "+15%", 26, (center[0], center[1] - 36), ACCENT)
 
     def _hint_alpha(self) -> float:
@@ -390,7 +513,10 @@ class RaceScene(Scene):
         return 0.0
 
     def _draw_hints(self, surface: pygame.Surface, k: float, bottom: int) -> None:
-        lines = PAD_HINTS if self.ctx.input.using_pad else KEY_HINTS
+        pad = self.ctx.input.using_pad
+        lines = PAD_HINTS if pad else KEY_HINTS
+        if self.realtime:  # online: no pause, R gives up
+            lines = lines[:-1] + (() if pad else (("R", "desistir"),))
         box = pygame.Rect(24, 0, 330, 16 + len(lines) * 30)
         box.bottom = bottom
         panel(surface, box, alpha=215 * k)
@@ -418,8 +544,10 @@ class RaceScene(Scene):
         elif self.phase is Phase.WON:
             scale = out_back(min(1.0, self.phase_t / 0.4))
             alpha = round(255 * clamp((WIN_TO_RESULTS - self.phase_t) / 0.2, 0.0, 1.0))
-            blit_pop(surface, "VITÓRIA!", 150, ACCENT, center, scale, alpha, width=6)
+            label, color = self.banner or ("VITÓRIA!", ACCENT)
+            blit_pop(surface, label, 150, color, center, scale, alpha, width=6)
         elif self.phase is Phase.CRASHED and self.phase_t > 0.5:
             k = min(1.0, (self.phase_t - 0.5) / 0.3)
             alpha = round(255 * clamp((CRASH_TO_RESULTS - self.phase_t) / 0.2, 0.0, 1.0))
-            blit_pop(surface, "BATEU!", 140, DANGER, center, out_back(k), alpha, width=6)
+            label, color = self.banner or ("BATEU!", DANGER)
+            blit_pop(surface, label, 140, color, center, out_back(k), alpha, width=6)

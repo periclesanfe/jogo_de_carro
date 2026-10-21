@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card">
+  <h1>{{ titulo }}</h1>
+  {% if enviado %}
+    <p class="ok" role="status">Se o e-mail puder ser usado, enviamos um link para ele. Confira a caixa de entrada (e o spam): o link vale por 1 hora.</p>
+    <p class="links"><a href="/entrar">Voltar para Entrar</a></p>
+  {% else %}
+    {% if not mail %}
+      <p class="erro" role="alert">E-mail indisponível: o envio de e-mails ainda não está funcionando. {% if google %}Entre com o Google ou tente mais tarde.{% else %}Tente mais tarde.{% endif %}</p>
+    {% endif %}
+    {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+    <p class="muted">Digite seu e-mail: enviamos um link para você definir sua senha.</p>
+    <form method="post">
+      <fieldset{% if not mail %} disabled{% endif %}>
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" value="{{ email or '' }}">
+        <button class="primary wide" type="submit">Enviar link</button>
+      </fieldset>
+    </form>
+    {% if google %}<p class="ou">ou</p><a class="btn wide" href="/auth/google">Entrar com Google</a>{% endif %}
+    <p class="links"><a href="/entrar">Já tenho conta</a></p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Conta · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card">
+  <h1>Sua conta</h1>
+  {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+  <dl class="info">
+    <dt>E-mail</dt><dd>{{ user.email }}</dd>
+    <dt>Apelido</dt><dd>{% if user.nick %}{{ user.nick }}{% else %}<a href="/apelido">escolher</a>{% endif %}</dd>
+    <dt>Google</dt><dd>{{ "ligado" if user.google_sub else "não ligado" }}</dd>
+  </dl>
+
+  <section>
+    <h2>Senha</h2>
+    <p class="muted">Enviaremos para o seu e-mail um link para definir a nova senha.</p>
+    <form method="post" action="/conta/senha">
+      <fieldset{% if not mail %} disabled{% endif %}><button class="wide" type="submit">Trocar senha</button></fieldset>
+    </form>
+    {% if not mail %}<p class="muted small">E-mail indisponível no momento.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Aparelhos</h2>
+    <form method="post" action="/sair"><button class="wide" type="submit">Sair</button></form>
+    <form method="post" action="/conta/sair-todos"><button class="wide" type="submit">Sair de todos os aparelhos</button></form>
+  </section>
+
+  <section>
+    <h2>Excluir conta</h2>
+    <p class="muted">Apaga sua conta, seus amigos e tudo ligado a ela. Não dá para desfazer.</p>
+    <form method="post" action="/conta/excluir">
+      <label for="confirmar">Para confirmar, digite {% if user.nick %}seu apelido, <b>{{ user.nick }}</b>{% else %}seu e-mail{% endif %}</label>
+      <input id="confirmar" name="confirmar" type="text" required autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="danger wide" type="submit">Excluir conta</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

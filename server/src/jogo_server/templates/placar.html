@@ -1,0 +1,13 @@
+{# The board's rows, on the home page and on /ranking. #}
+{% macro placar(linhas, user) %}
+<ol class="placar">
+  {% for r in linhas %}
+  <li{% if user and r.user_id == user.id %} class="eu"{% endif %}>
+    <span class="pos">{{ loop.index }}</span>
+    <span class="nick">{{ r.nick }}</span>
+    <span>{{ r.score | pontos }}</span>
+    <span class="tempo">{{ r.seconds | tempo }}</span>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}

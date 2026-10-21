@@ -2,12 +2,15 @@
 
 import itertools
 import json
+import math
+from decimal import Decimal, localcontext
 
 import pytest
 
 from jogo_de_carro import save
-from jogo_de_carro.settings import COMBO_MAX, COMBO_TIME, MODES, NEAR_MISS_POINTS, PX_PER_METER
-from jogo_de_carro.world.difficulty import max_blocked_at, row_gap, speed_at, unlocked_kinds
+from jogo_de_carro.settings import COMBO_MAX, COMBO_TIME, FIXED_DT, MODES, NEAR_MISS_POINTS, PX_PER_METER
+from jogo_de_carro.tween import STEP_DECAY
+from jogo_de_carro.world.difficulty import max_blocked_at, pow_08, row_gap, speed_at, unlocked_kinds
 from jogo_de_carro.world.scoring import Score
 
 TIMES = [i * 0.5 for i in range(2000)]  # 0 .. 1000 s
@@ -29,6 +32,17 @@ def test_difficulty_is_monotonic_and_capped(mode):
 
     kinds = [len(unlocked_kinds(mode, t)) for t in TIMES]
     assert all(a <= b for a, b in itertools.pairwise(kinds))
+
+
+def test_libm_free_math_is_exact():
+    with localcontext() as ctx:
+        ctx.prec = 50
+        for rate, k in STEP_DECAY.items():  # the literals are exp(-rate * FIXED_DT), correctly rounded
+            assert k == float(Decimal(-rate * FIXED_DT).exp())
+        for t in [*TIMES[1:], 1e-9, FIXED_DT, 3 + FIXED_DT, 1803.0]:
+            exact = float(Decimal(t) ** (Decimal(4) / 5))
+            assert abs(pow_08(t) - exact) <= math.ulp(exact)
+    assert pow_08(0.0) == pow_08(-1.0) == pow_08(math.nan) == pow_08(1e-300) == 0.0 < pow_08(math.inf) < 1e50
 
 
 def test_modes_keep_relative_order_and_original_win_times():

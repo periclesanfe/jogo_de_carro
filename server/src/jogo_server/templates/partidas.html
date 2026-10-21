@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Partidas · Jogo de Carro{% endblock %}
+{% macro vezes(n, um, varios) %}{{ n }} {{ um if n == 1 else varios }}{% endmacro %}
+{% block main %}
+<div class="card">
+  <h1>Partidas</h1>
+  <h2>Contra cada amigo</h2>
+  {% if contra %}
+  <ul class="list">
+    {% for c in contra %}
+    <li><span class="nick">{{ c.nick }}</span><span class="res">{{ vezes(c.v, "vitória", "vitórias") }} · {{ vezes(c.d, "derrota", "derrotas") }} · {{ vezes(c.e, "empate", "empates") }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nenhuma partida decidida ainda. No jogo, abra AMIGOS para correr ao vivo ou desafiar.</p>
+  {% endif %}
+
+  <section>
+    <h2>Corridas e desafios</h2>
+    {% if jogos %}
+    <ul class="list">
+      {% for j in jogos %}
+      {% set classe = "" %}
+      {% if j.state == "done" and j.winner == user.id %}{% set rotulo, classe = "Vitória", "vitoria" %}
+      {% elif j.state == "done" and j.winner is none %}{% set rotulo = "Empate" %}
+      {% elif j.state == "done" %}{% set rotulo, classe = "Derrota", "derrota" %}
+      {% elif j.state == "open" and j.desafiou %}{% set rotulo = "Esperando " ~ j.nick %}
+      {% elif j.state == "open" %}{% set rotulo, classe = "Sua vez", "vitoria" %}
+      {% else %}{% set rotulo = {"racing": "Em andamento", "playing_b": "Em andamento", "expired": "Expirou"}.get(j.state, "Anulada") %}
+      {% endif %}
+      <li>
+        <span><span class="nick">{{ j.nick }}</span><br>
+          <span class="muted small">{{ "Ao vivo" if j.kind == "live" else "Desafio" }} · {{ modos[j.mode].name }} · {{ j.created | data }}</span></span>
+        <span class="res{% if classe %} {{ classe }}{% endif %}">{{ rotulo }}<br>
+          <span class="muted small">{% if j.state == "open" and not j.desafiou %}no jogo, até {{ j.expires | data }}{% else %}{{ j.meus | pontos }} × {{ j.deles | pontos }}{% endif %}</span></span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="muted small">Pontos: os seus × os do amigo. Um desafio fica aberto 7 dias; quem foi desafiado tem uma tentativa.</p>
+    {% else %}
+    <p class="muted">Nenhuma ainda.</p>
+    {% endif %}
+  </section>
+
+  {% if analise %}
+  <section>
+    <h2>Em análise</h2>
+    <ul class="list">
+      {% for r in analise %}
+      <li><span>{{ modos[r.mode].name }}<br><span class="muted small">{{ r.ended | data }}</span></span>
+        <span class="res">{{ r.score | pontos }}<br><span class="muted small">{{ r.seconds | tempo }}</span></span></li>
+      {% endfor %}
+    </ul>
+    <p class="muted small">Corridas que entrariam no top 10 entram no ranking depois de revisadas.</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

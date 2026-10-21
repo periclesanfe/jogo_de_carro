@@ -1,0 +1,50 @@
+<!doctype html>
+{#- The HTML copy of the link email (mail.py). Mail clients keep little CSS: tables, inline styles and system fonts
+    only. It is the site's look (static/site.css), dark in both color schemes, and reads right with images off.
+    Outlook's Word engine uses only the first font of a stack. The address is text, never a link: a relay's click
+    tracking would point it elsewhere, and a mail app's own link color must stay readable on its light box. #}
+{%- set font = "font-family:Segoe UI,-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif" %}
+{%- set box = "margin:0;padding:12px 14px;background:#f4f4f4;border-radius:14px;color:#1a1c2c;font-family:Consolas,Menlo,monospace;font-size:13px;line-height:1.45;word-break:break-all" %}
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Defina sua senha</title>
+</head>
+<body style="margin:0;padding:0;background:#1a1c2c">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">O link vale por 1 hora e só pode ser usado uma vez.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1c2c" style="background:#1a1c2c">
+<tr><td align="center" style="padding:32px 16px">
+<!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px">
+<tr><td align="center" style="padding:0 0 22px;{{ font }}">
+  <img src="{{ base }}/icone.png" width="64" height="64" alt="Pneu em chamas" style="display:block;margin:0 auto 10px;border:0;image-rendering:pixelated;color:#949cb4;font-size:11px;line-height:14px;text-align:center">
+  <div style="color:#ffcd3c;font-size:22px;font-weight:900;letter-spacing:.04em;text-transform:uppercase">Jogo de Carro</div>
+</td></tr>
+<tr><td bgcolor="#161826" style="background:#161826;border:2px solid #3c405c;border-radius:26px;padding:30px 24px;{{ font }};color:#f4f4f4;font-size:17px;line-height:1.5">
+  <h1 style="margin:0 0 12px;font-size:26px;line-height:1.15;font-weight:900;letter-spacing:.02em;text-transform:uppercase;color:#f4f4f4">Defina sua senha</h1>
+  <p style="margin:0 0 22px">Olá! Recebemos um pedido para entrar no Jogo de Carro com este <span style="white-space:nowrap">e-mail</span>.</p>
+  {%- if links %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td align="center" bgcolor="#ffcd3c" style="border-radius:999px;mso-padding-alt:16px 24px"><a href="{{ link }}" style="display:block;padding:16px 24px;border-radius:999px;{{ font }};color:#1a1c2c;font-size:16px;font-weight:800;line-height:1.1;letter-spacing:.04em;text-transform:uppercase;text-decoration:none">Definir senha</a></td>
+  </tr></table>
+  {%- else %}
+  <p style="margin:0 0 8px;color:#949cb4;font-size:14px">Para definir sua senha, copie e cole este endereço no navegador:</p>
+  <p style="{{ box }}">{{ link }}</p>
+  {%- endif %}
+  <p style="margin:14px 0 0;color:#949cb4;font-size:14px;text-align:center">O link vale por 1 hora e só pode ser usado uma vez.</p>
+  {%- if links %}
+  <p style="margin:24px 0 8px;padding-top:20px;border-top:1px solid #3c405c;color:#949cb4;font-size:14px">Se o botão não funcionar, copie e cole este endereço no navegador:</p>
+  <p style="{{ box }}">{{ link }}</p>
+  {%- endif %}
+</td></tr>
+<tr><td align="center" style="padding:20px 8px 0;{{ font }};color:#949cb4;font-size:13px;line-height:1.5">Se não foi você, ignore este e-mail: nada muda.</td></tr>
+</table>
+<!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>

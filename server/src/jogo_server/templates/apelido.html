@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Seu apelido · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card">
+  <h1>Seu apelido</h1>
+  <p class="muted">É como os outros jogadores veem você. Não dá para trocar depois.</p>
+  {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+  <form method="post" action="/apelido">
+    <label for="apelido">Apelido</label>
+    <input id="apelido" name="apelido" type="text" required minlength="3" maxlength="16" pattern="[A-Za-z0-9_]{3,16}"
+           autocomplete="nickname" autocapitalize="off" spellcheck="false" value="{{ apelido or '' }}">
+    <p class="muted small">De 3 a 16 caracteres: letras sem acento, números ou _.</p>
+    <button class="primary wide" type="submit">Confirmar</button>
+  </form>
+</div>
+{% endblock %}

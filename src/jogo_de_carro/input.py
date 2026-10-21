@@ -118,10 +118,6 @@ class Input:
     def held(self, action: Action) -> bool:
         return action in self._keys or any(action in dirs for dirs in self._pads.values())
 
-    def vertical(self) -> float:
-        """-1 when holding up, +1 when holding down."""
-        return float(self.held(Action.DOWN)) - float(self.held(Action.UP))
-
     def release_all(self) -> None:
         self._keys.clear()
         self._pads.clear()

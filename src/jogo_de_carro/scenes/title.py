@@ -1,4 +1,5 @@
-"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Sair."""
+"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Contra o bot, Amigos (logged in to the
+site), Sair (Site on the web)."""
 
 import math
 
@@ -8,25 +9,44 @@ from .. import __version__
 from ..input import Action
 from ..settings import ACCENT, FLAME, MUTED, SKIN_NAMES, WHITE, WIDTH
 from ..ui import Menu, blit_text, glow, gradient_text, panel, text
-from .base import Context, MenuScene, Transition
+from .base import WEB, Context, MenuScene, Transition
 
 CREDITS = "IFAL 2022 · Adenilson · Eduardo · Erimaiken · Ingrid · Péricles"
+
+
+def to_site() -> None:
+    """The web build's SAIR: a page cannot close itself, so it goes back to the site's home page."""
+    import platform  # pygbag's: the browser's window
+
+    platform.window.location.href = "/"
 
 
 class TitleScene(MenuScene):
     def __init__(self, ctx: Context, focus: int = 0) -> None:
         super().__init__(ctx)
-        self.menu = Menu(["JOGAR", "SKIN", "DIFICULDADE", "SAIR"], (WIDTH // 2, 392), ctx.audio, index=focus)
+        self.menu = self._menu(focus)
         self.logo = gradient_text("JOGO DE CARRO", 104, (255, 230, 120), FLAME)
         self.icon = pygame.transform.scale_by(ctx.assets.icon(), 2)
         self.clock = 0.0
+
+    def _labels(self) -> list[str]:
+        # new items go before SAIR, so the indices the other menus return to (focus=) keep their meaning
+        net = self.ctx.net
+        friends = ["AMIGOS"] if net and net.up else []  # the site's socket: hidden offline and on the desktop
+        return ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT", *friends, "SITE" if WEB else "SAIR"]
+
+    def _menu(self, focus: int) -> Menu:
+        labels = self._labels()
+        n = len(labels)  # six buttons close up a little to clear the logo and the footer
+        center = (WIDTH // 2, 412 + 10 * (n - 5))
+        return Menu(labels, center, self.ctx.audio, gap=14 - 4 * (n - 5), index=min(focus, n - 1))
 
     def enter(self) -> None:
         self.ctx.audio.music("menu")
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
         if action is Action.BACK:
-            self.menu.index = 3
+            self.menu.index = len(self.menu.buttons) - 1  # SAIR / SITE
             self.ctx.audio.play("ui_back")
             return
         choice = self.menu.handle(action, event)
@@ -35,9 +55,9 @@ class TitleScene(MenuScene):
         self.ctx.audio.play("ui_select")
         scenes = self.ctx.scenes
         if choice == 0:
-            from .race import RaceScene
+            from .online import play
 
-            scenes.switch(RaceScene(self.ctx), Transition.FADE)
+            scenes.switch(play(self.ctx), Transition.FADE)  # ranked when logged in to the site
         elif choice == 1:
             from .garage import GarageScene
 
@@ -46,12 +66,25 @@ class TitleScene(MenuScene):
             from .difficulty import DifficultyScene
 
             scenes.switch(DifficultyScene(self.ctx), Transition.SLIDE_LEFT)
+        elif choice == 3:
+            from .versus import BotScene
+
+            scenes.switch(BotScene(self.ctx), Transition.SLIDE_LEFT)
+        elif self.menu.labels[choice] == "AMIGOS":
+            from .online import AmigosScene
+
+            scenes.switch(AmigosScene(self.ctx), Transition.SLIDE_LEFT)
+        elif WEB:
+            to_site()
         else:
             self.ctx.quit()
 
     def update(self, dt: float) -> None:
         super().update(dt)
         self.clock += dt
+        if (labels := self._labels()) != self.menu.labels:  # the socket came up, or went: the focus stays on
+            focused = self.menu.labels[self.menu.index]  # its item, or goes to JOGAR (never onto SAIR / SITE)
+            self.menu = self._menu(labels.index(focused) if focused in labels else 0)
         self.menu.update(dt)
 
     def draw_ui(self, surface: pygame.Surface) -> None:
@@ -85,10 +118,9 @@ class TitleScene(MenuScene):
             blit_text(surface, chip, 26, rect.center, WHITE, shadow=False)
             x += w + 10
         pad = self.ctx.input.using_pad
-        hint = (
-            "D-PAD navegar · A confirmar"
-            if pad
-            else "SETAS navegar · ENTER confirmar · F11 tela cheia · M som"
-        )
+        if pad:
+            hint = "D-PAD navegar · A confirmar"
+        else:
+            hint = "SETAS navegar · ENTER confirmar" + ("" if WEB else " · F11 tela cheia") + " · M som"
         blit_text(surface, hint, 24, (WIDTH - 24, 657), MUTED, anchor="midright")
         blit_text(surface, f"{CREDITS} · v{__version__}", 24, (WIDTH // 2, 701), MUTED)

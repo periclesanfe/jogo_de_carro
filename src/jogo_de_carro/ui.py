@@ -74,6 +74,15 @@ def gradient_text(s: str, size: int, top: Color, bottom: Color, outline: Color =
     return out
 
 
+def fit(label: str, size: int, width: int) -> str:
+    """The label, cut short with … to fit the width (a player's nick)."""
+    if text(label, size).get_width() <= width:
+        return label
+    while len(label) > 1 and text(label + "…", size).get_width() > width:
+        label = label[:-1]
+    return label + "…"
+
+
 def blit_text(
     surface: pygame.Surface,
     s: str,
@@ -198,6 +207,11 @@ def clock_text(seconds: float) -> str:
     """mm:ss, the original game's score format."""
     s = int(seconds)
     return f"{s // 60:02d}:{s % 60:02d}"
+
+
+def mss(seconds: float) -> str:
+    """m:ss, for a time in a sentence ("bateu aos 1:02")."""
+    return clock_text(seconds).removeprefix("0")
 
 
 def mix(a: Color, b: Color, k: float) -> Color:

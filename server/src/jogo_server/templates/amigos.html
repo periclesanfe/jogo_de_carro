@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Amigos · Jogo de Carro{% endblock %}
+{% block main %}
+{% set recebidos = lista | rejectattr("accepted") | rejectattr("mine") | list %}
+{% set enviados = lista | rejectattr("accepted") | selectattr("mine") | list %}
+{% set amigos = lista | selectattr("accepted") | list %}
+<div class="card">
+  <h1>Amigos</h1>
+  {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+  <form method="post" action="/amigos">
+    <label for="apelido">Adicionar pelo apelido</label>
+    <div class="row">
+      <input id="apelido" name="apelido" type="text" required minlength="3" maxlength="16" pattern="[A-Za-z0-9_]{3,16}"
+             autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="primary" type="submit">Pedir</button>
+    </div>
+  </form>
+
+  {% if recebidos %}
+  <section>
+    <h2>Pedidos recebidos</h2>
+    <ul class="list">
+      {% for f in recebidos %}
+      <li><span>{{ f.nick }}</span><span class="acoes">
+        <form method="post" action="/amigos/{{ f.id }}/aceitar"><button class="small primary" type="submit">Aceitar</button></form>
+        <form method="post" action="/amigos/{{ f.id }}/recusar"><button class="small" type="submit">Recusar</button></form>
+      </span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2>Seus amigos</h2>
+    {% if amigos %}
+    <ul class="list">
+      {% for f in amigos %}
+      <li><span>{{ f.nick }}</span><span class="acoes">
+        <form method="post" action="/amigos/{{ f.id }}/remover"><button class="small" type="submit">Remover</button></form>
+      </span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nenhum ainda. Peça amizade pelo apelido.</p>
+    {% endif %}
+  </section>
+
+  {% if enviados %}
+  <section>
+    <h2>Pedidos enviados</h2>
+    <ul class="list">
+      {% for f in enviados %}
+      <li><span>{{ f.nick }} <span class="muted small">aguardando</span></span><span class="acoes">
+        <form method="post" action="/amigos/{{ f.id }}/remover"><button class="small" type="submit">Cancelar</button></form>
+      </span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Defina sua senha · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card">
+  {% if email %}
+    <h1>Defina sua senha</h1>
+    <p class="muted">Conta: <b>{{ email }}</b></p>
+    {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+    <form method="post" action="/senha">
+      <input type="hidden" name="t" value="{{ t }}">
+      <input type="email" name="usuario" value="{{ email }}" autocomplete="username" hidden>
+      <label for="senha">Nova senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="new-password" required minlength="8" maxlength="128">
+      <label for="senha2">Repita a senha</label>
+      <input id="senha2" name="senha2" type="password" autocomplete="new-password" required minlength="8" maxlength="128">
+      <p class="muted small">De 8 a 128 caracteres. Ao salvar, quem estiver conectado na sua conta em outro aparelho sai.</p>
+      <button class="primary wide" type="submit">Salvar e entrar</button>
+    </form>
+  {% else %}
+    <h1>Link inválido</h1>
+    <p>Este link expirou ou já foi usado.</p>
+    <a class="btn primary wide" href="/esqueci">Pedir outro link</a>
+  {% endif %}
+</div>
+{% endblock %}

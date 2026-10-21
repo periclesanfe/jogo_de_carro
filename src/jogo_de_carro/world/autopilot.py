@@ -1,6 +1,8 @@
-"""Drivers that follow the spawner's safe corridor: they power the attract mode, demos and tests."""
+"""Drivers that follow the spawner's safe corridor: they power the attract mode, demos, tests and the bot."""
 
-from ..settings import LANE_CHANGE_TIME, PLAYER_Y
+import random
+
+from ..settings import LANE_CHANGE_TIME, PLAYER_Y, START_LANE
 from ..tween import clamp
 from .traffic import Traffic
 from .world import Controls, World
@@ -42,3 +44,30 @@ def showoff(world: World) -> Controls:
         if body.top - ob_body.bottom <= LATE_DODGE * closing:
             return base  # now!
     return Controls(steer=0, vertical=base.vertical)
+
+
+class Bot:
+    """The autopilot with human reflexes, for "desafiar um bot".
+
+    Each time the corridor asks for a new lane the bot reacts after a random delay (exponential, mean
+    ``react`` s). A rare slow reaction misses the lane-change window, and the window shrinks as the rows
+    get faster, so it crashes later in a run on easier modes and sooner on harder ones.
+    """
+
+    def __init__(self, react: float, rng: random.Random) -> None:
+        self.react, self.rng = react, rng
+        self.target, self.at = START_LANE, 0.0
+
+    def __call__(self, world: World) -> Controls:
+        base = autopilot(world)
+        player = world.player
+        target = world.spawner.corridor_lane(world.distance + (PLAYER_Y - player.y) + 4.0)
+        if target != self.target:
+            self.target, self.at = target, world.elapsed + self.rng.expovariate(1 / self.react)
+        if world.elapsed < self.at:
+            return Controls(steer=0, vertical=base.vertical)
+        return base
+
+
+# mean reaction time (s) per bot level, tuned on the shared road
+BOT_LEVELS = {"facil": 0.20, "medio": 0.13, "dificil": 0.07}

@@ -42,6 +42,13 @@ SPAWN_Y = -140  # screen y where new rows appear (above the top edge)
 DESPAWN_Y = HEIGHT + 140
 REACTION_TIME = 0.12  # slack added to every planned lane change
 MAX_LANE_SHIFT = 2  # the safe lane moves at most this many lanes between rows
+# A shared road (versus, challenges) ignores the player's lane, which makes it harder; rows are spaced out
+# by this factor to compensate (the one knob to refit from versus logs).
+VERSUS_ROWS = 1.15
+
+# --- runs ---------------------------------------------------------------------------------------------
+VERSUS_CAP_S = 600  # a run on a shared road ends here at the latest (Infinito "wins" at the cap)
+RANKED_CAP_S = 1800  # same for a solo run
 
 
 class Kind(Enum):

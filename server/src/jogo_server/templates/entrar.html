@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Entrar · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card">
+  <h1>Entrar</h1>
+  {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+  <form method="post" action="/entrar">
+    <label for="email">E-mail</label>
+    <input id="email" name="email" type="email" autocomplete="username" required maxlength="254" value="{{ email or '' }}">
+    <label for="senha">Senha</label>
+    <input id="senha" name="senha" type="password" autocomplete="current-password" required maxlength="128">
+    <button class="primary wide" type="submit">Entrar</button>
+  </form>
+  {% if google %}<p class="ou">ou</p><a class="btn wide" href="/auth/google">Entrar com Google</a>{% endif %}
+  <p class="links"><a href="/esqueci">Esqueci a senha</a><a href="/cadastro">Criar conta</a></p>
+</div>
+{% endblock %}

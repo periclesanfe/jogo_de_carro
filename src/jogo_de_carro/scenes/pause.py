@@ -1,5 +1,7 @@
 """Pause overlay: Continuar / Reiniciar / Menu."""
 
+from collections.abc import Callable
+
 import pygame
 
 from ..input import Action
@@ -21,9 +23,10 @@ def blurred(frame: pygame.Surface) -> pygame.Surface:
 
 
 class PauseScene(Scene):
-    def __init__(self, ctx: Context, frame: pygame.Surface) -> None:
+    def __init__(self, ctx: Context, frame: pygame.Surface, again: Callable[[], Scene]) -> None:
         super().__init__(ctx)
         self.frame = frame
+        self.again = again  # REINICIAR: a fresh race of the same kind
         self.background = blurred(frame)
         self.menu = Menu(["CONTINUAR", "REINICIAR", "MENU"], (WIDTH // 2, HEIGHT // 2 + 50), ctx.audio)
         self.t = 0.0
@@ -42,9 +45,7 @@ class PauseScene(Scene):
         if choice == 0:
             self._resume()
         elif choice == 1:
-            from .race import RaceScene
-
-            self.ctx.scenes.switch(RaceScene(self.ctx), Transition.FADE)
+            self.ctx.scenes.switch(self.again(), Transition.FADE)
         else:
             from .title import TitleScene
 

@@ -1,0 +1,3 @@
+# local dev database (JOGO_DB) and its WAL files
+*.db
+*.db-*

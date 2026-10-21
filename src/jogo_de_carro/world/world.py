@@ -21,7 +21,7 @@ from ..settings import (
     Kind,
 )
 from ..tween import approach
-from .difficulty import speed_at
+from .difficulty import speed_at, versus_rows
 from .obstacles import Obstacle, Trunk
 from .pickups import Pickup
 from .player import Player
@@ -66,15 +66,27 @@ class Controls:
 
 class World:
     def __init__(
-        self, assets: Assets, mode: Difficulty, skin: str, rng: random.Random, attract: bool = False
+        self,
+        assets: Assets,
+        mode: Difficulty,
+        skin: str,
+        rng: random.Random,
+        attract: bool = False,
+        shared_road: bool = False,  # the road ignores the player: same seed, same road for every driver
+        rival: str | None = None,  # the other driver's skin (versus): no traffic car wears it either
     ) -> None:
         self.assets = assets
         self.mode = mode
         self.rng = rng
         self.attract = attract
-        self.road = Road(assets, random.Random(rng.random()))
-        self.spawner = Spawner(mode, random.Random(rng.random()))
-        self.particles = Particles(random.Random(rng.random()))
+        self.shared_road = shared_road
+        self.rival = rival
+        # int sub-seeds: Random(float) seeds from hash(), which differs on 32-bit builds (the wasm)
+        self.road = Road(assets, random.Random(rng.getrandbits(64)))
+        if shared_road:
+            mode = versus_rows(mode)
+        self.spawner = Spawner(mode, random.Random(rng.getrandbits(64)))
+        self.particles = Particles(random.Random(rng.getrandbits(64)))
         self.player = Player(assets, skin)
         self.obstacles: list[Obstacle] = []
         self.pickups: list[Pickup] = []
@@ -102,7 +114,8 @@ class World:
                 self.speed = min(target, self.speed + self.mode.base_speed / START_RAMP_S * dt)
         px = self.speed * dt
         self.distance += px
-        for placement in self.spawner.update(self.distance, self.elapsed, self.speed, player.lane):
+        lane = None if self.shared_road else player.lane
+        for placement in self.spawner.update(self.distance, self.elapsed, self.speed, lane):
             self._spawn(placement)
 
         if controls.steer and player.steer(controls.steer):
@@ -130,10 +143,10 @@ class World:
             return
         x = float(LANE_CENTERS[p.lane])
         if p.kind.is_traffic:
-            skin = SKINS[p.variant]
-            if skin == self.player.skin:  # never a twin of the player's car
-                skin = SKINS[(p.variant + 1) % len(SKINS)]
-            sprite = f"car_{skin}" if p.kind is Kind.CAR else p.kind.value
+            i = p.variant
+            while SKINS[i % len(SKINS)] in (self.player.skin, self.rival):  # never a twin of a driver's car
+                i += 1
+            sprite = f"car_{SKINS[i % len(SKINS)]}" if p.kind is Kind.CAR else p.kind.value
             car = Traffic(
                 self.assets,
                 p.kind,
@@ -230,7 +243,9 @@ class World:
 
     # --- drawing ---------------------------------------------------------------------------------------
 
-    def draw(self, surface: pygame.Surface, offset: tuple[float, float] = (0, 0)) -> None:
+    def draw(
+        self, surface: pygame.Surface, offset: tuple[float, float] = (0, 0), vignette: bool = True
+    ) -> None:
         self.road.draw(surface, offset)
         for ob in self.obstacles:
             if ob.flat:
@@ -241,4 +256,5 @@ class World:
             ob.draw(surface, offset)
         self.player.draw(surface, offset)
         self.particles.draw(surface, offset)
-        surface.blit(self.road.vignette, (0, 0))
+        if vignette:  # the versus split screen shades both halves at once
+            surface.blit(self.road.vignette, (0, 0))

@@ -1,0 +1,20 @@
+# /etc/systemd/system/jogo-backup.service, installed by ops/setup.sh; started by jogo-backup.timer.
+# Runs as jogo, not root: the database belongs to jogo, and root's sqlite3 could leave -wal/-shm files the
+# server cannot open. Output: journalctl -u jogo-backup
+[Unit]
+Description=Cópia do banco do Jogo de Carro
+
+[Service]
+Type=oneshot
+User=jogo
+Group=jogo
+ExecStart=/usr/local/bin/jogo-backup
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# the database directory too: sqlite3 opens a WAL database for writing (its -shm file)
+ReadWritePaths=/var/lib/jogo /var/backups/jogo
+CapabilityBoundingSet=

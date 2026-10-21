@@ -2,21 +2,24 @@
 
 import math
 import random
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 
 import pygame
 
 from ..input import Action
 from ..particles import Particles
-from ..settings import ACCENT, DANGER, HEIGHT, MUTED, WHITE, WIDTH, Difficulty
+from ..settings import ACCENT, CYAN, DANGER, HEIGHT, MUTED, WHITE, WIDTH, Difficulty
 from ..tween import out_back, out_cubic
 from ..ui import Menu, blit_pop, blit_text, clock_text, faded, panel
 from ..world.scoring import Score
-from .base import Context, Scene, Transition
+from .base import WEB, Context, Scene, Transition
+from .online import NO_RESULT, VERIFYING, official
 from .pause import blurred
 from .race import Outcome
 
 COUNT_UP = 1.1  # seconds for the score to count up
+VERDICTS = {1: ("VOCÊ VENCEU!", ACCENT), 0: ("EMPATE", WHITE), -1: ("VOCÊ PERDEU", DANGER)}
 CARD = pygame.Rect(0, 0, 860, 630)
 CARD.center = (WIDTH // 2, HEIGHT // 2)
 
@@ -29,21 +32,34 @@ class RaceStats:
     score: Score
     new_record: bool
     previous_best: int
+    verdict: int | None = None  # a versus: 1 won, 0 draw, -1 lost
+    reason: str = ""  # a versus: why it was decided; a run the server or the network ended: why
+    rival: str = ""  # a versus: the rival's line
+    official: str | None = None  # a ranked run: the server's word on it (online.VERIFYING until it comes)
+    button: str = "JOGAR DE NOVO"  # the first button (REVANCHE: a new invite to the same friend; AMIGOS)
+    to: str = ""  # a challenge's run: the friend it goes to (the official line says it was sent)
+
+    @property
+    def won(self) -> bool:
+        return self.outcome is Outcome.WIN if self.verdict is None else self.verdict == 1
 
     @property
     def celebrate(self) -> bool:
         """Cannons and fanfare for a win or a beaten record; a first-ever score is only noted."""
-        return self.outcome is Outcome.WIN or (self.new_record and self.previous_best > 0)
+        return self.won or (self.new_record and self.previous_best > 0)
 
 
 class ResultsScene(Scene):
-    def __init__(self, ctx: Context, stats: RaceStats, frame: pygame.Surface) -> None:
+    def __init__(
+        self, ctx: Context, stats: RaceStats, frame: pygame.Surface, again: Callable[[], Scene]
+    ) -> None:
         super().__init__(ctx)
         self.stats = stats
         self.frame = frame
+        self.again = again  # JOGAR DE NOVO: a fresh race of the same kind
         self.background = blurred(frame)
         self.menu = Menu(
-            ["JOGAR DE NOVO", "MENU", "SAIR"],
+            [stats.button, "MENU", "SITE" if WEB else "SAIR"],
             (WIDTH // 2, CARD.bottom - 66),
             ctx.audio,
             size=(232, 56),
@@ -55,7 +71,7 @@ class ResultsScene(Scene):
         self.celebrated = False
 
     def enter(self) -> None:
-        if self.stats.outcome is not Outcome.WIN:
+        if not (self.stats.outcome is Outcome.WIN and self.stats.won):  # else the win fanfare plays on
             self.ctx.audio.music("menu", fade_ms=2500)
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
@@ -69,15 +85,26 @@ class ResultsScene(Scene):
             return
         self.ctx.audio.play("ui_select")
         if choice == 0:
-            from .race import RaceScene
-
-            self.ctx.scenes.switch(RaceScene(self.ctx), Transition.FADE)
+            self.ctx.scenes.switch(self.again(), Transition.FADE)
         elif choice == 1:
             from .title import TitleScene
 
             self.ctx.scenes.switch(TitleScene(self.ctx), Transition.FADE)
+        elif WEB:
+            from .title import to_site
+
+            to_site()
         else:
             self.ctx.quit()
+
+    def on_net(self, msg: dict) -> None:
+        """A ranked run: the server's result turns "verificando…" into its line."""
+        if self.stats.official != VERIFYING:
+            return
+        if msg.get("t") == "result":
+            self.stats = replace(self.stats, official=official(msg, self.stats.mode, self.stats.to))
+        elif msg.get("t") == "closed":
+            self.stats = replace(self.stats, official=NO_RESULT)
 
     def update(self, dt: float) -> None:
         self.t += dt
@@ -102,19 +129,24 @@ class ResultsScene(Scene):
 
     def _draw_card(self, surface: pygame.Surface) -> None:
         stats = self.stats
-        won = stats.outcome is Outcome.WIN
         box = CARD
         panel(surface, box, alpha=232, radius=26, border=(60, 64, 92))
 
-        title, color = ("VOCÊ VENCEU!", ACCENT) if won else ("GAME OVER", DANGER)
+        if stats.verdict is None:
+            title, color = ("VOCÊ VENCEU!", ACCENT) if stats.won else ("GAME OVER", DANGER)
+            subtitle = (
+                stats.reason
+                or {
+                    Outcome.WIN: f"Sobreviveu {clock_text(stats.seconds)} no modo {stats.mode.name}",
+                    Outcome.CRASH: f"Você bateu no modo {stats.mode.name}",
+                    Outcome.GAVE_UP: f"Você desistiu no modo {stats.mode.name}",
+                }[stats.outcome]
+            )
+        else:
+            (title, color), subtitle = VERDICTS[stats.verdict], stats.reason
         blit_pop(
             surface, title, 96, color, (WIDTH // 2, box.y + 76), out_back(min(1.0, self.t / 0.4)), width=5
         )
-        subtitle = {
-            Outcome.WIN: f"Sobreviveu {clock_text(stats.seconds)} no modo {stats.mode.name}",
-            Outcome.CRASH: f"Você bateu no modo {stats.mode.name}",
-            Outcome.GAVE_UP: f"Você desistiu no modo {stats.mode.name}",
-        }[stats.outcome]
         blit_text(surface, subtitle, 30, (WIDTH // 2, box.y + 140), MUTED)
 
         score = stats.score
@@ -144,12 +176,28 @@ class ResultsScene(Scene):
             anchor="midright",
         )
         self._draw_record(surface, box)
+        if stats.official:
+            self._draw_official(surface, stats.official, box.y + 512)
         self.menu.draw(surface)
+
+    def _draw_official(self, surface: pygame.Surface, line: str, y: int) -> None:
+        """The server's line; its ✓ (missing from the font) is drawn."""
+        ok = line.startswith("✓ ")
+        rect = blit_text(
+            surface, line.removeprefix("✓ "), 28, (WIDTH // 2 + 14 * ok, y), CYAN if ok else MUTED
+        )
+        if ok:
+            x, cy = rect.x - 30, rect.centery
+            pygame.draw.lines(surface, CYAN, False, [(x, cy), (x + 7, cy + 7), (x + 20, cy - 8)], 4)
 
     def _draw_record(self, surface: pygame.Surface, box: pygame.Rect) -> None:
         stats = self.stats
         y = box.y + 468
-        if stats.new_record and self.celebrated:
+        if stats.to:  # a challenge's run sets no record either: the official line says it was sent
+            return
+        if stats.rival:  # a versus sets no records: its road is not the solo road
+            blit_text(surface, stats.rival, 30, (WIDTH // 2, y), WHITE)
+        elif stats.new_record and self.celebrated:
             if not stats.celebrate:  # the first score in this mode: a record, but nothing to beat yet
                 blit_text(surface, f"Primeiro recorde: {stats.score.total}", 28, (WIDTH // 2, y), MUTED)
                 return

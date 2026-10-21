@@ -15,7 +15,7 @@ authors = [
     { name = "Ingrid Mônica da Silva Bezerra" },
     { name = "Péricles Andrade Feitoza" },
 ]
-dependencies = ["pygame-ce>=2.5.8"]
+dependencies = ["pygame-ce>=2.5.7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff==0.17.0"]  # pinned: CI enforces its formatter and rules
@@ -30,7 +30,7 @@ jogo-de-carro = "jogo_de_carro.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-jogo_de_carro = ["assets/**/*.png", "assets/**/*.wav", "assets/*.png"]
+jogo_de_carro = ["assets/**/*.png", "assets/**/*.wav", "assets/*.png", "replays/*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -40,7 +40,7 @@ addopts = "-ra"
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-src = ["src", "tests", "tools"]
+src = ["src", "tests", "tools", "server/src", "server/tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

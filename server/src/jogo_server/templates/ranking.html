@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "placar.html" import placar %}
+{% block title %}Ranking {{ modo.name }} · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card">
+  <h1>Ranking</h1>
+  <nav class="modos" aria-label="Modo">
+    {% for m in modos %}
+    <a href="/ranking?modo={{ m.key }}"{% if m.key == modo.key %} aria-current="page"{% endif %}>{{ m.name }}</a>
+    {% endfor %}
+  </nav>
+  {% if voce %}<p class="ok">Você: <b>#{{ voce }}</b></p>{% endif %}
+  {% if linhas %}
+  {{ placar(linhas, user) }}
+  {% else %}
+  <p class="muted">Ninguém no ranking {{ modo.name }} ainda.</p>
+  {% endif %}
+  <p class="muted small center">A melhor corrida de cada jogador. Uma corrida que entraria no top 10 aparece depois de revisada.</p>
+</div>
+{% endblock %}

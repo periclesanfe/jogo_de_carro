@@ -1,0 +1,11 @@
+# /etc/systemd/system/jogo-backup.timer, enabled by ops/setup.sh. Persistent: a run missed while the VPS was
+# off happens at the next boot. List with: systemctl list-timers jogo-backup.timer
+[Unit]
+Description=Cópia diária do banco do Jogo de Carro
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 America/Sao_Paulo
+Persistent=true
+
+[Install]
+WantedBy=timers.target

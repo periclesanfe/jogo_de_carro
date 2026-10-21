@@ -8,6 +8,7 @@ turn any missing or mis-sized asset into an error instead.
 import importlib.resources
 import logging
 import os
+import sys
 from pathlib import Path
 
 import pygame
@@ -16,6 +17,7 @@ from .settings import ICON_SIZE, MUSIC, SCALE, SOUNDS, SPRITES
 
 log = logging.getLogger(__name__)
 STRICT_ENV = "JOGO_STRICT_ASSETS"
+EXT = "ogg" if sys.platform == "emscripten" else "wav"  # tools/web_build.py converts them for the browser
 
 
 class AssetError(RuntimeError):
@@ -53,6 +55,7 @@ class Assets:
         self._scaled: dict[str, list[pygame.Surface]] = {}
         self._rotated: dict[tuple[str, int, int, bool], pygame.Surface] = {}
         self._masks: dict[tuple[str, int, float, float], pygame.Mask] = {}
+        self._bounds: dict[str, pygame.Rect] = {}
         self._shadows: dict[tuple[str, int], pygame.Surface] = {}
         self._sounds: dict[str, pygame.mixer.Sound | None] = {}
 
@@ -105,6 +108,8 @@ class Assets:
         return self._rotated[key]
 
     def mask(self, name: str, index: int = 0, shrink: tuple[float, float] = (1.0, 1.0)) -> pygame.Mask:
+        if name.startswith("car_"):  # one hitbox for every car colour: a skin never changes the race
+            name = "car_yellow"
         key = (name, index, *shrink)
         if key not in self._masks:
             self._masks[key] = shrunk_mask(self.frame(name, index), *shrink)
@@ -112,8 +117,10 @@ class Assets:
 
     def bounds(self, name: str) -> pygame.Rect:
         """Bounding box of the opaque pixels of frame 0, relative to the frame's top-left corner."""
-        rects = self.mask(name).get_bounding_rects()
-        return rects[0].unionall(rects[1:]) if rects else self.frame(name).get_rect()
+        if name not in self._bounds:  # cached: it is read for every obstacle on every step
+            rects = self.mask(name).get_bounding_rects()
+            self._bounds[name] = rects[0].unionall(rects[1:]) if rects else self.frame(name).get_rect()
+        return self._bounds[name]
 
     def shadow(self, name: str, index: int = 0) -> pygame.Surface:
         """Soft drop-shadow silhouette of a frame."""
@@ -133,10 +140,10 @@ class Assets:
     def sound(self, name: str) -> pygame.mixer.Sound | None:
         """A Sound, a silent Sound for missing files, or None when there is no audio device."""
         if name not in self._sounds:
-            path = self.root / "sounds" / f"{name}.wav"
+            path = self.root / "sounds" / f"{name}.{EXT}"
             found = path.is_file()
             if not found:
-                self._problem(f"missing asset sounds/{name}.wav")
+                self._problem(f"missing asset sounds/{name}.{EXT}")
             if not pygame.mixer.get_init():
                 self._sounds[name] = None
             else:
@@ -146,10 +153,10 @@ class Assets:
         return self._sounds[name]
 
     def music_path(self, name: str) -> Path | None:
-        path = self.root / "music" / f"{name}.wav"
+        path = self.root / "music" / f"{name}.{EXT}"
         if path.is_file():
             return path
-        self._problem(f"missing asset music/{name}.wav")
+        self._problem(f"missing asset music/{name}.{EXT}")
         return None
 
     def preload(self) -> None:

@@ -1,6 +1,7 @@
 """Scene protocol, shared services and a stack-based scene manager with fade/slide transitions."""
 
 import random
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -17,7 +18,10 @@ from ..settings import HEIGHT, MODE_BY_KEY, WIDTH, Difficulty
 from ..tween import in_out_cubic
 
 if TYPE_CHECKING:
+    from ..net import Net
     from .backdrop import Backdrop
+
+WEB = sys.platform == "emscripten"  # pygbag: the page cannot quit, and the browser owns fullscreen
 
 
 @dataclass
@@ -32,7 +36,9 @@ class Context:
     rng: random.Random
     quit: Callable[[], None]
     autopilot: bool = False  # races drive themselves (demo / tests)
+    net: "Net | None" = None  # the site's socket: the web build, logged in (JOGAR is then a ranked run)
     scenes: "SceneManager" = field(init=False)
+    toast: Callable[[str], None] = field(init=False)  # a short message at the bottom of the screen
     backdrop: "Backdrop | None" = None  # the menus share one endless demo drive behind them
 
     @property
@@ -46,6 +52,8 @@ class Context:
 class Scene:
     """Overlays (pause) are pushed on top of the stack and draw a frozen frame of the scene below."""
 
+    realtime = False  # an online race: the simulation keeps wall-clock pace through long frames
+
     def __init__(self, ctx: Context) -> None:
         self.ctx = ctx
 
@@ -57,6 +65,9 @@ class Scene:
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
         """One input event; ``action`` is its mapped game action, if any."""
+
+    def on_net(self, msg: dict) -> None:
+        """A server message the Game does not route itself (net.py; plan §5)."""
 
     def update(self, dt: float) -> None: ...
 

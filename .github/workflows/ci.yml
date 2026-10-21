@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, web-platform]
   pull_request:
 
 permissions:
@@ -11,6 +11,12 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: "3.14"  # the desktop build
+          - python: "3.12.12"  # the web runtime (pygbag 0.9.3) and the server
+            pygame: pygame-ce==2.5.7
     env:
       SDL_VIDEODRIVER: dummy
       SDL_AUDIODRIVER: dummy
@@ -19,10 +25,114 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev]" ${{ matrix.pygame }}
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest
+
+  server:
+    # The site and accounts (server/), on the runtime it deploys with, from server/uv.lock (a stale lock fails).
+    # Its startup test computes the real golden digest on this runner.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      UV_PYTHON_DOWNLOADS: never  # the setup-python interpreter below, nothing else
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.12"
+      - run: python -m pip install uv==0.12.23  # the VPS's uv (ops/setup.sh)
+      - run: uv run --locked pytest
+
+  web:
+    # The browser build (tools/web_build.py) and its golden gate: in headless Chrome, with every host but
+    # localhost unreachable (so it boots from our own mirror only), the wasm runtime must simulate exactly like
+    # CPython 3.12.12 + pygame-ce 2.5.7 here. The build, with that digest in golden.txt, is what deploy publishes.
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      golden: ${{ steps.gate.outputs.golden }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install pygbag==0.9.3 . pygame-ce==2.5.7
+      - run: command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; }
+      - run: python tools/web_build.py
+      - id: gate
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          tree=$(git rev-parse HEAD:src/jogo_de_carro HEAD:web HEAD:tools/web_build.py | git hash-object --stdin)
+          native=$(python -I -m jogo_de_carro.golden | awk '$1 == "GOLDEN" {print $2}')
+          # any port but 8666, where pygbag's runtime switches to its dev mode
+          python -m http.server 4173 --bind 127.0.0.1 --directory build/www >/dev/null 2>&1 &
+          server=$!
+          google-chrome --headless=new --user-data-dir="$RUNNER_TEMP/chrome" --no-first-run \
+            --autoplay-policy=no-user-gesture-required --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE localhost" \
+            --enable-logging=stderr --v=0 "http://localhost:4173/jogo/$tree/index.html?golden=1" 2>chrome.log &
+          chrome=$!
+          for _ in $(seq 300); do grep -q 'GOLDEN ' chrome.log && break; sleep 1; done
+          kill "$chrome" "$server" || true  # already gone if Chrome crashed: the log below says why
+          browser=$(grep -o 'GOLDEN [0-9a-f]\{64\}' chrome.log | head -n 1 | cut -d' ' -f2 || true)
+          echo "native  $native"
+          echo "browser $browser"
+          if [[ -z $native || $browser != "$native" ]]; then
+            grep -E 'GOLDEN|CONSOLE|ERROR' chrome.log | tail -n 40 || true
+            exit 1
+          fi
+          echo "$browser" >"build/www/jogo/$tree/golden.txt"
+          echo "golden=$browser" >>"$GITHUB_OUTPUT"
+      - run: tar -czf www.tgz -C build/www index.html jogo cdn
+      - uses: actions/upload-artifact@v7
+        with:
+          name: www
+          path: www.tgz
+          retention-days: 7
+
+  deploy:
+    # On a push, after the web build passed its gate: install this commit on the VPS, require that its CPU
+    # simulates exactly like the browser (ops/jogo-deploy) and publish the build. The DEPLOY_* secrets live in the
+    # "deploy" environment, limited to main and web-platform; the job is skipped until they exist. No repo code
+    # runs in this job.
+    needs: [web, server]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    environment: deploy
+    concurrency: deploy
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+    steps:
+      - uses: actions/download-artifact@v8
+        if: env.HOST != ''
+        with:
+          name: www
+      - if: env.HOST != ''
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          GOLDEN: ${{ needs.web.outputs.golden }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ssh://jogo@$HOST" "$GITHUB_SHA $GOLDEN" < www.tgz
