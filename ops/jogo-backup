@@ -1,0 +1,39 @@
+#!/bin/bash
+# Daily copy of the game's database (jogo-backup.timer runs it as user jogo: the files it reads belong to jogo,
+# and a root sqlite3 could leave root-owned -wal/-shm files the server then cannot open). Each copy is checked
+# by restoring it before it joins the 14 kept in /var/backups/jogo, so a bad copy never pushes out a good one.
+# Restore by hand (the old -wal must go too, or SQLite would replay it onto the copy):
+#   systemctl stop jogo
+#   runuser -u jogo -- sh -c 'rm -f /var/lib/jogo/jogo.db-wal /var/lib/jogo/jogo.db-shm &&
+#       zstd -qfd /var/backups/jogo/<copy> -o /var/lib/jogo/jogo.db'
+#   systemctl start jogo
+# ponytail: local copies only, on the same disk as the database. Add an off-site copy (rclone copy to a crypt
+# remote, plan C8) and a healthchecks.io ping here once that remote exists.
+set -euo pipefail
+umask 077  # e-mails and password hashes
+
+db=${JOGO_DB:-/var/lib/jogo/jogo.db}
+dir=/var/backups/jogo
+name=${1:-jogo}  # jogo-deploy's copies, taken before each server switch, are "deploy": 14 of each kind
+keep=14
+
+[[ -f $db ]] || { echo "sem banco em $db: nada a copiar"; exit 0; }
+tmp=$(mktemp -d "$dir/.tmp.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+
+sqlite3 "$db" ".timeout 10000" ".backup '$tmp/jogo.db'"
+zstd -q -19 "$tmp/jogo.db" -o "$tmp/copy.zst"
+zstd -q -d "$tmp/copy.zst" -o "$tmp/check.db"  # what a restore would do
+check=$(sqlite3 "$tmp/check.db" "PRAGMA integrity_check")
+if [[ $check != ok ]]; then
+    echo "cópia recusada, PRAGMA integrity_check: $check" >&2
+    exit 1
+fi
+out=$dir/$name-$(date -u +%Y%m%d-%H%M%S).db.zst
+mv "$tmp/copy.zst" "$out"
+echo "ok: $out ($(stat -c %s "$out") bytes, restauração verificada)"
+
+copies=("$dir/$name"-*.db.zst)  # sorted by name, oldest first
+if ((${#copies[@]} > keep)); then
+    rm -f -- "${copies[@]:0:${#copies[@]}-keep}"
+fi

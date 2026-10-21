@@ -1,0 +1,41 @@
+[project]
+name = "jogo-server"
+version = "0.1.0"
+description = "O site do Jogo de Carro: páginas, contas e amigos (Starlette + SQLite)."
+requires-python = "==3.12.12"  # the browser's runtime: the server must simulate exactly like it
+dependencies = [
+    "jogo-de-carro",  # the game at the repo root (the golden check now, the verifier in M3)
+    "pygame-ce==2.5.7",
+    "starlette>=1.7",
+    "uvicorn[standard]>=0.54",
+    "jinja2>=3.1.6",
+    "python-multipart>=0.0.32",
+    "argon2-cffi>=25.1",
+    "authlib>=1.8",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+# nothing younger than two weeks when this was written: the end of 2026-10-06 in Brasília, as an instant (uv reads
+# a plain date in the local timezone, so the lock would differ on a UTC runner)
+exclude-newer = "2026-10-07T03:00:00Z"
+# Both local packages are rebuilt on every sync: uv caches a directory's wheel until its pyproject.toml changes,
+# so a fresh venv for a new commit (jogo-deploy) would otherwise get the previous commit's code.
+reinstall-package = ["jogo-server", "jogo-de-carro"]
+
+[tool.uv.sources]
+jogo-de-carro = { path = "..", editable = false }
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.14"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+# authlib 1.8 and starlette 1.7 prefer the httpx2 fork; their httpx fallback works (the plan pins httpx)
+filterwarnings = ["ignore:The httpx module is deprecated", "ignore:Using `httpx` with `starlette.testclient`"]

@@ -1,6 +1,8 @@
 """Build the browser version (pygbag 0.9.3) as a static site in build/www:
 
     index.html          redirects to the current build; serve it with Cache-Control: no-cache
+    current             that build's TREE, the one the server's /jogar sends players to (jogo-deploy writes
+                        its own on the VPS)
     jogo/<TREE>/        index.html, jogo.tar.gz (the game) and favicon.png; CI's gate adds golden.txt
     cdn/                pygbag's runtime, fetched from upstream and checked against web/cdn.lock, plus .gz
                         copies
@@ -114,6 +116,7 @@ def main() -> None:
         for name in ("jogo.tar.gz", "favicon.png"):
             shutil.copy(web / name, dest)
     url = f"jogo/{tree}/"
+    (OUT / "current").write_text(tree + "\n")
     (OUT / "index.html").write_text(
         f'<!doctype html><meta http-equiv="refresh" content="0; url={url}"><a href="{url}">Jogar</a>\n'
     )

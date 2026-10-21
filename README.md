@@ -104,6 +104,7 @@ tools/
   web_build.py        the browser build (pygbag) into build/www
   pyinstaller_entry.py
 web/                  main.py (the browser entry point) and cdn.lock (the pinned pygbag runtime)
+server/               the site: accounts, friends, /jogar (Starlette, SQLite; see "Servidor")
 ops/                  VPS setup, the deploy script CI runs there, the nginx site
 .github/workflows/    ci.yml (lint, tests, web build and its golden gate, deploy), release.yml (PyInstaller builds on v* tags)
 ```
@@ -134,13 +135,26 @@ python tools/web_build.py                          # writes build/www
 python -m http.server 4173 --directory build/www   # open http://localhost:4173/
 ```
 
-`build/www` is the whole site: `index.html` redirects to `jogo/<tree>/`, the game, named after everything it is built from (`git rev-parse HEAD:src/jogo_de_carro HEAD:web HEAD:tools/web_build.py | git hash-object --stdin`, or `dev` while those have uncommitted changes), and `cdn/` holds pygbag's runtime, checked against `web/cdn.lock`. Everything but the top `index.html` can be cached forever. In the browser the save lives in localStorage, and `?golden=1` on the game's URL logs `GOLDEN <sha256>` to the browser console instead of starting the game.
+`build/www` is the whole static site: `index.html` redirects to `jogo/<tree>/` (and `current` names it, for the server's `/jogar`), the game, named after everything it is built from (`git rev-parse HEAD:src/jogo_de_carro HEAD:web HEAD:tools/web_build.py | git hash-object --stdin`, or `dev` while those have uncommitted changes), and `cdn/` holds pygbag's runtime, checked against `web/cdn.lock`. Everything but the top `index.html` and `current` can be cached forever. In the browser the save lives in localStorage, and `?golden=1` on the game's URL logs `GOLDEN <sha256>` to the browser console instead of starting the game.
 
-On pushes to `main` and `web-platform` and on pull requests, CI builds the site and opens `?golden=1` in headless Chrome with every host but localhost blocked: the digest must equal `python -m jogo_de_carro.golden` on CPython 3.12.12. On a push to `main` or `web-platform` it then sends the build to the VPS, where `ops/jogo-deploy` (the deploy key's only command) installs that commit, refuses it unless the VPS's own digest matches too, and publishes it into `/srv/jogo/www` (the entry page moves to it only while that commit is still its branch's newest). One-time VPS setup, as root, from a copy of `ops/` taken outside `/srv/jogo`:
+On pushes to `main` and `web-platform` and on pull requests, CI builds the site and opens `?golden=1` in headless Chrome with every host but localhost blocked: the digest must equal `python -m jogo_de_carro.golden` on CPython 3.12.12. On a push to `main` or `web-platform` it then sends the build to the VPS, where `ops/jogo-deploy` (the deploy key's only command) installs that commit, refuses it unless the VPS's own digest matches too, and publishes it into `/srv/jogo/www`. Each deploy of a commit with `server/` installs the server into `/srv/jogo/venvs/<sha>`, copies the database, writes `/srv/jogo/www/current` and restarts `jogo.service` (only while that commit is still its branch's newest). `/saude` must report the new build with `golden: true` within 60 s; otherwise the deploy switches back to the previous server and build and fails. Its output is also kept in `/srv/jogo/cache/deploy.log`. One-time VPS setup, as root, from a copy of `ops/` taken outside `/srv/jogo`:
 
-1. `bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'` creates the `jogo` user, the pinned Python, the checkout and `/srv/jogo/www`. Re-run it whenever `ops/` changes.
-2. Install `ops/nginx/jogo.conf` as `/etc/nginx/sites-available/jogo`, link it into `sites-enabled`, check it with `nginx -t`, reload nginx, then run the `certbot` line at the top of that file.
-3. In the repository's `deploy` environment, set the secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY` (the private half of that key) and `DEPLOY_KNOWN_HOSTS` (the line `setup.sh` prints). The deploy job is skipped until `DEPLOY_HOST` exists.
+1. `bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'` (the certificate from `certbot --nginx --no-redirect -d jogo.pericles.dev.br` must already exist) creates the `jogo` user, the pinned Python, the checkout, `/srv/jogo/www`, `/var/lib/jogo`, `/etc/jogo/env` (once, with a random `SESSION_SECRET`; fill Google/SMTP later, then `systemctl restart jogo`), `jogo.service` and its only sudo rule, the needrestart exclusion, the daily backup (`/var/backups/jogo`, 14 copies, each verified by a restore; restore steps in `ops/jogo-backup`) and the nginx site (`nginx -t`, previous file restored if it fails). Re-run it whenever `ops/` changes.
+2. In the repository's `deploy` environment, set the secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY` (the private half of that key) and `DEPLOY_KNOWN_HOSTS` (the line `setup.sh` prints). The deploy job is skipped until `DEPLOY_HOST` exists.
+
+## Servidor
+
+`server/` is the site around the game (`jogo-server`, Starlette + SQLite, plan in `docs/web-platform-plan.md`): the landing page, accounts (email link + password, or Google), nickname, friends, `/conta` and `/privacidade`, and `/jogar`, which sends a logged-in player with a nickname to the current build. Pages are server-rendered with no JavaScript. It runs on CPython 3.12.12 + pygame-ce 2.5.7 like the browser, and refuses to start unless `python -m jogo_de_carro.golden` on its own CPU equals the build's `golden.txt`. Dependencies are locked in `server/uv.lock`.
+
+```bash
+cd server
+uv sync && uv run pytest                           # the server's tests (needs uv and Python 3.12.12)
+python ../tools/web_build.py                       # optional: a local game build for /jogar (build/www)
+JOGO_DEV=1 JOGO_DB=jogo-dev.db JOGO_WWW=../build/www SMTP_HOST=localhost SMTP_PORT=1025 MAIL_FROM=jogo@localhost \
+  uv run uvicorn jogo_server.app:app --port 8090   # open http://localhost:8090 (not 127.0.0.1: POSTs must come from DOMAIN)
+```
+
+`JOGO_DEV=1` serves the site over http on `localhost:8090` (or `DOMAIN`), skips the runtime check, sends mail without STARTTLS to any local SMTP sink (for example `python -m aiosmtpd -n -l localhost:1025`) and serves `build/www`'s `/jogo/` and `/cdn/` itself. In production the settings come from `/etc/jogo/env` (`ops/env.example`): without `GOOGLE_CLIENT_ID` the Google button is hidden, and without `SMTP_HOST` signup says email is unavailable. `GET /saude` answers `{"build": ..., "golden": true}`.
 
 ## Credits
 

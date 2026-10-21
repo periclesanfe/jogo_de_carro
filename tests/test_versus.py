@@ -1,11 +1,14 @@
 """Contra o bot: the bot runs in lockstep on the same road, run.verdict ends the race, menus lead to it."""
 
+import platform
 import random
+from types import SimpleNamespace
 
 import pygame
 import pytest
 
 from jogo_de_carro.app import Game
+from jogo_de_carro.input import Action
 from jogo_de_carro.run import Run
 from jogo_de_carro.scenes import results, title
 from jogo_de_carro.scenes.base import Transition
@@ -163,10 +166,22 @@ def test_menus_lead_to_the_bot_and_restarts_keep_its_level(game):
     assert isinstance(game.scenes.top, TitleScene)
 
 
-def test_the_web_build_has_no_sair(game, monkeypatch):
+def test_the_web_build_has_site_instead_of_sair(game, monkeypatch):
+    location = SimpleNamespace(href="/jogo/x/")
+    monkeypatch.setattr(platform, "window", SimpleNamespace(location=location), raising=False)
     monkeypatch.setattr(title, "WEB", True)
     monkeypatch.setattr(results, "WEB", True)
-    assert "SAIR" not in TitleScene(game.ctx).menu.labels
+    menu = TitleScene(game.ctx)
+    assert list(menu.menu.labels) == ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT", "SITE"]
+    enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+    menu.handle(Action.BACK, enter)  # Esc moves to SITE, as it moves to SAIR on the desktop
+    menu.handle(Action.CONFIRM, enter)
+    assert location.href == "/"  # the site's home page
+
+    location.href = "/jogo/x/"
     stats = RaceStats(Outcome.CRASH, NORMAL, 1.0, Score(), False, 0)
     scene = ResultsScene(game.ctx, stats, pygame.Surface((WIDTH, HEIGHT)), lambda: TitleScene(game.ctx))
-    assert list(scene.menu.labels) == ["JOGAR DE NOVO", "MENU"]
+    assert list(scene.menu.labels) == ["JOGAR DE NOVO", "MENU", "SITE"]
+    scene.t, scene.menu.index = 1.0, 2
+    scene.handle(Action.CONFIRM, enter)
+    assert location.href == "/"

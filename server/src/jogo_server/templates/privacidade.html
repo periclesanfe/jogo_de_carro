@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Privacidade · Jogo de Carro{% endblock %}
+{% block main %}
+<div class="card prose">
+  <h1>Privacidade</h1>
+  <p>O Jogo de Carro é um projeto sem fins lucrativos. Guardamos só o necessário para a sua conta funcionar (LGPD, Lei 13.709/2018).</p>
+
+  <h2>O que guardamos</h2>
+  <ul>
+    <li><b>E-mail</b>: para você entrar e receber os links de senha.</li>
+    <li><b>Senha</b>: só um resumo criptográfico (Argon2id). A senha em si nunca é guardada.</li>
+    <li><b>Conta Google</b>, se você entrar com o Google: o identificador da conta e o e-mail que o Google confirma.</li>
+    <li><b>Apelido</b> e <b>amigos</b>: o que você escolhe e os pedidos de amizade.</li>
+    <li><b>Cookies</b>: um cookie de sessão mantém você conectado por até 30 dias (no servidor fica só um resumo dele) e, durante o login com o Google, outro guarda os dados do login por até 10 minutos. Não há outros cookies.</li>
+  </ul>
+
+  <h2>O que não fazemos</h2>
+  <ul>
+    <li>Não usamos propaganda, estatísticas de visita nem rastreadores.</li>
+    <li>Não vendemos nem compartilhamos seus dados. Os e-mails saem por um serviço de envio, e o site passa pela Cloudflare, que protege e entrega as páginas.</li>
+    <li>Seu endereço IP é usado para limitar abusos (como tentativas de senha) e pode aparecer nos registros técnicos do servidor.</li>
+  </ul>
+
+  <h2>Seus direitos</h2>
+  <p>Em <a href="/conta">Conta</a> você vê seus dados e pode excluir a conta a qualquer momento: tudo ligado a ela é apagado na hora, e as cópias de segurança são substituídas em até 14 dias.</p>
+  <p>Responsável: Péricles Feitoza.{% if contato %} Contato: <a href="mailto:{{ contato }}">{{ contato }}</a>.{% endif %}</p>
+</div>
+{% endblock %}

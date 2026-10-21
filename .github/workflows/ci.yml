@@ -33,6 +33,27 @@ jobs:
       - run: ruff format --check .
       - run: pytest
 
+  server:
+    # The site and accounts (server/), on the runtime it deploys with, from server/uv.lock (a stale lock fails).
+    # Its startup test computes the real golden digest on this runner.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      UV_PYTHON_DOWNLOADS: never  # the setup-python interpreter below, nothing else
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.12"
+      - run: python -m pip install uv==0.12.23  # the VPS's uv (ops/setup.sh)
+      - run: uv run --locked pytest
+
   web:
     # The browser build (tools/web_build.py) and its golden gate: in headless Chrome, with every host but
     # localhost unreachable (so it boots from our own mirror only), the wasm runtime must simulate exactly like
@@ -92,7 +113,7 @@ jobs:
     # simulates exactly like the browser (ops/jogo-deploy) and publish the build. The DEPLOY_* secrets live in the
     # "deploy" environment, limited to main and web-platform; the job is skipped until they exist. No repo code
     # runs in this job.
-    needs: web
+    needs: [web, server]
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     environment: deploy

@@ -55,7 +55,7 @@ class ResultsScene(Scene):
         self.again = again  # JOGAR DE NOVO: a fresh race of the same kind
         self.background = blurred(frame)
         self.menu = Menu(
-            ["JOGAR DE NOVO", "MENU"] if WEB else ["JOGAR DE NOVO", "MENU", "SAIR"],
+            ["JOGAR DE NOVO", "MENU", "SITE" if WEB else "SAIR"],
             (WIDTH // 2, CARD.bottom - 66),
             ctx.audio,
             size=(232, 56),
@@ -86,6 +86,10 @@ class ResultsScene(Scene):
             from .title import TitleScene
 
             self.ctx.scenes.switch(TitleScene(self.ctx), Transition.FADE)
+        elif WEB:
+            from .title import to_site
+
+            to_site()
         else:
             self.ctx.quit()
 

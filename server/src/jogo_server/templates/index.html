@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="hero">
+  <img src="/icone.png" alt="" width="96" height="96">
+  <h1>Jogo de Carro</h1>
+  <p class="tagline">desvie · colete · sobreviva</p>
+</section>
+<div class="card stack">
+  {% if user and user.nick %}
+    <p>Olá, <b>{{ user.nick }}</b>!</p>
+    <a class="btn primary wide" href="/jogar">Jogar</a>
+    <a class="btn wide" href="/amigos">Amigos</a>
+  {% elif user %}
+    <p>Falta só escolher seu apelido.</p>
+    <a class="btn primary wide" href="/apelido">Escolher apelido</a>
+  {% else %}
+    <p>Uma estrada de cinco faixas: desvie do trânsito, das pedras e dos troncos, pegue moedas e sobreviva até o fim do tempo.</p>
+    <a class="btn primary wide" href="/entrar">Entrar</a>
+    <a class="btn wide" href="/cadastro">Criar conta</a>
+  {% endif %}
+  <p class="muted small">Jogue no computador, com teclado ou controle.</p>
+</div>
+<p class="muted small center">Em breve: ranking, corridas com amigos e desafios.</p>
+{% endblock %}

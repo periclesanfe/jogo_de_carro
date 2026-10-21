@@ -1,4 +1,4 @@
-"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Contra o bot, Sair."""
+"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Contra o bot, Sair (Site on the web)."""
 
 import math
 
@@ -13,11 +13,18 @@ from .base import WEB, Context, MenuScene, Transition
 CREDITS = "IFAL 2022 · Adenilson · Eduardo · Erimaiken · Ingrid · Péricles"
 
 
+def to_site() -> None:
+    """The web build's SAIR: a page cannot close itself, so it goes back to the site's home page."""
+    import platform  # pygbag's: the browser's window
+
+    platform.window.location.href = "/"
+
+
 class TitleScene(MenuScene):
     def __init__(self, ctx: Context, focus: int = 0) -> None:
         super().__init__(ctx)
         # new items go before SAIR, so the indices the other menus return to (focus=) keep their meaning
-        labels = ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT"] + ([] if WEB else ["SAIR"])
+        labels = ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT", "SITE" if WEB else "SAIR"]
         self.menu = Menu(labels, (WIDTH // 2, 412), ctx.audio, index=focus)
         self.logo = gradient_text("JOGO DE CARRO", 104, (255, 230, 120), FLAME)
         self.icon = pygame.transform.scale_by(ctx.assets.icon(), 2)
@@ -28,9 +35,8 @@ class TitleScene(MenuScene):
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
         if action is Action.BACK:
-            if not WEB:
-                self.menu.index = 4  # SAIR
-                self.ctx.audio.play("ui_back")
+            self.menu.index = 4  # SAIR / SITE
+            self.ctx.audio.play("ui_back")
             return
         choice = self.menu.handle(action, event)
         if choice is None:
@@ -53,6 +59,8 @@ class TitleScene(MenuScene):
             from .versus import BotScene
 
             scenes.switch(BotScene(self.ctx), Transition.SLIDE_LEFT)
+        elif WEB:
+            to_site()
         else:
             self.ctx.quit()
 

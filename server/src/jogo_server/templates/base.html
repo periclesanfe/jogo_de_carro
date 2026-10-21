@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Jogo de Carro{% endblock %}</title>
+<link rel="icon" href="/icone.png">
+<link rel="stylesheet" href="/static/site.css?v={{ css }}">
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/"><img src="/icone.png" alt="" width="32" height="32">Jogo de Carro</a>
+  <nav>
+    {% if user %}
+      {% if user.nick %}<a href="/amigos">Amigos</a>{% endif %}
+      <a href="/conta">{{ user.nick or "Conta" }}</a>
+    {% else %}
+      <a href="/entrar">Entrar</a>
+    {% endif %}
+  </nav>
+</header>
+<main>{% block main %}{% endblock %}</main>
+<footer><a href="/privacidade">Privacidade</a> · IFAL 2022 · remasterizado em 2026</footer>
+</body>
+</html>

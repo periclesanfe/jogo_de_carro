@@ -2,10 +2,10 @@
 # The only thing the CI deploy key can run (authorized_keys: restrict,command="/usr/local/bin/jogo-deploy").
 # CI calls: ssh jogo@VPS "<commit sha> <golden digest>" < www.tgz (tools/web_build.py's build/www, golden.txt
 # filled). This checks out that commit, installs the game on the pinned runtime, refuses the deploy unless the
-# simulation digest computed on this CPU equals CI's (and the browser's), then publishes the web build in
-# /srv/jogo/www for the web server.
-# ponytail: no service yet; M2 adds the restart with drain (and must install into a fresh venv, switching only
-# after the golden matches: a refused deploy here has already installed).
+# simulation digest computed on this CPU equals CI's (and the browser's), installs the server (server/, from
+# M2) into a venv of its own, publishes the web build in /srv/jogo/www, then switches jogo.service to this
+# commit and switches back if it does not come up healthy. Commits without server/ only publish the site.
+# ponytail: restarts without a drain: M2 has no races to drop; M3 adds the drain before the restart.
 set -euo pipefail
 
 read -r sha golden extra <<<"${SSH_ORIGINAL_COMMAND:-}"
@@ -20,6 +20,9 @@ PY=/srv/jogo/venv/bin/python
 
 cd /srv/jogo/app
 exec 9>/srv/jogo/cache/.deploy.lock && flock 9  # one deploy at a time
+# Everything below also goes to deploy.log. If CI's connection drops, tee -p ignores the closed pipe and keeps
+# writing the log, so this script never dies of SIGPIPE halfway through a switch or its rollback.
+exec > >(tee -p -a /srv/jogo/cache/deploy.log) 2>&1
 git() { command git -c core.hooksPath=/dev/null "$@"; }  # a deployed commit must not leave hooks behind
 # only commits on the deploy branches: GitHub would also serve a fork's commit fetched by its sha
 git fetch --quiet --prune origin
@@ -32,7 +35,7 @@ uv venv --quiet --allow-existing --python cpython-3.12.12-linux-x86_64-gnu /srv/
 uv pip install --quiet --python "$PY" --reinstall-package jogo-de-carro . pygame-ce==2.5.7
 
 got=$("$PY" -I -m jogo_de_carro.golden | awk '$1 == "GOLDEN" {print $2}')
-echo "commit  $sha"
+echo "commit  $sha ($(date -u +%FT%TZ))"
 echo "runtime $("$PY" -c 'import platform, pygame; print(platform.python_version(), pygame.version.ver)')"
 echo "cpu     $(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)"
 echo "golden  $got"
@@ -42,10 +45,25 @@ if [[ $got != "$golden" ]]; then
 fi
 echo "ok: a simulação nesta CPU é idêntica à do CI"
 
+# The server: a fresh venv per commit, so the running one is never touched (a redeploy of the running commit
+# reuses it). server/pyproject.toml's reinstall-package rebuilds the two local packages on every sync: uv would
+# otherwise reuse a cached build whose pyproject.toml did not change, even when its code did.
+venvs=/srv/jogo/venvs
+venv=
+if [[ -f server/pyproject.toml ]]; then
+    venv=$venvs/$sha
+    if [[ $(readlink -f "$venvs/current") != "$venv" ]]; then
+        rm -rf "$venv"
+        UV_PROJECT_ENVIRONMENT=$venv uv sync --quiet --project server --frozen --no-dev --no-editable \
+            --compile-bytecode --python cpython-3.12.12-linux-x86_64-gnu
+    fi
+fi
+
 # The web build. Everything under jogo/<TREE>/ and cdn/ is immutable (cached forever), so only what is missing
-# is added, each by a rename within /srv/jogo (atomic); index.html, which sends players to the new build, goes
-# last, and only for the newest commit of its branch (deploys can finish out of order). ponytail: old builds
-# stay (an open page may still need its jogo.tar.gz); about 0.5 MB each.
+# is added, each by a rename within /srv/jogo (atomic). Players get a build from the server's /jogar, which
+# sends them to the one www/current names; that switches last, and only for the newest commit of its branch
+# (deploys can finish out of order). www/index.html (web_build's redirect) still moves in just after it, but
+# '/' is the server's page. ponytail: old builds stay (an open page may still need its jogo.tar.gz); ~0.5 MB each.
 die() { echo "$*" >&2; exit 1; }
 umask 022  # readable by the web server
 # the build's name covers all it is made of (tools/web_build.py computes it the same way)
@@ -77,8 +95,62 @@ mkdir -p "$www/jogo"
     fi
 done
 if [[ -z $(git branch --remotes --points-at "$sha" --list origin/main origin/web-platform) ]]; then
-    echo "publicado jogo/$tree/, mas $sha já não é a ponta do ramo: index.html continua como estava"
+    echo "publicado jogo/$tree/, mas $sha já não é a ponta do ramo: build atual e servidor seguem como estavam"
     exit 0
 fi
+if [[ -z $venv ]]; then
+    mv "$tmp/www/index.html" "$www/index.html"
+    echo "commit sem servidor: só acrescentou jogo/$tree/ (o /jogar continua no build de www/current)"
+    exit 0
+fi
+
+# The switch: "current" names the build the server serves and checks its golden against, then the server
+# itself. The previous build name stays at hand (a hard link) to switch back to. The database is copied first:
+# the new server may migrate it at startup, and a rollback would put the previous server on the migrated one.
+/usr/local/bin/jogo-backup deploy
+[[ ! -e $www/current ]] || ln "$www/current" "$tmp/current.prev"
+prev=$(readlink "$venvs/current" || true)
+point() { ln -sfn "$1" "$venvs/.current" && mv -T "$venvs/.current" "$venvs/current"; }
+restart() { sudo -n /usr/bin/systemctl restart jogo.service || true; }  # healthy decides
+healthy() {  # /saude must report this build and golden true within a minute (the golden check takes ~3 s)
+    local _
+    for _ in $(seq 60); do
+        if curl -fsS --max-time 2 http://127.0.0.1:8090/saude 2>/dev/null | "$PY" -Ic 'import json, sys
+d = json.load(sys.stdin)
+sys.exit(d.get("build") != sys.argv[1] or d.get("golden") is not True)' "$1" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+echo "$tree" >"$tmp/current"
+mv "$tmp/current" "$www/current"
 mv "$tmp/www/index.html" "$www/index.html"
-echo "publicado: jogo/$tree/"
+point "$sha"
+restart
+if healthy "$tree"; then
+    echo "publicado: jogo/$tree/, servidor $sha no ar"
+    # keep the 3 newest venvs, and always the running one
+    find "$venvs" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | tail -n +4 | cut -d' ' -f2- |
+        while read -r old; do [[ $old == "$venv" ]] || rm -rf "$old"; done
+    exit 0
+fi
+
+echo "o servidor $sha não respondeu em /saude com build $tree e golden true: voltando ao anterior" >&2
+echo "o banco de antes do deploy: a cópia deploy-* mais nova em /var/backups/jogo (ver jogo-backup)" >&2
+if [[ -e $tmp/current.prev ]]; then mv "$tmp/current.prev" "$www/current"; else rm -f "$www/current"; fi
+if [[ -z $prev ]]; then
+    rm -f "$venvs/current"
+    restart  # nothing left to run: the service stays down until a good deploy
+    echo "não havia servidor anterior: o site fica fora do ar até um deploy bom (journalctl -u jogo)" >&2
+else
+    point "$prev"
+    restart
+    if healthy "$(cat "$www/current")"; then
+        echo "de volta ao servidor anterior ($prev)" >&2
+    else
+        echo "ATENÇÃO: o servidor anterior ($prev) também não respondeu (journalctl -u jogo)" >&2
+    fi
+fi
+exit 1
