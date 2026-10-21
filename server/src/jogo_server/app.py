@@ -492,12 +492,7 @@ async def amigos(request: Request, user: sqlite3.Row) -> Response:
             state.db.execute("INSERT OR IGNORE INTO friends(a, b, asked_by) VALUES (?, ?, ?)", (a, b, me))
             state.db.execute(ACCEPT, (a, b, me))  # asking someone who already asked you is accepting
             return go("/amigos")
-    lista = state.db.execute(
-        "SELECT users.id, users.nick, friends.accepted, friends.asked_by = :me AS mine FROM friends"
-        " JOIN users ON users.id = iif(friends.a = :me, friends.b, friends.a)"
-        " WHERE :me IN (friends.a, friends.b) ORDER BY users.nick",
-        {"me": me},
-    ).fetchall()
+    lista = state.db.execute(auth.FRIENDS, {"me": me}).fetchall()
     return page(request, "amigos.html", status, erro=erro, lista=lista)
 
 

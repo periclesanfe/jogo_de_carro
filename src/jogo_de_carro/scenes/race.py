@@ -19,6 +19,7 @@ from ..settings import (
     DANGER,
     FLAME,
     HEIGHT,
+    MODE_BY_KEY,
     MUTED,
     NEAR_MISS_POINTS,
     SHIELD_TIME,
@@ -96,6 +97,8 @@ class RaceScene(Scene):
         shared_road: bool = False,
         rival: str | None = None,
         online: int | None = None,  # the server's match: a ranked run, created at its go
+        mode: str | None = None,  # a live race: the match's mode, not the menu's
+        skin: str | None = None,  # ...and the car its hello named, which the rival sees
     ) -> None:
         super().__init__(ctx)
         self.online = online
@@ -103,9 +106,10 @@ class RaceScene(Scene):
         self.official = VERIFYING if online is not None else None  # the server's word on the run
         self.sent = 0  # run.ev entries sent
         self.reported = online is None  # nothing more goes to the server (fin sent, or it decided)
-        self.mode = ctx.mode
+        self.mode = MODE_BY_KEY[mode] if mode else ctx.mode
         self.seed = ctx.rng.getrandbits(53) if seed is None else seed  # 53 bits survive JSON in a browser
-        self.run = Run(ctx.assets, self.mode.key, ctx.save.skin, self.seed, shared_road, rival=rival)
+        skin = skin or ctx.save.skin
+        self.run = Run(ctx.assets, self.mode.key, skin, self.seed, shared_road, rival=rival)
         self.world, self.score = self.run.world, self.run.score
         self.best = ctx.save.best.get(self.mode.key, 0)
         self.phase = Phase.COUNTDOWN
@@ -323,10 +327,7 @@ class RaceScene(Scene):
     def finish(self, outcome: Outcome, why: str = "") -> None:
         from .results import RaceStats, ResultsScene
 
-        if not self.reported and self.run.tick % REPORT == 0:  # a give-up on a tick already sent: every
-            self.run.play(0, self.run.held)  # message must move k on, so one more tick, with no new input
-        self.run.stop("giveup")  # a crash or a win already ended it
-        self._report()
+        self._stop()
         if (folder := os.environ.get("JOGO_RECORD")) and not (self.piloted or self.run.known):  # nor a replay
             path = Path(folder) / f"{self.mode.key}-{self.seed}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,6 +340,13 @@ class RaceScene(Scene):
             outcome, self.mode, seconds, self.score, record, self.best, reason=why, official=self.official
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
+
+    def _stop(self) -> None:
+        """End my run on this tick (a crash or a win already ended it); online, its fin goes out."""
+        if not self.reported and self.run.tick % REPORT == 0:  # a give-up on a tick already sent: every
+            self.run.play(0, self.run.held)  # message must move k on, so one more tick, with no new input
+        self.run.stop("giveup")
+        self._report()
 
     def snapshot(self) -> pygame.Surface:
         """The current frame without the big centre text, as a backdrop for pause/results."""

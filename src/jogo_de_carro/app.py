@@ -14,9 +14,10 @@ from .input import Action, Input
 from .net import Net
 from .save import default_save_path, load
 from .scenes.base import WEB, Context, SceneManager, Transition
-from .scenes.online import WaitScene
+from .scenes.online import ConviteScene, WaitScene
 from .scenes.race import RaceScene
 from .scenes.title import TitleScene
+from .scenes.versus import LiveScene
 from .settings import FIXED_DT, FPS, HEIGHT, MUTED, TITLE, WIDTH
 from .ui import blit_text, panel, text
 
@@ -70,6 +71,7 @@ class Game:
         self._toast = ("", 0.0)
         self._retry: float | None = None  # a closed socket opens again when this runs out
         self._reload: float | None = None  # a new build: the page reloads when this runs out
+        self._invite: tuple[dict, float] | None = None  # an invite held over a race or a wait, and its age
         if net:
             net.connect(save.skin)
 
@@ -132,8 +134,17 @@ class Game:
             return
         for msg in net.poll():
             self._route(net, msg)
-        racing = any(isinstance(s, RaceScene) for s in self.scenes.stack)
-        if self._retry is not None and not racing:  # a bot race or a paused one is left alone
+        if self._invite:  # shown once no race (its last seconds included) nor wait is up, if still on
+            msg, age = self._invite
+            left = float(msg.get("ttl") or 30) - age
+            if left <= 0:
+                self._invite = None
+            elif not (self._racing() or isinstance(self.scenes.top, (WaitScene, ConviteScene))):
+                self._invite = None
+                self.scenes.push(ConviteScene(self.ctx, {**msg, "ttl": left}))
+            else:
+                self._invite = (msg, age + frame_dt)
+        if self._retry is not None and not self._racing():  # a bot race or a paused one is left alone
             self._retry -= frame_dt
             if self._retry <= 0:
                 self._retry = None
@@ -146,33 +157,50 @@ class Game:
                 if not net.reload():  # it did not help before: offline play
                     self.ctx.net = None
 
+    def _racing(self) -> bool:
+        return any(isinstance(s, RaceScene) for s in self.scenes.stack)
+
     def _route(self, net: Net, msg: dict) -> None:
-        """match, go and errors are the Game's; everything else goes to the top scene."""
+        """match, go, waiting, invited and errors are the Game's; everything else goes to the top scene."""
         t, top = msg.get("t"), self.scenes.top
         waiting = isinstance(top, WaitScene) and not top.refused
         if t == "match":
-            if waiting and top.m is None:
-                top.m, top.label = msg["m"], "Preparando…"
+            if waiting and top.m is None and msg.get("kind") == top.kind:
+                top.m, top.match, top.label = msg["m"], msg, "Preparando…"
                 net.send({"t": "ready", "m": msg["m"]})
             else:  # cancelled meanwhile
                 net.send({"t": "leave", "m": msg["m"]})
         elif t == "go":
             if waiting and top.m == msg["m"]:  # the race starts now: its countdown is the start sync
-                race = RaceScene(self.ctx, msg["seed"], online=msg["m"])
+                if top.friend and top.match:
+                    race: RaceScene = LiveScene(self.ctx, top.match, top.friend, msg["seed"])
+                else:
+                    race = RaceScene(self.ctx, msg["seed"], online=msg["m"])
                 self.scenes.switch(race, Transition.NONE)
+        elif t == "waiting":  # my invite is out
+            if waiting and top.ask["t"] == "invite" and top.invite is None:
+                top.invite = msg["id"]
+            else:  # cancelled meanwhile
+                net.send({"t": "invite_cancel", "id": msg["id"]})
+        elif t == "invited":  # held over a race or a wait (see _network): unanswered, it expires
+            self._invite = (msg, 0.0)
         elif t == "error" and msg.get("code") == "version":
             self._reload = 2.0
             self._refused(NEW_BUILD, 2.0)
         elif t == "error" and msg.get("code") == "login":  # the page was opened logged out: offline play
             self.ctx.net = None
             self.toast(str(msg.get("msg") or "Sem login: jogando offline"))
-            if waiting:
-                self.scenes.switch(RaceScene(self.ctx), Transition.FADE)
+            if waiting:  # JOGAR plays offline; a live race has no offline rival
+                offline = RaceScene(self.ctx) if top.kind == "solo" else TitleScene(self.ctx)
+                self.scenes.switch(offline, Transition.FADE)
         elif t == "error":  # full, drain, rate, busy...: the server's own words
             self._refused(str(msg.get("msg") or f"Erro do servidor: {msg.get('code')}"))
         else:
             if t == "closed":
                 self._retry = None if net.error in FINAL else RETRY
+            held = self._invite and self._invite[0].get("id")
+            if t in ("closed", "welcome") or (t == "invite_gone" and msg.get("id") == held):
+                self._invite = None  # it is over, or was on the socket before
             top.on_net(msg)
 
     def _refused(self, label: str, seconds: float = TOAST_TIME) -> None:

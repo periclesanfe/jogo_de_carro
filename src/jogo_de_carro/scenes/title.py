@@ -1,4 +1,5 @@
-"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Contra o bot, Sair (Site on the web)."""
+"""Main menu over the attract-mode drive: Jogar, Skin, Dificuldade, Contra o bot, Amigos (logged in to the
+site), Sair (Site on the web)."""
 
 import math
 
@@ -23,19 +24,29 @@ def to_site() -> None:
 class TitleScene(MenuScene):
     def __init__(self, ctx: Context, focus: int = 0) -> None:
         super().__init__(ctx)
-        # new items go before SAIR, so the indices the other menus return to (focus=) keep their meaning
-        labels = ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT", "SITE" if WEB else "SAIR"]
-        self.menu = Menu(labels, (WIDTH // 2, 412), ctx.audio, index=focus)
+        self.menu = self._menu(focus)
         self.logo = gradient_text("JOGO DE CARRO", 104, (255, 230, 120), FLAME)
         self.icon = pygame.transform.scale_by(ctx.assets.icon(), 2)
         self.clock = 0.0
+
+    def _labels(self) -> list[str]:
+        # new items go before SAIR, so the indices the other menus return to (focus=) keep their meaning
+        net = self.ctx.net
+        friends = ["AMIGOS"] if net and net.up else []  # the site's socket: hidden offline and on the desktop
+        return ["JOGAR", "SKIN", "DIFICULDADE", "CONTRA O BOT", *friends, "SITE" if WEB else "SAIR"]
+
+    def _menu(self, focus: int) -> Menu:
+        labels = self._labels()
+        n = len(labels)  # six buttons close up a little to clear the logo and the footer
+        center = (WIDTH // 2, 412 + 10 * (n - 5))
+        return Menu(labels, center, self.ctx.audio, gap=14 - 4 * (n - 5), index=min(focus, n - 1))
 
     def enter(self) -> None:
         self.ctx.audio.music("menu")
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
         if action is Action.BACK:
-            self.menu.index = 4  # SAIR / SITE
+            self.menu.index = len(self.menu.buttons) - 1  # SAIR / SITE
             self.ctx.audio.play("ui_back")
             return
         choice = self.menu.handle(action, event)
@@ -59,6 +70,10 @@ class TitleScene(MenuScene):
             from .versus import BotScene
 
             scenes.switch(BotScene(self.ctx), Transition.SLIDE_LEFT)
+        elif self.menu.labels[choice] == "AMIGOS":
+            from .online import AmigosScene
+
+            scenes.switch(AmigosScene(self.ctx), Transition.SLIDE_LEFT)
         elif WEB:
             to_site()
         else:
@@ -67,6 +82,9 @@ class TitleScene(MenuScene):
     def update(self, dt: float) -> None:
         super().update(dt)
         self.clock += dt
+        if (labels := self._labels()) != self.menu.labels:  # the socket came up, or went: the focus stays on
+            focused = self.menu.labels[self.menu.index]  # its item, or goes to JOGAR (never onto SAIR / SITE)
+            self.menu = self._menu(labels.index(focused) if focused in labels else 0)
         self.menu.update(dt)
 
     def draw_ui(self, surface: pygame.Surface) -> None:

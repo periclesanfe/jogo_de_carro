@@ -74,6 +74,15 @@ def gradient_text(s: str, size: int, top: Color, bottom: Color, outline: Color =
     return out
 
 
+def fit(label: str, size: int, width: int) -> str:
+    """The label, cut short with … to fit the width (a player's nick)."""
+    if text(label, size).get_width() <= width:
+        return label
+    while len(label) > 1 and text(label + "…", size).get_width() > width:
+        label = label[:-1]
+    return label + "…"
+
+
 def blit_text(
     surface: pygame.Surface,
     s: str,

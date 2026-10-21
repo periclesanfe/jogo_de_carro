@@ -76,3 +76,21 @@ BEGIN
   INSERT INTO bests SELECT user_id, mode, id, score, seconds FROM runs
     WHERE kind = 'solo' AND state = 'ok' AND user_id = NEW.user_id AND mode = NEW.mode ORDER BY score DESC, id LIMIT 1;
 END;
+
+-- migration 3
+CREATE TABLE matches(                       -- a live race between two friends (M5 adds challenges)
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('live', 'challenge')),
+  mode TEXT NOT NULL,
+  seed INTEGER NOT NULL,
+  a INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,  -- who invited
+  b INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK (state IN ('racing', 'open', 'playing_b', 'done', 'expired', 'void')),
+  winner INTEGER,                           -- done and NULL: a draw
+  created REAL NOT NULL,
+  expires REAL
+);
+CREATE INDEX matches_a ON matches(a);
+CREATE INDEX matches_b ON matches(b);
+ALTER TABLE runs ADD COLUMN match_id INTEGER REFERENCES matches ON DELETE CASCADE;  -- kind 'live': its race
+CREATE INDEX runs_match ON runs(match_id);

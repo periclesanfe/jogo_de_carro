@@ -1,5 +1,7 @@
-"""Ranked runs over the site's socket (net.py, plan §5), with stand-ins for pygbag's window and the server."""
+"""Races over the site's socket (net.py, plan §5): ranked runs, AMIGOS, invites and live races, with
+stand-ins for pygbag's window and the server."""
 
+import copy
 import json
 import platform
 import random
@@ -11,12 +13,14 @@ import pytest
 from jogo_de_carro.app import NEW_BUILD, Game
 from jogo_de_carro.net import _JS, Net
 from jogo_de_carro.run import MAX_MESSAGE, MAX_STEP, Run
+from jogo_de_carro.scenes import online
 from jogo_de_carro.scenes.base import Transition
-from jogo_de_carro.scenes.online import LOST, NO_RESULT, VERIFYING, WaitScene
-from jogo_de_carro.scenes.race import NO_PAUSE, Phase, RaceScene
-from jogo_de_carro.scenes.results import ResultsScene
+from jogo_de_carro.scenes.online import LOST, NO_RESULT, VERIFYING, AmigosScene, ConviteScene, WaitScene
+from jogo_de_carro.scenes.race import NO_PAUSE, Outcome, Phase, RaceScene
+from jogo_de_carro.scenes.results import VERDICTS, ResultsScene
 from jogo_de_carro.scenes.title import TitleScene
-from jogo_de_carro.settings import FIXED_DT
+from jogo_de_carro.scenes.versus import CATCH_UP, HOLD_S, LAG, UNSTABLE, LiveScene, VersusScene
+from jogo_de_carro.settings import FIXED_DT, FLAME, MUTED
 from jogo_de_carro.world.autopilot import autopilot
 
 FRAME = 1 / 60
@@ -175,7 +179,7 @@ def test_hello_goes_first_and_nothing_is_sent_before_the_socket_opens(window):
     net.send({"t": "solo", "mode": "facil"})
     assert net.poll() == [] and window.sent == []
     window.accept()
-    window.reply(t="welcome", me={"id": 7, "nick": "pericles"}, friends=[], challenges=[], requests=0)
+    window.reply(t="welcome", me={"id": 7, "nick": "pericles"}, friends=[], requests=0)
     assert net.poll()[0]["t"] == "welcome" and net.me == {"id": 7, "nick": "pericles"}
     hello, solo = window.sent
     assert hello == {
@@ -377,3 +381,411 @@ def test_the_desktop_plays_offline(tmp_path):
     assert (
         game.ctx.net is None and isinstance(race, RaceScene) and not race.realtime and race.official is None
     )
+
+
+# --- AMIGOS, invites and live races (M4) ------------------------------------------------------------------
+
+FRIENDS = [
+    {"id": 42, "nick": "ana_42", "s": "menu"},
+    {"id": 43, "nick": "bia", "s": "racing"},
+    {"id": 44, "nick": "caio", "s": "off"},
+]
+ANA = {"id": 42, "nick": "ana_42"}
+M = 77
+
+
+def welcome(game: Game, window: Window, friends: list = FRIENDS, requests: int = 0) -> None:
+    me = {"id": 7, "nick": "pericles"}
+    window.reply(t="welcome", me=me, friends=copy.deepcopy(friends), requests=requests)
+    frames(game, 2)
+
+
+def amigos(game: Game, window: Window, requests: int = 0) -> AmigosScene:
+    """AMIGOS from the title: its 5th item once the socket is up."""
+    welcome(game, window, requests=requests)
+    assert list(game.scenes.top.menu.labels) == [
+        "JOGAR",
+        "SKIN",
+        "DIFICULDADE",
+        "CONTRA O BOT",
+        "AMIGOS",
+        "SAIR",
+    ]
+    for _ in range(4):
+        key(game, pygame.K_DOWN, 2)
+    key(game, pygame.K_RETURN, 40)
+    scene = game.scenes.top
+    assert isinstance(scene, AmigosScene)
+    return scene
+
+
+def invited(game: Game, window: Window, id: str, mode: str = "facil", ttl: int = 30) -> None:
+    window.reply(**{"t": "invited", "id": id, "from": ANA, "mode": mode, "ttl": ttl})
+    frames(game, 1)
+
+
+@pytest.fixture
+def drawn(monkeypatch) -> list[str]:
+    """Every string the online scenes draw."""
+    seen: list[str] = []
+    real = online.blit_text
+    monkeypatch.setattr(
+        online, "blit_text", lambda surface, s, *a, **k: (seen.append(s), real(surface, s, *a, **k))[1]
+    )
+    return seen
+
+
+def test_amigos_lists_the_friends_online_as_presence_changes(game, window, drawn):
+    scene = amigos(game, window, requests=2)
+    assert [f["nick"] for f in scene.rows] == ["ana_42", "bia"]  # free first; caio is offline
+    assert list(scene.menu.labels) == ["CORRER AGORA", "CORRENDO"]
+    assert "2 pedidos de amizade — veja no site" in drawn
+    key(game, pygame.K_DOWN, 2)
+    window.reply(t="presence", id=44, s="menu")
+    window.reply(t="presence", id=99, s="menu")  # not a friend (yet): nothing to show
+    frames(game, 2)
+    assert [f["nick"] for f in scene.rows] == ["ana_42", "caio", "bia"]
+    assert scene.rows[scene.menu.index]["nick"] == "bia", "the focus stays on its friend"
+    key(game, pygame.K_RETURN, 2)
+    assert game.scenes.top is scene and game._toast[0] == "bia está correndo agora"
+    for id in (42, 43, 44):
+        window.reply(t="presence", id=id, s="off")
+    drawn.clear()
+    frames(game, 2)
+    assert scene.rows == [] and "Nenhum amigo online agora" in drawn
+    key(game, pygame.K_ESCAPE, 40)
+    title = game.scenes.top
+    assert isinstance(title, TitleScene) and title.menu.labels[title.menu.index] == "AMIGOS"
+    window.drop()  # AMIGOS goes: the focus goes to JOGAR, not onto SAIR
+    frames(game, 1)
+    assert title.menu.labels[title.menu.index] == "JOGAR" and "AMIGOS" not in title.menu.labels
+
+
+def test_an_invite_waits_and_esc_cancels_it(game, window):
+    amigos(game, window)
+    key(game, pygame.K_RETURN, 40)  # CORRER AGORA with ana_42, in the menu's mode
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and wait.label == "Aguardando ana_42…"
+    assert window.sent[-1] == {"t": "invite", "to": 42, "mode": "normal"}
+    window.reply(t="waiting", id="i_1")
+    frames(game, 1)
+    key(game, pygame.K_ESCAPE, 40)
+    assert window.sent[-1] == {"t": "invite_cancel", "id": "i_1"} and isinstance(game.scenes.top, AmigosScene)
+
+    key(game, pygame.K_RETURN, 40)  # turned down: the reason stays up, and Esc has nothing to cancel
+    window.reply(t="waiting", id="i_2")
+    window.reply(t="invite_gone", id="i_2", why="declined")
+    frames(game, 1)
+    wait, sent = game.scenes.top, len(window.sent)
+    assert wait.refused and wait.label == "ana_42 recusou o convite"
+    key(game, pygame.K_ESCAPE, 40)
+    assert len(window.sent) == sent
+
+    key(game, pygame.K_RETURN, 40)  # Esc before the server's waiting: the invite is cancelled when it comes
+    key(game, pygame.K_ESCAPE, 1)
+    window.reply(t="waiting", id="i_3")
+    frames(game, 1)
+    assert window.sent[-1] == {"t": "invite_cancel", "id": "i_3"}
+
+    game.scenes.switch(WaitScene(game.ctx), Transition.NONE)  # JOGAR: a ranked run takes no live match
+    assert window.sent[-1] == {"t": "solo", "mode": "normal"}
+    window.reply(t="match", m=5, kind="live", mode="normal", op={"nick": "ana_42", "skin": "red"})
+    frames(game, 1)
+    assert window.sent[-1] == {"t": "leave", "m": 5} and game.scenes.top.m is None
+
+
+def test_an_invite_comes_in_over_the_menus(game, window, drawn):
+    welcome(game, window)
+    title = game.scenes.top
+    invited(game, window, "i_9")
+    convite = game.scenes.top
+    assert isinstance(convite, ConviteScene) and convite.below is title
+    frames(game, 1)
+    assert "ana_42 te chamou para correr (Fácil)" in drawn
+    key(game, pygame.K_ESCAPE, 2)  # RECUSAR
+    assert window.sent[-1] == {"t": "invite_reply", "id": "i_9", "ok": False} and game.scenes.top is title
+
+    invited(game, window, "i_10")
+    window.reply(t="invite_gone", id="i_10", why="cancelled")
+    frames(game, 1)
+    assert game.scenes.top is title and game._toast[0] == "ana_42 cancelou o convite"
+    invited(game, window, "i_11", ttl=1)  # unanswered
+    frames(game, 70)
+    assert game.scenes.top is title and game._toast[0] == "O convite expirou"
+
+    invited(game, window, "i_12")
+    button = game.scenes.top.menu.buttons[0].rect.center  # ACEITAR, with the mouse
+    pygame.event.post(pygame.event.Event(pygame.MOUSEMOTION, pos=button, rel=(0, 0), buttons=(0, 0, 0)))
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=button, button=1))
+    frames(game, 2)
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and (wait.label, wait.mode.key) == ("Preparando…", "facil")
+    assert window.sent[-1] == {"t": "invite_reply", "id": "i_12", "ok": True}
+    invited(game, window, "i_13")
+    assert game.scenes.top is wait, "never over a wait"
+    window.reply(t="match", m=M, kind="live", mode="facil", op={"nick": "ana_42", "skin": "red"})
+    void = {"state": "rejected", "why": "anulada", "outcome": None, "score": None, "secs": None}
+    window.reply(t="result", m=M, run=M, **void, rank=None, verdict=None, op=None)  # she was not ready
+    frames(game, 1)
+    assert wait.refused and wait.label == "Corrida anulada"
+
+    bot = VersusScene(game.ctx, "medio")
+    game.scenes.switch(bot, Transition.NONE)
+    invited(game, window, "i_14")
+    assert game.scenes.top is bot, "never over a race"
+
+
+def her_inputs(game: Game, ticks: int) -> Run:
+    """ana_42's run: the autopilot on the shared road, toggling UP every 3 ticks (many events)."""
+    run = Run(game.ctx.assets, "facil", "red", SEED, True, rival="yellow")
+    while run.tick < ticks:
+        run.play(autopilot(run.world).steer, (run.tick // 3) % 2)
+    assert run.outcome is None
+    return run
+
+
+def op(her: Run, a: int, b: int) -> dict:
+    """What the server relays of her inputs for the ticks [a, b)."""
+    return {"t": "op", "m": M, "k": b, "ev": [e for e in her.ev if a <= e[0] < b]}
+
+
+def live(game: Game, window: Window) -> LiveScene:
+    """ana_42 invites (Fácil, while the menu is on Normal); ACEITAR, the server's match and go."""
+    welcome(game, window)
+    game.ctx.save.skin = "blue"  # changed after the hello: the race keeps the car the server knows
+    invited(game, window, "i_1")
+    key(game, pygame.K_RETURN, 2)  # ACEITAR
+    assert window.sent[-1] == {"t": "invite_reply", "id": "i_1", "ok": True}
+    window.reply(t="match", m=M, kind="live", mode="facil", op={"nick": "ana_42", "skin": "red"})
+    frames(game, 1)
+    assert window.sent[-1] == {"t": "ready", "m": M} and game.scenes.top.label == "Preparando…"
+    window.reply(t="go", m=M, seed=SEED)
+    frames(game, 1)
+    race = game.scenes.top
+    assert isinstance(race, LiveScene) and race.realtime and len(window.sockets) == 1
+    assert (race.online, race.seed, race.mode.key) == (M, SEED, "facil")
+    assert (race.run.skin, race.rival.skin, race.rival.shared, race.run.shared) == (
+        "yellow",
+        "red",
+        True,
+        True,
+    )
+    while race.phase is Phase.COUNTDOWN:
+        race.update(FIXED_DT)
+    return race
+
+
+def tick(race: LiveScene, her: Run | None = None) -> int:
+    """One of my ticks, then her inputs, if they come on time (her messages every 12 ticks, as mine);
+    how far she moved."""
+    before = race.rival.tick
+    race.update(FIXED_DT)
+    assert race.rival.tick <= max(0, race.ticks - LAG), "never shown ahead of the gate"
+    if her and race.ticks % 12 == 0 and race.rival.known < race.ticks <= her.tick:
+        race.on_net(op(her, race.rival.known, race.ticks))
+    return race.rival.tick - before
+
+
+def test_the_live_rival_runs_24_ticks_behind_and_catches_up_gently(game, window):
+    race = live(game, window)
+    race.world.invulnerable = True
+    her = her_inputs(game, 900)
+    while race.ticks < 300:  # on time: exactly LAG ticks behind me
+        tick(race, her)
+        assert race.rival.tick == max(0, race.ticks - LAG)
+    assert race.rival.known == 300
+
+    while race.ticks < 384:  # her inputs stop coming: she stands where they end
+        tick(race)
+        assert not race.unstable
+    tick(race)
+    assert race.ticks - LAG - race.rival.tick > UNSTABLE and race.state() == ("conexão instável", FLAME)
+    race.draw(game.screen)
+    while race.ticks < 400:
+        tick(race)
+
+    for k in range(312, 432, 12):  # then a burst, up to my last k + 24
+        race.on_net(op(her, k - 12, k))
+    moved = [tick(race) for _ in range(30)]
+    assert race.lag == UNSTABLE, "after 100 ticks without her inputs, she is drawn further back"
+    assert max(moved) == CATCH_UP and moved[-1] == 1 and race.rival.tick == race.ticks - race.lag
+    assert not race.unstable
+
+    race.on_net(op(her, 420, 700))  # one late batch, longer and fuller than a client may send
+    for junk in (
+        op(her, 600, 650),
+        {"t": "op", "m": M, "k": 800, "ev": [[750, "X"]]},
+        {**op(her, 700, 720), "m": 5},
+    ):
+        race.on_net(junk)  # stale, malformed, another match: ignored
+    assert race.rival.known == 700
+    while race.ticks < 760:
+        tick(race)
+    assert race.rival.tick == 700
+
+    race.on_net(op(her, 700, 900))
+    race.on_net({"t": "op_end", "m": M, "k": 900, "why": "ritmo"})  # she fell behind: a forfeit
+    while race.ticks < 1000:
+        tick(race)
+    rival = race.rival
+    assert (rival.tick, rival.outcome) == (900, "ritmo") and race.state() == ("SAIU", MUTED)
+    assert (rival.score, rival.world.distance) == (her.score, her.world.distance), "replayed exactly"
+    race.draw(game.screen)
+
+    sent = len(inputs(window))
+    assert all(m["m"] == M and m["k"] % 12 == 0 for m in inputs(window))
+    there = dict(race.kept)[996]  # my score where the server decided (8.3 s), not where my run got to
+    assert there != race.run.score
+    result = {
+        "t": "result",
+        "m": M,
+        "run": M,
+        "state": "ok",
+        "why": None,
+        "outcome": "decided",
+        "score": 1,
+        "secs": 8.3,
+    }
+    race.on_net(
+        {**result, "rank": None, "verdict": "win", "op": {"nick": "ana_42", "score": 90, "secs": 7.5}}
+    )
+    assert race.phase is Phase.WON and race.banner[0] == "VITÓRIA!"
+    until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
+    stats = game.scenes.top.stats
+    assert (VERDICTS[stats.verdict][0], stats.reason) == ("VOCÊ VENCEU!", "ana_42 ficou para trás aos 0:07")
+    assert (stats.seconds, stats.score) == (8.3, there), "the server's numbers, as her card shows them"
+    assert stats.rival == "ana_42: 90 pontos · ficou para trás aos 0:07" and stats.official is None
+    assert len(inputs(window)) == sent, "the result ended my run: nothing more to send"
+    assert game.scenes.top.menu.labels[0] == "REVANCHE"
+    frames(game, 30)
+    key(game, pygame.K_RETURN, 10)  # REVANCHE: a new invite, same friend and mode
+    wait = game.scenes.top
+    assert isinstance(wait, WaitScene) and wait.label == "Aguardando ana_42…"
+    window.accept()  # with the car chosen meanwhile, so on a new socket
+    frames(game, 1)
+    assert [m["t"] for m in window.sent] == ["hello", "invite"] and window.sent[0]["skin"] == "blue"
+    assert window.sent[-1] == {"t": "invite", "to": 42, "mode": "facil"}
+
+
+def test_crashing_first_waits_for_the_result(game, window):
+    race = live(game, window)  # nobody steers me: a crash
+    her = her_inputs(game, 3000)
+    invited(game, window, "i_4")  # held over the race...
+    window.reply(t="invite_gone", id="i_4", why="cancelled")  # ...and over before it ends: never shown
+    while race.over is None:
+        tick(race, her)
+    assert race.over is Outcome.CRASH and game.scenes.top is race
+    assert inputs(window)[-1]["fin"] == {"outcome": "crash", "score": race.run.score.total}
+    at = race.rival.tick
+    for _ in range(60):
+        tick(race, her)
+    assert race.rival.tick == at + 60 and game.scenes.top is race, "she drives on until the server decides"
+    result = {"t": "result", "m": M, "run": 1, "state": "ok", "why": None, "outcome": "crash", "score": 5}
+    race.on_net(
+        {
+            **result,
+            "secs": race.run.seconds,
+            "rank": None,
+            "verdict": "loss",
+            "op": {"nick": "ana_42", "score": 9, "secs": 13.0},
+        }
+    )
+    stats = game.scenes.top.stats
+    assert (VERDICTS[stats.verdict][0], stats.rival) == ("VOCÊ PERDEU", "ana_42: 9 pontos")
+    assert stats.reason == f"Você bateu aos 0:{int(race.run.seconds):02d}"
+    frames(game, 2)
+    assert isinstance(game.scenes.top, ResultsScene)
+
+
+def test_after_the_result_the_rival_drives_on_for_show(game, window):
+    """The result comes during my crash's slow motion: she won, so she cruises on (no more of her inputs
+    will come), instead of standing still on her half."""
+    race = live(game, window)  # nobody steers me: a crash
+    her = her_inputs(game, 3000)
+    while race.phase is not Phase.CRASHED:
+        tick(race, her)
+    result = {"t": "result", "m": M, "run": M, "state": "ok", "why": None, "outcome": "crash", "score": 5}
+    race.on_net({**result, "secs": 1.0, "rank": None, "verdict": "loss", "op": {"nick": "ana_42"}})
+    for _ in range(40):
+        tick(race)
+    rival, distance = race.rival, race.rival.world.distance
+    for _ in range(10):
+        tick(race)
+    assert rival.tick == rival.known and rival.outcome is None and rival.world.distance > distance
+    assert rival.world.invulnerable and game.scenes.top is race
+
+
+def test_a_late_rival_is_drawn_smoothly_further_back(game, window):
+    """Her inputs reach me 36 ticks late (about 75 ms each way): she is drawn 48 ticks behind, a tick at a
+    time, instead of stopping and jumping at each batch."""
+    race = live(game, window)
+    race.world.invulnerable = True
+    her = her_inputs(game, 700)
+    moved = []
+    while race.ticks < 600:
+        before = race.rival.tick
+        race.update(FIXED_DT)
+        if race.ticks % 12 == 0 and race.ticks > 36:
+            race.on_net(op(her, race.rival.known, race.ticks - 36))
+        moved.append(race.rival.tick - before)
+    assert race.lag == 36 + 12 and set(moved[100:]) == {1} and not race.unstable
+    race.on_net({"t": "op_end", "m": M, "k": 700, "why": "giveup"})  # past my gate: sent with the result
+    result = {"t": "result", "m": M, "run": M, "state": "ok", "why": None, "outcome": "decided", "score": 5}
+    race.on_net({**result, "secs": 5.0, "rank": None, "verdict": "win", "op": {"nick": "ana_42"}})
+    for _ in range(30):
+        tick(race)
+    assert (race.rival.tick, race.rival.outcome) == (564, "giveup") and race.state() == ("DESISTIU", MUTED)
+
+
+def test_live_races_end_without_a_result(game, window):
+    race = live(game, window)
+    while race.over is None:
+        tick(race)
+    invited(game, window, "i_6")  # held while the race waits for its result
+    assert game.scenes.top is race
+    race.waited = HOLD_S  # the server never answered
+    tick(race)
+    assert game.scenes.top.stats.reason == "O servidor não respondeu"
+    frames(game, 1)  # the results are up: now the invite
+    convite = game.scenes.top
+    assert isinstance(convite, ConviteScene) and convite.id == "i_6" and convite.left < 30
+    key(game, pygame.K_ESCAPE, 2)  # RECUSAR
+    assert window.sent[-1] == {"t": "invite_reply", "id": "i_6", "ok": False}
+
+    race = live(game, window)
+    race.world.invulnerable = True
+    tick(race)
+    window.drop()
+    frames(game, 1)
+    stats = game.scenes.top.stats
+    assert (stats.verdict, stats.reason, stats.official) == (None, "Conexão perdida", LOST)
+
+
+def test_a_forfeit_card_shows_the_servers_numbers(game, window):
+    """The server cut my run off (5 s of silence) after my client ran on (a frozen tab resumes with a 1 s
+    frame): my card shows the server's numbers, as the rival's does."""
+    race = live(game, window)
+    race.world.invulnerable = True
+    while race.run.tick < 1560:  # my client got to 13 s...
+        race.update(FIXED_DT)
+    there = dict(race.kept)[1464]  # ...the server stopped me at my last k it heard, 12.2 s
+    assert there.total != race.run.score.total
+    race.on_net(
+        {
+            "t": "result",
+            "m": M,
+            "run": M,
+            "state": "rejected",
+            "why": "conexao",
+            "outcome": "giveup",
+            "score": there.total,
+            "secs": 12.2,
+            "rank": None,
+            "verdict": "loss",
+            "op": {"nick": "ana_42", "score": 953, "secs": 18.6},
+        }
+    )
+    until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
+    stats = game.scenes.top.stats
+    assert stats.reason == "Você perdeu: conexão perdida"
+    assert (stats.seconds, stats.score.total) == (12.2, there.total)

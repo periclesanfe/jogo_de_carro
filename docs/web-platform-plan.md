@@ -735,3 +735,62 @@ All three: `X-Content-Type-Options: nosniff`. No COOP/COEP. `ops/nginx/jogo.conf
 - **`result` can arrive before the client's `fin`** (the server's simulation crashed first); the client takes it as the end of the run.
 
 **Ops, after review:** no `JOGO_DRAIN` setting and no deploy gate on it; `setup.sh` no longer appends keys to an existing `/etc/jogo/env`; uvicorn's address lines are silenced by the app alone ((G)). Re-running `setup.sh` from the M3 commit's `ops/` before its deploy is still the rollout (it installs `jogo-admin` and the no-restart behaviour), but the deploy no longer enforces it.
+
+---
+
+# (I) M4 notes: live races with friends (2026-10-21)
+
+M4 is "Jogar com amigos (live)" only; "Desafiar amigo" and `/partidas` are M5. The wire protocol as built is the docstring at the top of `server/src/jogo_server/hub.py`.
+
+**Protocol, changed from §5 or decided where it was silent:**
+- **`m` is each player's own run id**, also in a race (the two players get different values). The race is a `matches` row (migration 3: `matches` as in §5, `runs.match_id`, indexes `matches_a`, `matches_b`, `runs_match`); a restart turns `racing` matches `void`.
+- **`welcome`** is `{me, friends: [{id, nick, s: off|menu|racing}], requests}`, friends by nick; `requests` counts the friend requests waiting for this player's answer. No `challenges` (M5) and no `update` message (a new build is `error version`, (H)). The list is not refreshed during a session: a friendship accepted on the site shows at the next hello.
+- **`presence {id, s}`** goes to accepted friends who said hello, and only when the status changes. `racing` means a run in progress, including an old tab's race that is over for that tab but not decided yet. Without that, a rival who crashed past your gate and then closed the tab (or opened a new one) sent "off" before the gated `op_end`, which told you the run had ended. Who to tell is read at once, so the friends of a deleted account still hear "off".
+- **Invites:**
+  - One per socket, either side. A new `invite` or a `solo` ends the old one: `cancelled` from the inviter, `declined` from the invitee. A closed socket sends `offline`, and the 30 s TTL sends `expired` to both.
+  - Replying to, or cancelling, someone else's invite closes with 1008.
+  - **Crossing invites**: inviting the friend whose invite to you is open, in the same mode, is a yes to theirs. You get `waiting` with their id, then `match`. Before this, both pressing REVANCHE in the same frame made one see "recusou" and the other wait 30 s.
+  - **Accept re-checks** both sessions (a failing one gets `login` and 1008, the other `invite_gone offline`) and the friendship (unfriended within the TTL: `invite_gone offline` to both, nothing starts). It then checks admission: `drain` or `full` to both.
+  - Errors that leave the socket open are `drain`, `rate` (10 invites every 10 min, text "Convites demais, tente em alguns minutos") and `racing`.
+- **One run per player** (§6.1) holds across tabs: while an old tab's race is undecided, a new tab's `solo` or `invite` gets `error racing` ("Sua corrida anterior ainda não acabou") and the socket stays open. An invite to that player gets `busy`.
+- **Sockets:** at most 20 per player a minute, because each hello and close reaches every friend. The 21st gets `error rate` ("Conexões demais, tente em 1 min") and 1008, and the open tab stays. It is not counted, so the game's 2 s retry gets back in.
+- **`op_end`** is `{m, k: the rival's ticks simulated, why: crash|win|giveup|conexao|ritmo|adiantado|invalido}`, not `left`.
+  - It is gated like `op` while the race is on. Once the race is decided, an `op_end` still past the gate goes out just before the result, and ops past the gate are dropped. Before this, a rival who forfeited ahead of you got the reason "Você fez mais pontos".
+  - A rival still alive when the race is decided sends no `op_end`.
+- **Forfeits lose at once**, whatever the tick: give-up (`leave`, or a `fin` the server did not reach by itself), 5 s of silence, a lost socket, a kick, a second tab, pacing, or a bad frame. §5 step 6 instead ended the run at its last tick and left the decision to the verdict. A give-up is stored `ok` with outcome `giveup`; the others are `rejected` with their why.
+- **`result`** in a race: `rank` null, `state` `ok` or `rejected` (never `review`), `verdict` `win|loss|draw`, `op {nick, score, secs}`. The run still going when the race is decided ends with the new outcome `decided`. The decision comes with the first `in` past the rival's crash tick, which is on the 12-tick grid: the test's crash at tick 1012 is decided at 1020, not at "crash tick + 1" as §8 says.
+- **Void before `go`:** the late player's why is `prazo` (or `conexao`/`invalido`), the other's is the new why `anulada`; `verdict` and `op` are null. A `leave` before `go` counts as `prazo` for the leaver.
+- **After your own run ends but before the result** (up to about 2 s, or 5 s more if the rival goes silent): `leave` and `in` are ignored, but `solo`, `invite` or a second `ready` get 1008. The client waits for the result, with a 12 s fallback.
+
+**Hub, decided where §5 was silent:** the two runs of a race are `Live` objects linked by `op`, both in `hub.live`, so a race needs two `MAX_ATIVAS` places and `/saude`'s `ativas` counts both. Open invites take no place. `in` goes through the same feed, pacing and advance as solo, and each accepted message is queued for the rival as one `op`; a message rejected by pacing is never relayed. Each socket's sends go through a FIFO `asyncio.Lock`. **No handler awaits the other player's socket while the race is on**: the rival's `op` flush and both `go` messages go out as tasks. Before this, a rival socket that drained slowly made the honest player late for pacing (`ritmo`). Live runs skip the board, holds and review; the desync check still applies.
+
+**Client, changed from §3:**
+- **AMIGOS** is on the title only while the site's socket is up, before SAIR/SITE. It is hidden offline and on desktop. When it comes or goes, the focus stays on its item or goes to JOGAR, so a dropped socket never lands Enter on SITE.
+- **`AmigosScene`** has CORRER AGORA only: DESAFIAR and received challenges are M5. It lists at most 6 friends online (`ponytail:`), free ones first. A friend who is racing gets a toast, and pending requests show the line "N pedidos de amizade — veja no site".
+- **`ConviteScene`** is pushed over anything but a race or a wait. An invite that arrives during a race (including its victory lap or crash slow motion) or a wait is held, and shown with what is left of its 30 s when that ends. It is dropped on its `invite_gone`, on a closed socket or on a new `welcome`.
+- **Waiting and REVANCHE:** `WaitScene` covers solo, an invite and an accepted invite. REVANCHE is a new invite to the same friend in the same mode; it reconnects if the car changed, as solo does. The invitee never reconnects, because that would drop the invite. The race uses the car named in the hello.
+- **`LiveScene(VersusScene)`:**
+  - The rival is `Run(shared=True)` fed by `op`, drawn `lag` ticks behind me. `lag` starts at 24 and grows to `my tick − k + 12` for a late batch, up to 60: a jitter buffer. With a fixed 24, one-way latency above about 50 ms made the rival stop and jump at every batch. It never shrinks within a race (`ponytail:`).
+  - Catch-up is at most 6 rival ticks per simulation tick (§3 said per frame). "conexão instável" shows when the rival is more than 60 ticks behind where it should be drawn.
+  - After the result, a winning rival cruises on for show, invulnerable, as the bot does. An `op_end` past my gate stops it where its inputs reached.
+- **The results card** of a run the server stopped (`decided`) shows the server's numbers: the score at its `k`, from the last 64 per-`k` copies, and its `secs`. Both players therefore see the same points.
+- **Shared with the bot versus:** the results card and the rival line (`_results`, `line`). The bot's rival pill is 8 px wider; pause is hidden only online.
+
+**Two-browser playtest** (two accounts that are friends, two browsers or profiles, both on `/jogar`):
+1. Each sees the other in AMIGOS as "no menu"; JOGAR in one turns it to "correndo" in the other, and back after the run.
+2. Invite and accept: CORRER AGORA, then "Aguardando…", the CONVITE over the other's menu, ACEITAR. Both count down together on the same road and mode.
+3. Decline: "<nick> recusou o convite". Expiry: 30 s with no answer gives "O convite expirou" on both. Esc while waiting gives the toast "<nick> cancelou o convite".
+4. A crash decides: the survivor sees VITÓRIA! without driving on, the crasher VOCÊ PERDEU, and the points and times on both cards match.
+5. Give up with R, and close the tab mid-race: the other wins at once, and the card says why ("desistiu", "perdeu a conexão").
+6. On a slow link (or a throttled browser, about 100 ms each way) the rival moves smoothly, a little further behind; cut one side's network for 1.5 s and "conexão instável" shows, then it catches up (5 s loses the race).
+7. REVANCHE from both cards at the same moment: one race starts. From one card: a new invite.
+8. An invite sent while the other is in a race or on a bot race shows up when that race ends, if its 30 s are not over.
+9. A second tab of the same account: the first says "Aberto em outra aba", and a race it was in is lost.
+10. Unfriend on the site while an invite is open: accepting it starts nothing.
+
+**Checked:**
+- 148 server tests, including 29 in `test_live.py`: two WebSocket clients streaming corpus logs; every `op` checked against the receiver's own k + 24 as it arrives; crossing invites, an ex-friend's invite, an undecided crash kept hidden across a closed tab and a new one, a forfeit past the gate, a slow rival socket, a deleted account's presence, and the socket limit. Mutation runs: undoing each of these fixes fails its test.
+- Game tests on both runtimes, including the held invite, the title focus, the jitter buffer, the rival cruising after the result, and the server's numbers on the card.
+- GOLDEN unchanged.
+
+**Not checked:** a real two-browser playtest (the list above), a pygbag build of this code, gamepads, Infinito's 600 s cap in a live race, and load with live pairs (`jogo-admin load` plays solo runs only).

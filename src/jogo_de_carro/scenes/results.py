@@ -36,6 +36,7 @@ class RaceStats:
     reason: str = ""  # a versus: why it was decided; a run the server or the network ended: why
     rival: str = ""  # a versus: the rival's line
     official: str | None = None  # a ranked run: the server's word on it (online.VERIFYING until it comes)
+    rematch: bool = False  # a live race: JOGAR DE NOVO is REVANCHE, a new invite to the same friend
 
     @property
     def won(self) -> bool:
@@ -57,7 +58,7 @@ class ResultsScene(Scene):
         self.again = again  # JOGAR DE NOVO: a fresh race of the same kind
         self.background = blurred(frame)
         self.menu = Menu(
-            ["JOGAR DE NOVO", "MENU", "SITE" if WEB else "SAIR"],
+            ["REVANCHE" if stats.rematch else "JOGAR DE NOVO", "MENU", "SITE" if WEB else "SAIR"],
             (WIDTH // 2, CARD.bottom - 66),
             ctx.audio,
             size=(232, 56),

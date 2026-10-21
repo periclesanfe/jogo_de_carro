@@ -182,6 +182,10 @@ The replay is the server's own simulation, so replay it with game code equal to 
 
 Setting `MAX_ATIVAS`: while the site is quiet (the test competes with the live server for the VPS's two vCPUs), run `ssh meuhubprod jogo-admin load --n 100` (then other values of `--n`). It plays that many real-time ranked runs against a scratch copy of the server and reports the event loop's lag, the CPU used and every result: take the largest `n` whose p99 lag stays well under 500 ms with no run rejected for `ritmo` or `adiantado`, leave room for the other sites, and put `MAX_ATIVAS=<n>` in `/etc/jogo/env`. Memory bounds it too: a worst-case run holds about 6.5 MB, so keep `n` at 100 or below unless `MemoryMax=1G` in `jogo.service` grows. The next deploy applies it, draining first; `systemctl restart jogo` applies it at once but drops the races in progress.
 
+## Live races with friends (M4)
+
+Logged in on the web, AMIGOS on the title lists your friends (added on the site) who are in the game: CORRER AGORA invites one to a live race in the current mode, side by side on the same road, and the invite shows over their game for 30 s. The server simulates both runs from the inputs, relays each player's inputs to the other no further ahead than the receiver's own position, and decides the race (the first to crash or give up loses; if both reach the end, the points). REVANCHE is a new invite. Live races never enter `/ranking`; `MAX_ATIVAS` and `/saude`'s `ativas` count both runs of a race, and the drain refuses new invites too. Protocol and decisions: `docs/web-platform-plan.md`, (I).
+
 ## Credits
 
 The original 2022 game was made by:

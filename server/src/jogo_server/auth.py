@@ -70,6 +70,13 @@ def session_user(db: sqlite3.Connection, token: str | None) -> tuple[sqlite3.Row
     return user, True
 
 
+FRIENDS = (  # a user's (:me) friends and friend requests, either way, by nick: the site's list and the game's
+    "SELECT users.id, users.nick, friends.accepted, friends.asked_by = :me AS mine FROM friends"
+    " JOIN users ON users.id = iif(friends.a = :me, friends.b, friends.a)"
+    " WHERE :me IN (friends.a, friends.b) ORDER BY users.nick"
+)
+
+
 def end_sessions(db: sqlite3.Connection, uid: int) -> None:
     """Logs the user out everywhere and voids their emailed links. For a new password, "sair de todos", a ban
     and account deletion. In the server, app.end_sessions also closes the game's socket; a ban from the admin

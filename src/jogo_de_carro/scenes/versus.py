@@ -1,18 +1,36 @@
-"""Contra o bot: two roads from one seed side by side, the bot stepped in lockstep, decided by run.verdict."""
+"""Versus: two roads from one seed side by side. Contra o bot: the bot stepped in lockstep, decided by
+run.verdict. Ao vivo: a friend's inputs relayed by the server, decided by the server's result."""
 
+import contextlib
 import random
+from collections import deque
+from dataclasses import replace
 
 import pygame
 
 from ..input import Action
-from ..run import Run, Scored, verdict
-from ..settings import ACCENT, COMBO_TIME, CYAN, DANGER, FLAME, HEIGHT, MUTED, SHIELD_TIME, WHITE, WIDTH
+from ..run import BadInput, Run, Scored, verdict
+from ..settings import (
+    ACCENT,
+    COMBO_TIME,
+    CYAN,
+    DANGER,
+    FIXED_DT,
+    FLAME,
+    HEIGHT,
+    MUTED,
+    SHIELD_TIME,
+    WHITE,
+    WIDTH,
+)
 from ..tween import clamp, out_cubic
-from ..ui import Menu, blit_pop, blit_text, clock_text, outlined, panel
+from ..ui import Color, Menu, blit_pop, blit_text, clock_text, fit, outlined, panel
 from ..world.autopilot import BOT_LEVELS, Bot
+from ..world.scoring import Score
 from ..world.world import Controls
 from .base import Context, MenuScene, Scene, Transition, menu_hint
-from .race import Outcome, Phase, RaceScene
+from .online import LOST, NO_RESULT, WHY
+from .race import REPORT, Outcome, Phase, RaceScene
 
 BOT_NAMES = {"facil": "FÁCIL", "medio": "MÉDIO", "dificil": "DIFÍCIL"}
 BANNERS = {1: ("VITÓRIA!", ACCENT), 0: ("EMPATE!", WHITE), -1: ("VOCÊ PERDEU", DANGER)}
@@ -20,6 +38,21 @@ MINE = pygame.Rect(0, 0, WIDTH // 2, HEIGHT)
 THEIRS = pygame.Rect(WIDTH // 2, 0, WIDTH // 2, HEIGHT)
 SHIFT = -320  # each World draws unchanged but shifted: the road (x 400..880) lands on 80..560 of its half
 COLUMN = pygame.Rect(566, 0, 148, HEIGHT)  # the HUD, over the two inner verges (never over a lane)
+ENDED = {"crash": "BATEU!", "giveup": "DESISTIU"}  # a stopped rival; any other forfeit: SAIU
+ENDS = {  # how a run ended early, for the results (op_end's why)
+    "crash": "bateu",
+    "giveup": "desistiu",
+    "conexao": "perdeu a conexão",
+    "ritmo": "ficou para trás",
+    "adiantado": "foi desclassificado",
+    "invalido": "foi desclassificado",
+}
+LAG = 24  # live: the rival is replayed at least this many ticks behind me, the server's relay gate (§3, §5)
+CATCH_UP = 6  # live: rival ticks at most in one of mine, catching up after late or bursty inputs
+UNSTABLE = 60  # live: ticks the rival may fall behind its place before "conexão instável"; the most it is
+# drawn behind me for late inputs (a jitter buffer: one-way latency up to about 200 ms stays smooth)
+HOLD_S = 12.0  # live: my run is over; the race waits this long at most for the server's result
+VERDICTS = {"win": 1, "draw": 0, "loss": -1}
 
 
 def mss(seconds: float) -> str:
@@ -40,7 +73,8 @@ class VersusScene(RaceScene):
     def __init__(self, ctx: Context, level: str, seed: int | None = None) -> None:
         skin = "red" if ctx.save.skin != "red" else "blue"  # never the player's car
         super().__init__(ctx, seed, shared_road=True, rival=skin)
-        self.level, self.name = level, f"BOT {BOT_NAMES[level]}"
+        self.level = level
+        self.name = self.nick = f"BOT {BOT_NAMES[level]}"
         bot = Bot(BOT_LEVELS[level], random.Random(self.seed ^ 0xB07))
         self.rival = Run(ctx.assets, self.mode.key, skin, self.seed, True, bot, rival=ctx.save.skin)
         self.verdict: int | None = None
@@ -79,28 +113,41 @@ class VersusScene(RaceScene):
         self.world.running = False  # the clock stops where the race was decided
 
     def finish(self, outcome: Outcome) -> None:
-        from .results import RaceStats, ResultsScene
-
         if self.verdict is None and self.rival.outcome:  # the bot crashed on my last tick: I outlasted it
             self._step()
         self.run.stop("giveup")
         self._decide()
-        rival = self.rival
-        line = f"{self.name}: {rival.score.total} pontos"
-        if rival.outcome == "crash":
-            line += f" · bateu aos {mss(rival.seconds)}"
+        self._results(outcome)
+
+    def _results(self, outcome: Outcome, why: str = "", seconds: float | None = None) -> None:
+        """The results card: the verdict, why (or `why`), and the rival's line."""
+        from .results import RaceStats, ResultsScene
+
         stats = RaceStats(
             outcome,
             self.mode,
-            self.run.seconds,
+            self.run.seconds if seconds is None else seconds,
             self.score,
             False,
             self.best,
             self.verdict,
-            self.reason(),
-            line,
+            why or self.reason(),
+            self.line(),
+            self.official,
+            rematch=self.realtime,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
+
+    def _theirs(self) -> tuple[str | None, dict]:
+        """How the rival's run ended, and the server's numbers for it (a live race's)."""
+        return self.rival.outcome, {}
+
+    def line(self) -> str:
+        theirs, op = self._theirs()
+        line = f"{self.nick}: {op.get('score', self.rival.score.total)} pontos"
+        if theirs in ENDS:
+            line += f" · {ENDS[theirs]} aos {mss(op.get('secs') or self.rival.seconds)}"
+        return line
 
     def reason(self) -> str:
         me, bot, v = self.run, self.rival, self.verdict
@@ -123,15 +170,16 @@ class VersusScene(RaceScene):
         shifted = (offset[0] + SHIFT, offset[1])
         self.world.draw(mine, shifted, vignette=False)
         self.rival.world.draw(theirs, (SHIFT, 0), vignette=False)
-        if self.rival.outcome == "crash":  # frozen where it crashed, dimmed
+        if (ended := self.rival.outcome) not in (None, "win"):  # frozen where it stopped, dimmed
             theirs.fill((110, 110, 120), special_flags=pygame.BLEND_RGB_MULT)
-            blit_pop(theirs, "BATEU!", 72, DANGER, (THEIRS.width // 2, 440), 1.0, width=4)
+            blit_pop(theirs, ENDED.get(ended, "SAIU"), 72, DANGER, (THEIRS.width // 2, 440), 1.0, width=4)
         surface.blit(self.world.road.vignette, (0, 0))
         self._draw_juice(mine, shifted, SHIFT)
 
     def _draw_hud(self, surface: pygame.Surface) -> None:
         score, rival, x, w = self.score, self.rival, COLUMN.x, COLUMN.width
-        self._draw_pause(surface)
+        if not self.realtime:  # online has no pause
+            self._draw_pause(surface)
 
         box = pygame.Rect(x, 20, w, 92)
         panel(surface, box, alpha=240)
@@ -175,12 +223,169 @@ class VersusScene(RaceScene):
         panel(surface, box, alpha=240)
         blit_text(surface, self.name, 22, (x + 12, box.y + 10), MUTED, anchor="topleft", shadow=False)
         blit_text(surface, f"{rival.score.total}", 48, (box.right - 12, box.y + 30), WHITE, anchor="topright")
-        if rival.outcome == "crash":
-            pill = pygame.Rect(x + 10, box.bottom - 38, w - 20, 28)
-            panel(surface, pill, DANGER, 255, radius=14)
-            blit_text(surface, f"BATEU {mss(rival.seconds)}", 22, pill.center, WHITE, shadow=False)
+        if state := self.state():
+            pill = pygame.Rect(x + 6, box.bottom - 38, w - 12, 28)
+            panel(surface, pill, state[1], 255, radius=14)
+            blit_text(surface, state[0], 22, pill.center, WHITE, shadow=False)
 
         self._draw_speedometer(surface, (COLUMN.centerx, HEIGHT - 84), 58)
+
+    def state(self) -> tuple[str, Color] | None:
+        """The rival card's pill."""
+        if self.rival.outcome == "crash":
+            return f"BATEU {mss(self.rival.seconds)}", DANGER
+        return None
+
+
+class LiveScene(VersusScene):
+    """Ao vivo contra um amigo, created at the server's go. My run streams to the server as a ranked run does;
+    the rival is the friend's inputs as the server relays them (op), replayed at least LAG ticks behind me.
+    The server's result decides and ends both runs; when mine ends first, the race stays up until it comes."""
+
+    def __init__(self, ctx: Context, match: dict, friend: dict, seed: int) -> None:
+        net, op = ctx.net, match["op"]
+        assert net
+        RaceScene.__init__(self, ctx, seed, True, op["skin"], match["m"], match["mode"], net.skin)
+        self.official = None  # no ranking line: the verdict is the server's word
+        self.friend, self.nick = friend, op["nick"]
+        self.name = fit(self.nick, 22, COLUMN.width - 24)
+        self.rival = Run(ctx.assets, self.mode.key, op["skin"], self.seed, True, rival=net.skin)
+        self.verdict: int | None = None
+        self.result: dict | None = None
+        self.end: tuple[int, str] | None = None  # the rival's last tick, and why (op_end)
+        self.over: Outcome | None = None  # my run ended first: the race waits for the result
+        self.ticks = 0  # racing ticks since JÁ! on the wall clock (my run stops when it ends)
+        # ticks the rival is drawn behind me: more when its inputs come later. ponytail: it only grows (to
+        # UNSTABLE), so one hiccup keeps her up to 0.5 s back for the rest of the race; decay it if that shows
+        self.lag = LAG
+        self.kept: deque[tuple[int, Score]] = deque(maxlen=64)  # my score at each k sent: the server's
+        self.waited = 0.0
+
+    def again(self) -> Scene:
+        from .online import WaitScene
+
+        return WaitScene(self.ctx, self.friend, self.mode.key)  # REVANCHE: a new invite, same friend and mode
+
+    def _step(self) -> Scored:
+        if self.run.outcome:  # given up: my road stands still
+            return []
+        events = RaceScene._step(self)
+        if self.run.tick % REPORT == 0:
+            self.kept.append((self.run.tick, replace(self.score)))
+        return events
+
+    def update(self, dt: float) -> None:
+        if self.phase is Phase.COUNTDOWN:
+            self.rival.world.update(dt, Controls())  # standing ticks change nothing
+        RaceScene.update(self, dt)
+        if self.phase is Phase.COUNTDOWN:
+            return
+        self.ticks += 1
+        rival = self.rival
+        rival.advance(min(rival.known, self.ticks - self.lag, rival.tick + CATCH_UP))
+        caught_up = self.result is not None and rival.tick == rival.known  # decided: no more of hers comes
+        if self.end and (rival.tick >= self.end[0] or caught_up):  # (an end past my gate: where she got to)
+            rival.stop(self.end[1])
+        elif caught_up and rival.outcome is None:  # she won: she cruises on, for show, as the bot does
+            rival.world.invulnerable = True
+            rival.world.update(dt, Controls())
+        if self.over:
+            self.waited += dt
+            if self.waited > HOLD_S:
+                self.finish(self.over, "O servidor não respondeu")
+
+    @property
+    def unstable(self) -> bool:
+        """The rival's inputs are late: it is drawn more than UNSTABLE ticks behind its place."""
+        racing = self.result is None and self.run.outcome is None and self.rival.outcome is None
+        return racing and self.end is None and self.ticks - self.lag - self.rival.tick > UNSTABLE
+
+    def on_net(self, msg: dict) -> None:
+        t = msg.get("t")
+        if t == "closed":
+            if self.result is None:  # nobody will say who won
+                self.official = NO_RESULT if self.run.outcome else LOST
+                self.reported = True
+                self.finish(self._outcome(), "Conexão perdida")
+            return
+        if msg.get("m") != self.online:
+            return
+        if t == "op":
+            with contextlib.suppress(BadInput):  # the server checked them; a stale or empty batch is moot
+                self.rival.load(msg.get("k"), msg.get("ev"))
+                # drawn far enough back that the next batch comes before she is: no stop-and-jump
+                self.lag = min(UNSTABLE, max(self.lag, self.ticks - msg["k"] + REPORT))
+        elif t == "op_end" and type(msg.get("k")) is int:
+            self.end = (msg["k"], str(msg.get("why")))
+        elif t == "result" and self.result is None:
+            self.result, self.reported = msg, True  # it ended my run too: nothing more to send
+            self.verdict = VERDICTS.get(msg.get("verdict"))
+            if self.verdict is None:  # void
+                self.finish(self._outcome(), "Corrida encerrada pelo servidor")
+                return
+            self.banner = BANNERS[self.verdict]
+            if self.over:
+                self.finish(self.over)
+            elif self.phase in (Phase.COUNTDOWN, Phase.RACING) and self.run.outcome is None:
+                self._win()  # decided while I drive: it ends here
+
+    def _outcome(self) -> Outcome:
+        return self.over or {Phase.CRASHED: Outcome.CRASH, Phase.WON: Outcome.WIN}.get(
+            self.phase, Outcome.GAVE_UP
+        )
+
+    def _win(self, celebrate: bool = True) -> None:
+        if self.verdict is None:  # I reached the end: the server still compares the points
+            self.banner = ("CHEGOU!", WHITE)
+        super()._win(celebrate)
+
+    def finish(self, outcome: Outcome, why: str = "") -> None:
+        self._stop()  # fin
+        if self.result is None and not why:  # my run is over, the race is not: the rival drives on
+            self.over = outcome
+            return
+        result, seconds = self.result or {}, None
+        secs = result.get("secs")
+        # the server stopped my run (decided, or a forfeit stored as a give-up), maybe after I ran on
+        if result.get("outcome") in ("decided", "giveup") and isinstance(secs, int | float):
+            mine = dict(self.kept).get(round(secs / FIXED_DT))  # at its last k (a tenth of a second): its
+            if mine:  # numbers, which the rival's card shows too
+                self.score, seconds = mine, secs
+        self._results(outcome, why, seconds)
+
+    def _theirs(self) -> tuple[str | None, dict]:
+        """How the rival's run ended (op_end, else as replayed here), and the result's numbers for it."""
+        return (self.end[1] if self.end else self.rival.outcome), (self.result or {}).get("op") or {}
+
+    def reason(self) -> str:
+        result, v = self.result or {}, self.verdict
+        assert v is not None
+        theirs, op = self._theirs()
+        mine, why = result.get("outcome") or self.run.outcome, result.get("why")
+        if v < 0 and why in WHY:  # the server stopped my run
+            return f"Você perdeu: {WHY[why]}"
+        if v > 0 and theirs in ENDS:
+            return f"{self.nick} {ENDS[theirs]} aos {mss(op.get('secs') or self.rival.seconds)}"
+        if v < 0 and mine in ENDS:
+            return f"Você {ENDS[mine]} aos {mss(result.get('secs') or self.run.seconds)}"
+        return {
+            1: "Você fez mais pontos",
+            0: "Os dois fizeram os mesmos pontos",
+            -1: f"{self.nick} fez mais pontos",
+        }[v]
+
+    def state(self) -> tuple[str, Color] | None:
+        if self.rival.outcome not in (None, "win", "crash"):
+            return ENDED.get(self.rival.outcome, "SAIU"), MUTED
+        if self.unstable:
+            return "conexão instável", FLAME
+        return super().state()
+
+    def _draw_hud(self, surface: pygame.Surface) -> None:
+        super()._draw_hud(surface)
+        panel(surface, pygame.Rect(COLUMN.x + 24, 516, COLUMN.width - 48, 30), alpha=240, radius=15)
+        pygame.draw.circle(surface, DANGER, (COLUMN.centerx - 38, 531), 6)
+        blit_text(surface, "AO VIVO", 22, (COLUMN.centerx - 26, 531), WHITE, anchor="midleft", shadow=False)
 
 
 class BotScene(MenuScene):
