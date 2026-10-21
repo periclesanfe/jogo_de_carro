@@ -1,0 +1,29 @@
+#!/bin/bash
+# /usr/local/bin/jogo-admin, installed by ops/setup.sh: the server's admin CLI (python -m jogo_server.admin), or
+# with "load" first its load test (python -m jogo_server.load), as user jogo in the running server's venv, with
+# jogo.service's settings: /etc/jogo/env read as systemd reads it (KEY=value lines), never run as shell code, and
+# handed over in the environment, not on a command line (any local user can read those in /proc).
+# Uso (como root; outro usuário passa pelo sudo):
+#   jogo-admin revisar                 a fila de revisão
+#   jogo-admin export 123 > run.json   o log de entradas da corrida 123, para rever no desktop
+#   jogo-admin aprovar 123             entra no ranking (rejeitar 123 tira; banir <apelido>)
+#   jogo-admin load --n 100            quantas corridas este VPS aguenta: o MAX_ATIVAS de /etc/jogo/env
+# Rever uma corrida no Mac, no repositório (no commit do build da corrida):
+#   ssh meuhubprod 'jogo-admin export 123' > run.json && python -m jogo_de_carro --replay run.json
+set -euo pipefail
+[[ $EUID == 0 ]] || exec sudo -- "$0" "$@"
+
+mod=jogo_server.admin
+if [[ ${1:-} == load ]]; then
+    mod=jogo_server.load
+    shift
+fi
+vars=()
+while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then vars+=("$line"); fi
+done </etc/jogo/env
+for v in $(compgen -e); do unset -v "$v" 2>/dev/null || true; done  # a clean environment, like the service's
+export PATH=/usr/bin:/bin LANG=C.UTF-8 PYGAME_HIDE_SUPPORT_PROMPT=1 "${vars[@]}"
+cd /
+# -I: nothing from the caller's directory or PYTHON* variables; -B: no .pyc into the deployed venv
+exec /usr/sbin/runuser -u jogo -- /srv/jogo/venvs/current/bin/python -I -B -m "$mod" "$@"

@@ -10,7 +10,8 @@ User=jogo
 Group=jogo
 EnvironmentFile=/etc/jogo/env
 Environment=PYTHONDONTWRITEBYTECODE=1
-# one worker: rooms, presence and rate limits live in this process's memory
+# one worker: rooms, presence and rate limits live in this process's memory. uvicorn's own INFO lines (each
+# WebSocket accept carries the player's address) are silenced by the app at startup
 ExecStart=/srv/jogo/venvs/current/bin/uvicorn jogo_server.app:app --host 127.0.0.1 --port 8090 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --ws-max-size 16384 --no-access-log
 Restart=always
 # a refused start (golden mismatch) costs about 3 s of CPU: retry calmly

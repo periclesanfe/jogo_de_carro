@@ -1,9 +1,11 @@
-"""The site (plan §4/§5): landing page, accounts, friends, /jogar and /saude. One uvicorn worker: rate limits
-and the hashing queue live in this process; everything else is in SQLite.
+"""The site (plan §4/§5): landing page, accounts, friends, the ranking, /jogar, /saude and the game's /ws
+(hub.py). One uvicorn worker: rate limits, the hashing queue, sockets and runs in progress live in this
+process; everything else is in SQLite.
 
     uvicorn jogo_server.app:app   (settings in the environment: see the README's "Servidor")
 """
 
+import asyncio
 import functools
 import hashlib
 import logging
@@ -26,13 +28,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
-from starlette.routing import Mount, Route
+from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
+from starlette.websockets import WebSocket
 
 import jogo_de_carro
+from jogo_de_carro.settings import MODE_BY_KEY, MODES
 
-from . import auth, db, mail
+from . import auth, db, hub, mail
 
 HERE = Path(__file__).parent
 ICON = Path(jogo_de_carro.__file__).parent / "assets" / "icon.png"
@@ -67,6 +71,10 @@ class Config:
     smtp_password: str
     mail_from: str
     admin_email: str
+    max_ativas: int = 100  # runs in progress at most (set from python -m jogo_server.load)
+    # while this file exists no run starts: jogo-deploy creates it and waits for /saude's ativas == 0 (the
+    # tests and load.py use their own)
+    drain: Path = Path("/srv/jogo/cache/drain")
 
     @property
     def cookie(self) -> str:
@@ -98,6 +106,7 @@ class Config:
             smtp_password=env("SMTP_PASSWORD", ""),
             mail_from=env("MAIL_FROM", ""),
             admin_email=env("ADMIN_EMAIL", ""),
+            max_ativas=int(env("MAX_ATIVAS") or 100),
         )
 
 
@@ -126,12 +135,20 @@ def check_runtime(cfg: Config, build: str) -> None:
 
     want = (cfg.www / "jogo" / build / "golden.txt").read_text(encoding="utf-8").strip()
     got = (platform.python_version(), pygame.version.ver, golden.digest())
-    if got != ("3.12.12", "2.5.7", want):
+    if got != (*hub.RUNTIME, want):
         raise RuntimeError(f"recusado: Python {got[0]}, pygame-ce {got[1]}, golden {got[2]} (build: {want})")
 
 
 @asynccontextmanager
 async def lifespan(app: Starlette):
+    # uvicorn logs each WebSocket it accepts, with the player's address, at INFO (even with --no-access-log):
+    # keep its loggers quieter, whatever the unit's flags
+    for name in ("uvicorn.error", "uvicorn.access"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    if not log.handlers:  # uvicorn configures only its own loggers; ours prints one line per finished run
+        log.addHandler(logging.StreamHandler())
+        log.setLevel(logging.INFO)
+        log.propagate = False
     cfg = app.state.cfg
     app.state.build = current_build(cfg)
     app.state.golden = False  # in dev nothing was checked
@@ -141,16 +158,36 @@ async def lifespan(app: Starlette):
     app.state.db = db.connect(cfg.db)
     app.state.hasher = auth.Hasher()
     app.state.limits = auth.Limits()
+    clock = getattr(app.state, "clock", None)  # tests drive the hub's clock and its ticks by hand
+    app.state.hub = hub.Hub(app.state, clock)
+    tasks = [asyncio.create_task(remind(app.state))]
+    if clock is None:
+        tasks.append(asyncio.create_task(app.state.hub.ticker()))
     log.warning("pronto: build %s em %s", app.state.build, cfg.base)
     yield
+    for task in tasks:
+        task.cancel()
     app.state.db.close()
+
+
+def review_mail(state) -> None:
+    """Emails ADMIN_EMAIL how many runs wait for review, if any do."""
+    n = state.db.execute("SELECT count(*) FROM runs WHERE state = 'review'").fetchone()[0]
+    if n and state.cfg.admin_email and state.cfg.mail:
+        state.send_mail(state.cfg.admin_email, mail.review_message(state.cfg.base, n))
+
+
+async def remind(state) -> None:
+    while True:  # at startup, then hourly: one email an hour at most while the queue is not empty
+        review_mail(state)
+        await asyncio.sleep(3600)
 
 
 # --- every request --------------------------------------------------------------------------------------
 
 
 def same_origin(conn: HTTPConnection) -> bool:
-    """CSRF (with SameSite=Lax): a POST must come from our own pages. M3: /ws checks it before accept()."""
+    """CSRF (with SameSite=Lax): a POST, or the game's WebSocket, must come from our own pages."""
     return conn.headers.get("origin") == conn.app.state.cfg.base
 
 
@@ -231,6 +268,12 @@ def login(request: Request, user: sqlite3.Row) -> Response:
     return response
 
 
+def end_sessions(state, uid: int) -> None:
+    """Logs the user out everywhere, their open game included (a new password, "sair de todos", deletion)."""
+    auth.end_sessions(state.db, uid)
+    state.hub.kick(uid)
+
+
 def logged_out(cfg: Config, response: Response | None = None) -> Response:
     response = response or go("/")
     response.delete_cookie(cfg.cookie, secure=not cfg.dev, httponly=True, samesite="lax")
@@ -257,8 +300,27 @@ def send_link(request: Request, email: str) -> bool:
 # --- pages ----------------------------------------------------------------------------------------------
 
 
+def ranking(state, mode: str) -> list[sqlite3.Row]:
+    """The whole board of a mode, cached 10 s: the pages are public. ponytail: the whole board in memory, for
+    "você: #N"; fine to some 100k players a mode."""
+    hit = state.boards.get(mode)
+    if hit is None or hit[0] < time.monotonic():
+        hit = state.boards[mode] = (time.monotonic() + 10, hub.board(state.db, mode))
+    return hit[1]
+
+
 async def home(request: Request) -> Response:
-    return page(request, "index.html")
+    tops = [(m, ranking(request.app.state, m.key)[:10]) for m in MODES]
+    return page(request, "index.html", tops=tops)
+
+
+async def ranking_page(request: Request) -> Response:
+    modo = request.query_params.get("modo", "normal")
+    if modo not in MODE_BY_KEY:
+        return PlainTextResponse("Não encontrado.", 404)
+    linhas, user = ranking(request.app.state, modo), request.state.user
+    voce = next((n for n, r in enumerate(linhas, 1) if user and r["user_id"] == user["id"]), None)
+    return page(request, "ranking.html", modos=MODES, modo=MODE_BY_KEY[modo], linhas=linhas[:100], voce=voce)
 
 
 async def entrar(request: Request) -> Response:
@@ -343,7 +405,7 @@ async def senha(request: Request) -> Response:
             " ON CONFLICT(email) DO UPDATE SET pw_hash = excluded.pw_hash RETURNING *",
             (email, pw_hash, time.time()),
         ).fetchone()
-        auth.end_sessions(state.db, user["id"])
+        end_sessions(state, user["id"])
     return login(request, user)
 
 
@@ -388,7 +450,7 @@ async def sair(request: Request) -> Response:
 
 @account(need_nick=False)
 async def sair_todos(request: Request, user: sqlite3.Row) -> Response:
-    auth.end_sessions(request.app.state.db, user["id"])
+    end_sessions(request.app.state, user["id"])
     return logged_out(request.app.state.cfg)
 
 
@@ -400,7 +462,7 @@ async def excluir(request: Request, user: sqlite3.Row) -> Response:
         return page(request, "conta.html", 400, erro="O texto digitado não confere.")
     state = request.app.state
     with db.tx(state.db):
-        auth.end_sessions(state.db, user["id"])
+        end_sessions(state, user["id"])
         state.db.execute("DELETE FROM users WHERE id = ?", (user["id"],))
     request.state.user = None
     return logged_out(
@@ -464,7 +526,28 @@ async def jogar(request: Request, user: sqlite3.Row) -> Response:
 
 
 async def saude(request: Request) -> Response:
-    return JSONResponse({"build": request.app.state.build, "golden": request.app.state.golden})
+    state = request.app.state
+    review = state.db.execute("SELECT count(*) FROM runs WHERE state = 'review'").fetchone()[0]
+    sql = "SELECT count(*) FROM runs WHERE why = 'desync' AND ended > ?"
+    desync = state.db.execute(sql, (time.time() - auth.DAY,)).fetchone()[0]
+    return JSONResponse(
+        {
+            "build": state.build,
+            "golden": state.golden,
+            "ativas": len(state.hub.live),
+            "loop_lag_ms": round(state.hub.loop_lag * 1000),
+            "review": review,
+            "desync_24h": desync,
+        }
+    )
+
+
+async def ws(websocket: WebSocket) -> None:
+    if not same_origin(websocket):  # cross-site WebSocket hijacking: HTTP middleware never sees this
+        await websocket.close(1008)  # before accept(): the handshake gets 403
+        return
+    state = websocket.app.state
+    await state.hub.serve(websocket, websocket.cookies.get(state.cfg.cookie))
 
 
 # --- Google ---------------------------------------------------------------------------------------------
@@ -525,6 +608,8 @@ def create_app(cfg: Config | None = None) -> Starlette:
         Route("/privacidade", privacidade),
         Route("/jogar", jogar),
         Route("/saude", saude),
+        Route("/ranking", ranking_page),
+        WebSocketRoute("/ws", ws),
         Route("/icone.png", lambda request: FileResponse(ICON)),
         Mount("/static", StaticFiles(directory=HERE / "static")),
     ]
@@ -547,6 +632,7 @@ def create_app(cfg: Config | None = None) -> Starlette:
     ]
     app = Starlette(routes=routes, middleware=middleware, lifespan=lifespan, max_body_size=64 * 1024)
     app.state.cfg = cfg
+    app.state.boards = {}  # ranking(): mode -> (expires, board)
     app.state.google = google_client(cfg)
     mail_pool = ThreadPoolExecutor(2, "mail")
     app.state.send_mail = lambda to, msg: mail_pool.submit(mail.send, cfg, to, msg)

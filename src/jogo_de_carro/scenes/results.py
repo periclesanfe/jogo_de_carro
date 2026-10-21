@@ -3,17 +3,18 @@
 import math
 import random
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pygame
 
 from ..input import Action
 from ..particles import Particles
-from ..settings import ACCENT, DANGER, HEIGHT, MUTED, WHITE, WIDTH, Difficulty
+from ..settings import ACCENT, CYAN, DANGER, HEIGHT, MUTED, WHITE, WIDTH, Difficulty
 from ..tween import out_back, out_cubic
 from ..ui import Menu, blit_pop, blit_text, clock_text, faded, panel
 from ..world.scoring import Score
 from .base import WEB, Context, Scene, Transition
+from .online import NO_RESULT, VERIFYING, official
 from .pause import blurred
 from .race import Outcome
 
@@ -32,8 +33,9 @@ class RaceStats:
     new_record: bool
     previous_best: int
     verdict: int | None = None  # a versus: 1 won, 0 draw, -1 lost
-    reason: str = ""  # a versus: why it was decided
+    reason: str = ""  # a versus: why it was decided; a run the server or the network ended: why
     rival: str = ""  # a versus: the rival's line
+    official: str | None = None  # a ranked run: the server's word on it (online.VERIFYING until it comes)
 
     @property
     def won(self) -> bool:
@@ -93,6 +95,15 @@ class ResultsScene(Scene):
         else:
             self.ctx.quit()
 
+    def on_net(self, msg: dict) -> None:
+        """A ranked run: the server's result turns "verificando…" into its line."""
+        if self.stats.official != VERIFYING:
+            return
+        if msg.get("t") == "result":
+            self.stats = replace(self.stats, official=official(msg, self.stats.mode))
+        elif msg.get("t") == "closed":
+            self.stats = replace(self.stats, official=NO_RESULT)
+
     def update(self, dt: float) -> None:
         self.t += dt
         self.menu.update(dt)
@@ -121,11 +132,14 @@ class ResultsScene(Scene):
 
         if stats.verdict is None:
             title, color = ("VOCÊ VENCEU!", ACCENT) if stats.won else ("GAME OVER", DANGER)
-            subtitle = {
-                Outcome.WIN: f"Sobreviveu {clock_text(stats.seconds)} no modo {stats.mode.name}",
-                Outcome.CRASH: f"Você bateu no modo {stats.mode.name}",
-                Outcome.GAVE_UP: f"Você desistiu no modo {stats.mode.name}",
-            }[stats.outcome]
+            subtitle = (
+                stats.reason
+                or {
+                    Outcome.WIN: f"Sobreviveu {clock_text(stats.seconds)} no modo {stats.mode.name}",
+                    Outcome.CRASH: f"Você bateu no modo {stats.mode.name}",
+                    Outcome.GAVE_UP: f"Você desistiu no modo {stats.mode.name}",
+                }[stats.outcome]
+            )
         else:
             (title, color), subtitle = VERDICTS[stats.verdict], stats.reason
         blit_pop(
@@ -160,7 +174,19 @@ class ResultsScene(Scene):
             anchor="midright",
         )
         self._draw_record(surface, box)
+        if stats.official:
+            self._draw_official(surface, stats.official, box.y + 512)
         self.menu.draw(surface)
+
+    def _draw_official(self, surface: pygame.Surface, line: str, y: int) -> None:
+        """The server's line; its ✓ (missing from the font) is drawn."""
+        ok = line.startswith("✓ ")
+        rect = blit_text(
+            surface, line.removeprefix("✓ "), 28, (WIDTH // 2 + 14 * ok, y), CYAN if ok else MUTED
+        )
+        if ok:
+            x, cy = rect.x - 30, rect.centery
+            pygame.draw.lines(surface, CYAN, False, [(x, cy), (x + 7, cy + 7), (x + 20, cy - 8)], 4)
 
     def _draw_record(self, surface: pygame.Surface, box: pygame.Rect) -> None:
         stats = self.stats

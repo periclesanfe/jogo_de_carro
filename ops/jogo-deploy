@@ -5,7 +5,7 @@
 # simulation digest computed on this CPU equals CI's (and the browser's), installs the server (server/, from
 # M2) into a venv of its own, publishes the web build in /srv/jogo/www, then switches jogo.service to this
 # commit and switches back if it does not come up healthy. Commits without server/ only publish the site.
-# ponytail: restarts without a drain: M2 has no races to drop; M3 adds the drain before the restart.
+# Before that restart it drains the running server: ranked runs in progress finish, new ones are refused.
 set -euo pipefail
 
 read -r sha golden extra <<<"${SSH_ORIGINAL_COMMAND:-}"
@@ -17,6 +17,11 @@ fi
 export UV_PYTHON_INSTALL_DIR=/opt/uv-python UV_PYTHON_DOWNLOADS=never UV_CACHE_DIR=/srv/jogo/cache
 export PYGAME_HIDE_SUPPORT_PROMPT=1
 PY=/srv/jogo/venv/bin/python
+# While this file exists the server starts no new ranked run (its Config.drain; jogo cannot write /srv/jogo
+# itself). 31 min: the ranked cap plus slack, so every run older than the file is over.
+drain=/srv/jogo/cache/drain
+drain_max=1860
+die() { echo "$*" >&2; exit 1; }
 
 cd /srv/jogo/app
 exec 9>/srv/jogo/cache/.deploy.lock && flock 9  # one deploy at a time
@@ -64,7 +69,6 @@ fi
 # sends them to the one www/current names; that switches last, and only for the newest commit of its branch
 # (deploys can finish out of order). www/index.html (web_build's redirect) still moves in just after it, but
 # '/' is the server's page. ponytail: old builds stay (an open page may still need its jogo.tar.gz); ~0.5 MB each.
-die() { echo "$*" >&2; exit 1; }
 umask 022  # readable by the web server
 # the build's name covers all it is made of (tools/web_build.py computes it the same way)
 tree=$(git rev-parse "$sha:src/jogo_de_carro" "$sha:web" "$sha:tools/web_build.py" | git hash-object --stdin)
@@ -103,6 +107,27 @@ if [[ -z $venv ]]; then
     echo "commit sem servidor: só acrescentou jogo/$tree/ (o /jogar continua no build de www/current)"
     exit 0
 fi
+
+# The drain (plan §7): from here the running server refuses new ranked runs; the live ones get to finish before
+# the restart. A server that reports no "ativas" (M2's, or one that is down) has none. The EXIT trap removes the
+# file on every way out, rollback and failures included; progress every minute also keeps CI's ssh busy.
+trap 'rm -rf "$tmp"; rm -f "$drain"' EXIT
+touch "$drain"
+ativas() {
+    curl -fsS --max-time 5 http://127.0.0.1:8090/saude 2>/dev/null | "$PY" -Ic 'import json, sys
+n = json.load(sys.stdin).get("ativas")
+print(n if type(n) is int else "")' 2>/dev/null
+}
+for ((t = 0; ; t += 5)); do
+    n=$(ativas) || n=
+    [[ -n $n && $n != 0 ]] || break
+    if ((t >= drain_max)); then
+        echo "ainda $n corrida(s) ao vivo depois de $((t / 60)) min: reiniciando assim mesmo" >&2
+        break
+    fi
+    ((t % 60)) || echo "drenando: $n corrida(s) ao vivo, novas recusadas ($((t / 60)) min)"
+    sleep 5
+done
 
 # The switch: "current" names the build the server serves and checks its golden against, then the server
 # itself. The previous build name stays at hand (a hard link) to switch back to. The database is copied first:

@@ -1,4 +1,5 @@
-"""Gameplay: countdown, racing with HUD and juice, crash slow-motion, victory lap."""
+"""Gameplay: countdown, racing with HUD and juice, crash slow-motion, victory lap; online, the inputs stream
+to the server (plan §5), which scores the run itself."""
 
 import json
 import math
@@ -29,6 +30,7 @@ from ..ui import blit_pop, blit_text, clock_text, faded, glow, panel
 from ..world.autopilot import autopilot
 from ..world.world import Controls, EventKind
 from .base import Context, Scene, Transition
+from .online import LOST, NO_RESULT, VERIFYING, official
 
 COUNT_STEP = 0.75  # seconds per countdown number
 SLOWMO_TIME, SLOWMO_SCALE = 0.35, 0.25
@@ -51,6 +53,8 @@ PAD_HINTS = (
 )
 COUNT_COLORS = (DANGER, FLAME, ACCENT)
 GO_COLOR = (99, 199, 77)
+REPORT = 12  # online: the inputs go to the server every this many ticks (10 times a second)
+NO_PAUSE = "Sem pausa no online · R desiste"
 
 
 class Phase(Enum):
@@ -86,9 +90,19 @@ class RaceScene(Scene):
     cannons = (0, WIDTH)  # world x of the victory confetti cannons: the screen's bottom corners
 
     def __init__(
-        self, ctx: Context, seed: int | None = None, shared_road: bool = False, rival: str | None = None
+        self,
+        ctx: Context,
+        seed: int | None = None,
+        shared_road: bool = False,
+        rival: str | None = None,
+        online: int | None = None,  # the server's match: a ranked run, created at its go
     ) -> None:
         super().__init__(ctx)
+        self.online = online
+        self.realtime = online is not None
+        self.official = VERIFYING if online is not None else None  # the server's word on the run
+        self.sent = 0  # run.ev entries sent
+        self.reported = online is None  # nothing more goes to the server (fin sent, or it decided)
         self.mode = ctx.mode
         self.seed = ctx.rng.getrandbits(53) if seed is None else seed  # 53 bits survive JSON in a browser
         self.run = Run(ctx.assets, self.mode.key, ctx.save.skin, self.seed, shared_road, rival=rival)
@@ -125,7 +139,9 @@ class RaceScene(Scene):
             and self.pause_button.collidepoint(event.pos)
         ):
             pause = True
-        if pause:
+        if pause and self.realtime:
+            self.ctx.toast(NO_PAUSE)
+        elif pause:
             self.open_pause()
         elif action is Action.GIVE_UP and self.phase is Phase.RACING:
             self.finish(Outcome.GAVE_UP)
@@ -140,7 +156,9 @@ class RaceScene(Scene):
 
     def again(self) -> Scene:
         """A fresh race like this one (new seed), for REINICIAR and JOGAR DE NOVO."""
-        return RaceScene(self.ctx)
+        from .online import play
+
+        return play(self.ctx) if self.online is not None else RaceScene(self.ctx)
 
     def resume(self) -> None:
         self.ctx.audio.pause_music(False)
@@ -174,6 +192,7 @@ class RaceScene(Scene):
 
         if self.phase is Phase.RACING:
             self._react(self._step())
+            self._report()
             if self.run.outcome == "win":
                 self._win()
             elif self.run.known and self.run.outcome is None and self.run.tick == self.run.known:
@@ -195,6 +214,34 @@ class RaceScene(Scene):
         if self.run.known:  # a loaded log drives (--replay)
             return self.run.advance(self.run.tick + 1)
         return self.run.play(*self._controls())
+
+    def _report(self) -> None:
+        """Online: the inputs not sent yet, every REPORT ticks, and with fin once the run is over."""
+        run = self.run
+        if self.reported or not (run.outcome or run.tick % REPORT == 0):
+            return
+        msg: dict = {"t": "in", "m": self.online, "k": run.tick, "ev": run.ev[self.sent :]}
+        if run.outcome:
+            msg["fin"] = {"outcome": run.outcome, "score": run.score.total}
+            self.reported = True
+        self.sent = len(run.ev)
+        if self.ctx.net:
+            self.ctx.net.send(msg)
+
+    def on_net(self, msg: dict) -> None:
+        """Online: the server's result, or a closed socket, ends a run that is still on."""
+        if self.official != VERIFYING:  # offline, or settled
+            return
+        racing = self.phase in (Phase.COUNTDOWN, Phase.RACING)
+        if msg.get("t") == "result" and msg.get("m") == self.online:
+            self.official, why = official(msg, self.mode), "Corrida encerrada pelo servidor"
+        elif msg.get("t") == "closed":
+            self.official, why = LOST if racing else NO_RESULT, "Conexão perdida"
+        else:
+            return
+        self.reported = True
+        if racing:
+            self.finish(Outcome.GAVE_UP, why)
 
     def _controls(self) -> tuple[int, int]:
         """This tick's lane change and held keys (1 = up, 2 = down), as the input log records them."""
@@ -273,10 +320,13 @@ class RaceScene(Scene):
             self.world.particles.cannon(self.cannons[1], HEIGHT, -1)
             self.ctx.audio.music("win", loop=False, fade_ms=0)
 
-    def finish(self, outcome: Outcome) -> None:
+    def finish(self, outcome: Outcome, why: str = "") -> None:
         from .results import RaceStats, ResultsScene
 
+        if not self.reported and self.run.tick % REPORT == 0:  # a give-up on a tick already sent: every
+            self.run.play(0, self.run.held)  # message must move k on, so one more tick, with no new input
         self.run.stop("giveup")  # a crash or a win already ended it
+        self._report()
         if (folder := os.environ.get("JOGO_RECORD")) and not (self.piloted or self.run.known):  # nor a replay
             path = Path(folder) / f"{self.mode.key}-{self.seed}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -285,7 +335,9 @@ class RaceScene(Scene):
         save = self.ctx.save
         record = save.record(self.mode.key, save.skin, self.score.total, seconds)
         self.ctx.persist()
-        stats = RaceStats(outcome, self.mode, seconds, self.score, record, self.best)
+        stats = RaceStats(
+            outcome, self.mode, seconds, self.score, record, self.best, reason=why, official=self.official
+        )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
     def snapshot(self) -> pygame.Surface:
@@ -352,7 +404,8 @@ class RaceScene(Scene):
             blit_text(
                 surface, mode.name.upper(), 24, (box.right - 18, box.y + 13), mode.color, anchor="topright"
             )
-        self._draw_pause(surface)
+        if not self.realtime:  # online has no pause
+            self._draw_pause(surface)
 
         # score panel (top-right)
         box = pygame.Rect(WIDTH - 324, 20, 300, 104)
@@ -434,7 +487,10 @@ class RaceScene(Scene):
         return 0.0
 
     def _draw_hints(self, surface: pygame.Surface, k: float, bottom: int) -> None:
-        lines = PAD_HINTS if self.ctx.input.using_pad else KEY_HINTS
+        pad = self.ctx.input.using_pad
+        lines = PAD_HINTS if pad else KEY_HINTS
+        if self.realtime:  # online: no pause, R gives up
+            lines = lines[:-1] + (() if pad else (("R", "desistir"),))
         box = pygame.Rect(24, 0, 330, 16 + len(lines) * 30)
         box.bottom = bottom
         panel(surface, box, alpha=215 * k)

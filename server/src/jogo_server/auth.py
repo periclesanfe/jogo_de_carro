@@ -72,10 +72,10 @@ def session_user(db: sqlite3.Connection, token: str | None) -> tuple[sqlite3.Row
 
 def end_sessions(db: sqlite3.Connection, uid: int) -> None:
     """Logs the user out everywhere and voids their emailed links. For a new password, "sair de todos", a ban
-    and account deletion."""
+    and account deletion. In the server, app.end_sessions also closes the game's socket; a ban from the admin
+    command reaches it at its next start (hub.on_solo checks the session)."""
     db.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
     db.execute("DELETE FROM tokens WHERE email = (SELECT email FROM users WHERE id = ?)", (uid,))
-    # M3: hub.kick(uid) also closes the user's open WebSocket
 
 
 # --- emailed links (signup, forgotten password and "trocar senha" are one flow) -------------------------

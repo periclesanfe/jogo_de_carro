@@ -14,6 +14,7 @@ dependencies = [
     "authlib>=1.8",
     "httpx>=0.28.1",
     "itsdangerous>=2.2",
+    "websockets>=17.2",  # load.py's client (uvicorn[standard] serves with it too)
 ]
 
 [dependency-groups]

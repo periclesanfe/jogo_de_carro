@@ -410,8 +410,11 @@ def test_jogar_needs_a_session_and_a_nickname(s):
     assert r.status_code == 302 and r.headers["location"] == f"/jogo/{BUILD}/"
 
 
+SAUDE = {"golden": True, "ativas": 0, "loop_lag_ms": 0, "review": 0, "desync_24h": 0}
+
+
 def test_saude(s):
-    assert s.client().get("/saude").json() == {"build": BUILD, "golden": True}
+    assert s.client().get("/saude").json() == {"build": BUILD, **SAUDE}
 
 
 def test_startup_refuses_a_golden_mismatch(tmp_path):
@@ -428,12 +431,12 @@ def test_startup_passes_when_golden_matches_and_dev_skips_it(tmp_path, monkeypat
     cfg = config(tmp_path)
     (cfg.www / "jogo" / BUILD / "golden.txt").write_text("f" * 64 + "\n")
     with TestClient(site.create_app(cfg), base_url=BASE) as c:
-        assert c.get("/saude").json() == {"build": BUILD, "golden": True}
+        assert c.get("/saude").json().items() >= {"build": BUILD, "golden": True}.items()
 
     (cfg.www / "jogo" / BUILD / "golden.txt").write_text("0" * 64 + "\n")
     dev = config(tmp_path, dev=True, base="http://localhost:8090")
     with TestClient(site.create_app(dev), base_url=dev.base, headers={"origin": dev.base}) as c:
-        assert c.get("/saude").json() == {"build": BUILD, "golden": False}
+        assert c.get("/saude").json().items() >= {"build": BUILD, "golden": False}.items()
         r = c.post("/cadastro", data={"email": "ana@x.test"})  # dev: http origin, plain cookie names
         assert r.status_code == 200
 

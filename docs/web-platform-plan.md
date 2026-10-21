@@ -41,7 +41,7 @@ Verified while editing this plan (scripts in `scratchpad/design-final2/`; the re
 | Piece | Where | Tech + pin |
 |---|---|---|
 | Reverse proxy, TLS, static files | VPS, systemd, Caddy apt repo + `apt-mark hold` | **Caddy 2.11.7**, Let's Encrypt, `admin off`. Serves `/jogo/<build>/` and `/cdn/0.9.3/` as immutable files (`precompressed gzip`). Everything else goes to `127.0.0.1:8000` |
-| `jogo` app: pages, auth, `/ws`, hub, live verifier | VPS, systemd, user `jogo`, **1 uvicorn worker** (state lives in memory) | **CPython 3.12.12**: `uv python install cpython-3.12.12-linux-x86_64-gnu` (baseline build, not the `_v2/_v3/_v4` variants) into `/opt/uv-python`. **pygame-ce==2.5.7.** Libraries: starlette 1.7.0, uvicorn 0.54.0 + websockets, pydantic 2.13.5, jinja2 3.1.6, python-multipart 0.0.32, argon2-cffi 25.1.0, authlib 1.8.0, httpx 0.28.1, itsdangerous 2.2.0. `server/pyproject.toml` sets `[tool.uv] exclude-newer = "2026-10-06"`; `server/uv.lock` has hashes. `jogo_de_carro` is a path dependency from the same commit. No `pygame.init()` and no display |
+| `jogo` app: pages, auth, `/ws`, hub, live verifier | VPS, systemd, user `jogo`, **1 uvicorn worker** (state lives in memory) | **CPython 3.12.12**: `uv python install cpython-3.12.12-linux-x86_64-gnu` (baseline build, not the `_v2/_v3/_v4` variants) into `/opt/uv-python`. **pygame-ce==2.5.7.** Libraries: starlette 1.7.0, uvicorn 0.54.0 + websockets, jinja2 3.1.6, python-multipart 0.0.32, argon2-cffi 25.1.0, authlib 1.8.0, httpx 0.28.1, itsdangerous 2.2.0. `server/pyproject.toml` sets `[tool.uv] exclude-newer = "2026-10-06"`; `server/uv.lock` has hashes. `jogo_de_carro` is a path dependency from the same commit. No `pygame.init()` and no display |
 | Database | `/var/lib/jogo/jogo.db` | SQLite (stdlib), WAL, `foreign_keys=ON`, `busy_timeout=5000` |
 | Game client | browser | **pygbag 0.9.3** build. Runtime cp312 = CPython 3.12.12 + pygame-ce 2.5.7 (SDL 2.28.4). Mirrored to `/cdn/0.9.3/` and checked against `web/cdn.lock` |
 | Site pages | browser | Jinja2 templates (`*.html`, so they are autoescaped) + `site.css`. **No JavaScript** |
@@ -72,7 +72,7 @@ Verified while editing this plan (scripts in `scratchpad/design-final2/`; the re
 | `scenes/results.py` | `RaceStats.rival / .verdict / .official`. `on_net("result")` turns "verificando…" into one of: <br>• "✓ #37 no ranking Normal" <br>• "Em análise — entra no ranking após revisão" <br>• "Corrida invalidada: ritmo irregular" <br>Buttons: JOGAR DE NOVO / REVANCHE (an ordinary `invite`: same friend, same mode) / MENU / SITE. SAIR becomes SITE on web (`:46,:80`) |
 | `scenes/title.py` | Menu: JOGAR (ranked when `ctx.net`, otherwise offline), CONTRA O BOT, AMIGOS (web only), SKIN, DIFICULDADE, SAIR→SITE. No F11 hint on web |
 | `scenes/base.py` | `Context.net: Net \| None = None`; `Scene.on_net(msg)` does nothing by default |
-| `app.py` | `Game(net=None)`. Each frame, `net.poll()` routes messages: <br>• `match` → WaitScene("Preparando…"), then send `ready`; <br>• `go` → `RaceScene`/`VersusScene(seed=…)`; <br>• `invited` → push ConviteScene unless racing; <br>• `update` → toast, then reload; <br>• anything else → `scenes.top.on_net`. <br>Frame cap `min(frame_dt, 1.0 if top.realtime else MAX_FRAME)` (`:98`) |
+| `app.py` | `Game(net=None)`. Each frame, `net.poll()` routes messages: <br>• `match` → WaitScene("Preparando…"), then send `ready`; <br>• `go` → `RaceScene`/`VersusScene(seed=…)`; <br>• `invited` → push ConviteScene unless racing; <br>• `error version` → toast, then `/jogar` (once per build; (H)); <br>• anything else → `scenes.top.on_net`. <br>Frame cap `min(frame_dt, 1.0 if top.realtime else MAX_FRAME)` (`:98`) |
 | **new** `net.py` (~40) | • One **constant** JS string passed to `window.eval` defines `window.jws = new WebSocket(wss://location.host/ws)` and the `window.jq` queue, and reopens the socket after 2 s while in menus. <br>• `send(d)` calls `window.jws.send(json.dumps(d))` when `readyState==1`, otherwise buffers. Data is never formatted into `eval`. <br>• `poll()` drains `jq` into dicts |
 | `save.py` | localStorage on emscripten (`save_web.diff`) |
 | **new** `golden.py` (~70) | `digest()`, and `python -m jogo_de_carro.golden` prints `GOLDEN <sha256>`. It hashes: <br>• `t**0.8` over the accumulated `elapsed` and `elapsed+3` sequences up to 216k ticks; <br>• `exp(-r*FIXED_DT)` for r ∈ {9, 18, 1.8, 2.2, 4}; <br>• the lane-tween sequence; <br>• the bytes of **every collision mask**: `Assets.mask` for each sprite and shrink the sim uses, `bounds`, and the pothole ellipse mask; <br>• the `float.hex` results of `simulate()` on `tests/replays/*.json` (including a Difícil win and a trunk-heavy Infinito run) |
@@ -148,7 +148,7 @@ Verified while editing this plan (scripts in `scratchpad/design-final2/`; the re
 - **Game page:** `/jogar` requires a session and a nickname, then answers 302 to `/jogo/<BUILD>/index.html` (immutable, served by Caddy).
   - Auth: the same-origin WS carries `__Host-sid` automatically, so Python never handles a token.
   - Match parameters arrive only as WS messages. The URL carries only `?golden=1` and `?selftest=1`, both used by CI.
-- **The wasm loads once per visit** (2.4 s warm, 4–5 s cold). Ranked runs, rematches, bot races, live races and challenges all start inside it. It reloads only when the player navigates to an HTML page or the server sends `update`.
+- **The wasm loads once per visit** (2.4 s warm, 4–5 s cold). Ranked runs, rematches, bot races, live races and challenges all start inside it. It reloads only when the player navigates to an HTML page or the server refuses its version (`error version`).
 - **Mobile:** not supported. The site says "Jogue no computador (teclado ou controle)".
 
 ## 5. Backend (`server/`: `app.py` routes, `auth.py`, `hub.py`, `flags.py`, `db.py`, `mail.py`, `admin.py`, `load.py`, `templates/`)
@@ -236,7 +236,7 @@ CREATE INDEX runs_board ON runs(mode, score DESC) WHERE kind = 'solo' AND state 
 - `GET /saude` → `{build, golden:true, ativas, loop_lag_ms, review, desync_24h}`.
 - `WS /ws`.
 
-**WebSocket `/ws`** (JSON text frames). Envelopes are pydantic with `strict=True, extra="forbid"`, and `mode`/`skin` are typed `Literal`. Every `m` must equal `sock.match` and every `id` must belong to the sender, otherwise the server closes with 1008.
+**WebSocket `/ws`** (JSON text frames). Envelopes are checked by `hub.fits` against `hub.SHAPES` (no pydantic): every field present and no other, exact JSON types (`true` is no int), `mode`/`skin` one of the known values. Every `m` must equal `sock.match` and every `id` must belong to the sender, otherwise the server closes with 1008.
 ```
 C→S {"t":"hello","build":"<tree>","py":"3.12.12","pg":"2.5.7","skin":"yellow"}
 S→C {"t":"welcome","me":{"id":7,"nick":"pericles"},"friends":[{"id":42,"nick":"ana_42","s":"menu|racing|off"}],
@@ -271,7 +271,7 @@ S→C {"t":"challenge_new","id":77,...}   {"t":"challenge_done","id":77,"verdict
 
 **Hub mechanics** (`hub.py`):
 - **Clock:** `loop.time()`. A 100 ms ticker adds any oversleep beyond 50 ms to a global `stall`.
-- **Pacing:** each run stores `stall0` at `go`, and `lag = (now - t0) - (stall - stall0) - k/120`. A server hiccup is never blamed on the player. The 0.5 s sweeper skips its checks while the loop lags more than 0.5 s.
+- **Pacing:** each run stores `stall0` at `go`, and `lag = (now - t0) - credit - k/120`, where `credit` is the server's stall of the last 3 s (after `stall0`): the backlog a hiccup piles up is never blamed on the player, and the credit then lapses ((H)). The 0.5 s sweeper skips its checks while the loop lags more than 0.5 s.
 - **Sending:** `send()` is `wait_for(ws.send_text, 1)`; on timeout the socket is closed, so a client that never reads cannot stall broadcasts.
 - **Drain:** when `/srv/jogo/drain` exists, `solo`, `invite`, `challenge` and `challenge_play` get `drain`.
 - **Admission:** see the `MAX_ATIVAS` row above.
@@ -309,7 +309,7 @@ S→C {"t":"challenge_new","id":77,...}   {"t":"challenge_done","id":77,"verdict
    - It is revealed **only in `go`**, 2.25 s before tick 0, after `ready`.
    - Missing the 10 s `ready` deadline uses up the attempt: a solo run becomes `rejected/prazo`, and B loses the challenge.
    - The client never submits a seed. No public replay endpoint exists, so neither a seed nor a log can be fetched in any other way.
-   - This removes any offline search on a known course and any rehearsal of a challenge.
+   - This removes any rehearsal of a known course or of a challenge. It does not stop seed shopping: `leave` right after `go` costs nothing, so a bot can score each road offline and keep only the good ones, up to the 60 starts an hour (§6.10).
 3. **Stream:**
    - The client sends only inputs, every 100 ms.
    - The server assembles the log itself, plus the arrival time of each message.
@@ -336,9 +336,9 @@ S→C {"t":"challenge_new","id":77,...}   {"t":"challenge_done","id":77,"verdict
    - **Rule for ranks 11–100:** `(n≥30 and (p10<7 or median<12)) or adherence≥0.99` → `review/bot`. `lag_up` is only recorded until it is calibrated on beta data.
    - **Every run that would enter its mode's top 10** → `review/top10`. The player sees "Em análise".
    - **Review:** `admin revisar` lists the queue. The server emails `ADMIN_EMAIL` at most once an hour while the queue is not empty. The reviewer runs `admin export <run>` and replays it with `python -m jogo_de_carro --replay`. Then `admin aprovar | rejeitar | banir`.
-   - **Check:** `tests/test_flags.py`. Logs from `autopilot` and `Bot(0.07)` are flagged. Greedy logs and human logs recorded with `JOGO_RECORD` are not. The screen-planner bot is a **documented miss**, caught only by the top-10 hold.
+   - **Check:** `tests/test_flags.py`. Logs from `autopilot` and `Bot(0.07)` are flagged. Greedy logs and human logs recorded with `JOGO_RECORD` are not. The screen-planner bot is a **documented miss**, caught only by the top-10 hold. So is a **corridor reader with a human-scale delay** (0.10 s + up to 0.15 s a move): the spawner keeps 0.12 s of slack per planned move, so it wins every Normal, Fácil and Difícil run measured and is never flagged. Not flagged does not mean human. **Open:** before trusting the 11–100 rule, calibrate on `JOGO_RECORD` human logs with another feature (the spread of reaction ticks, p90 − p10, or a cap on adherence for long Normal/Difícil wins).
 8. **Versions:**
-   - `hello.build/py/pg` must equal the server's values, otherwise `update`.
+   - `hello.build/py/pg` must equal the server's values, otherwise `error version` (the game then goes to `/jogar` once per build; (H)).
    - The mirrored runtime is hash-locked.
    - The server asserts its versions and the golden digest on **its own CPU** at every start.
    - The web build and the server deploy from the same commit.
@@ -355,7 +355,9 @@ S→C {"t":"challenge_new","id":77,...}   {"t":"challenge_done","id":77,"verdict
      - masks → ship the precomputed mask bits as package data, loaded on both sides.
 10. **What can still be cheated, and why that's acceptable:**
     - **Real-time assisted play** (an in-page bot or a screen overlay). pygbag ships the source and the client must know the road to draw it. The measured screen-planner wins Normal 15 times out of 16 and is never flagged, so it can reach ranks 11–100. Top-10 human review, bans and the pacing checks limit the damage; it's a hobby game with no prizes.
-    - **Up to about 2 s of pacing slack.** It is bounded and leaves traces in `max_lag` and `lag_up`.
+    - **Corridor bots with a human-scale delay** (item 7) reach ranks 11–100 unflagged; only the top-10 hold and the reviewer's replay stop them.
+    - **Seed shopping** (item 2): a bot gives up right after `go` on roads it scored badly. Accepted as within the top-10 hold's scope; a tighter budget for early give-ups is the cheap limit if it shows up.
+    - **Up to about 2 s of pacing slack**, plus a server stall's length for the 3 s after it. It is bounded and leaves traces in `max_lag`, `arr` and `lag_up`.
     - **Multiple accounts:** each needs a proven email, and the top 10 is reviewed.
     - **Win-trading:** there is no public versus board.
 
@@ -437,7 +439,7 @@ S→C {"t":"challenge_new","id":77,...}   {"t":"challenge_done","id":77,"verdict
 | M0 | Determinism core: cubes, cached road surfaces, int seeds, `shared_road` + `VERSUS_ROWS`, bounds cache, canonical masks, input log, `run.py` (RaceScene steps through it), the W+S fix, `Bot`, `golden.py`, the log corpus, `JOGO_RECORD`, `--replay` | 350 | `pytest tests/test_run.py`: <br>• RaceScene with synthetic keys equals `Run` for all modes, solo and shared; <br>• 12-tick batches equal feeding the whole log; <br>• junk raises `BadInput`; <br>• the shared road gives the same placements for 3 drivers; <br>• bot levels are ordered; <br>• a Difícil win lands at the tick where `elapsed>=270`. <br>The 43 existing tests pass on both runtimes |
 | M1 | Web build + offline **bot versus** at `https://DOMAIN/jogo/` (public): `web/main.py`, OGG, localStorage, SITE, `VersusScene`, `BotScene`, results with rival, CDN mirror and lock, Caddy | 550 | CI golden gate (native == wasm); boot with external hosts blocked; `tests/test_versus.py` (headless versus against the Bot reaches a verdict; the rival's result equals `simulate`). Recorded by hand: p95 frame time on a real mid-range laptop, at 1× and under a 4× CPU throttle (the ≤ 20 ms gate is open, see (E)) |
 | M2 | Accounts: Starlette app, schema, email-link signup and reset, Google, sessions, `end_sessions`, Origin checks, rate limits, hashing budget, nickname, `/conta`, `/amigos`, `/privacidade`; systemd, setup.sh, backups, deploy with drain (drain moved to M3, see (F)) and the startup golden check | 1000 (450 py, 300 templates/css, 130 ops, 120 tests) | `server/tests/test_auth.py`, with a fake outbox and mocked Google: <br>• the link flow, and **GET `/senha` does not use up the token**; <br>• identical replies for known and unknown emails; <br>• the Google rules (a non-gmail address without `hd` is refused; missing userinfo fails closed); <br>• cookie flags; <br>• a new password kicks the open WS; <br>• 429s, including IPv6 /64 and the hash queue; <br>• cross-origin POST and WS are refused. <br>Also `test_friends.py` and the backup restore check |
-| M3 | **Ranked solo + public leaderboard + review tooling:** hub (hello/solo/ready/go/in/result), live re-sim, stall-compensated pacing, admission and drain, runs with arrivals, `flags.py`, top-10 hold, `admin revisar/aprovar/rejeitar/banir/export`, admin email, `/ranking`, `net.py`, `WaitScene`, online RaceScene, official result line, `load.py` | 700 | `server/tests/test_ranked.py` (TestClient WS, injectable clock): <br>• an honest log gives `ok` with the same score; <br>• altered inputs are scored by the server; <br>• 10× speed gives `adiantado`; <br>• 0.5× speed gives `ritmo`; <br>• **an injected 3 s loop stall leaves the run `ok`**; <br>• `true` or garbage gives `invalido`; <br>• **no seed before `go`**; <br>• the ready timeout gives `prazo`; <br>• a version mismatch gives `update`; <br>• a would-be top-10 run gets `review`; <br>• drain refuses `solo`; <br>• a foreign `m` gives 1008. <br>Also `test_flags.py` and the CI `NET OK` selftest. On the VPS, `python -m server.load --n 100` sets `MAX_ATIVAS`. 10 minutes over home Wi-Fi: `max_lag` < 1.0 s |
+| M3 | **Ranked solo + public leaderboard + review tooling:** hub (hello/solo/ready/go/in/result), live re-sim, stall-compensated pacing, admission and drain, runs with arrivals, `flags.py`, top-10 hold, `admin revisar/aprovar/rejeitar/banir/export`, admin email, `/ranking`, `net.py`, `WaitScene`, online RaceScene, official result line, `load.py` | 700 | `server/tests/test_ranked.py` (TestClient WS, injectable clock): <br>• an honest log gives `ok` with the same score; <br>• altered inputs are scored by the server; <br>• 10× speed gives `adiantado`; <br>• 0.5× speed gives `ritmo`; <br>• **an injected 3 s loop stall leaves the run `ok`**; <br>• `true` or garbage gives `invalido`; <br>• **no seed before `go`**; <br>• the ready timeout gives `prazo`; <br>• a version mismatch gives `error version`; <br>• a would-be top-10 run gets `review`; <br>• drain refuses `solo`; <br>• a foreign `m` gives 1008. <br>Also `test_flags.py` and the CI `NET OK` selftest. On the VPS, `python -m server.load --n 100` sets `MAX_ATIVAS`. 10 minutes over home Wi-Fi: `max_lag` < 1.0 s |
 | M4 | **Jogar com amigos (live):** presence, `AmigosScene`, `ConviteScene`, invites, rooms, gated relay, live verdict ending both runs, forfeit, REVANCHE as an invite | 420 | `server/tests/test_live.py` (two WS clients streaming corpus logs): <br>• `op` order is correct; <br>• **A never receives an `op` tick ≥ A.k+24**; <br>• the decision comes at the crash tick + 1 and both receive `result`; <br>• 5 s of silence forfeits; <br>• decline and expiry work; <br>• only the invitee can reply; <br>• a third user gets 1008. <br>Plus a written two-browser playtest checklist |
 | M5 | **Desafiar amigo** (async, A's run streamed back through the gate), `/partidas` | 200 | `server/tests/test_challenge.py`: <br>• B gets no seed before `go` and never the whole log; <br>• single attempt; <br>• ready timeout counts as a loss; <br>• expiry; <br>• early decision; <br>• A is notified; <br>• A's run `rejected` makes the match `void` |
 
@@ -614,7 +616,7 @@ All three: `X-Content-Type-Options: nosniff`. No COOP/COEP. `ops/nginx/jogo.conf
 
 `server/` (uv project `jogo-server`, package `jogo_server`): `app.py` (routes, `Config` from the environment, startup check), `auth.py` (sessions, links, hashing, rate limits, nicknames, Google's rules), `db.py`, `mail.py`, `schema.sql`, ten Jinja templates and `site.css`. 58 tests in `server/tests/`. uvicorn on `127.0.0.1:8090` behind nginx (§7's Caddy and port 8000 do not apply: (E), and 8000 is taken on the VPS).
 
-**Locked set** (`exclude-newer = "2026-10-07T03:00:00Z"`, the end of 2026-10-06 in Brasília written as an instant: uv reads a plain date in the local timezone, so `uv lock --check` failed on a UTC runner; now the same `uv.lock` from uv 0.12.23 and 0.13.3 in any timezone): exactly §2's versions (starlette 1.7.0, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, argon2-cffi 25.1.0, authlib 1.8.0, httpx 0.28.1, itsdangerous 2.2.0). No pydantic yet: only M3's WebSocket envelopes need it. authlib 1.8 and starlette 1.7 now warn that their httpx fallback is deprecated in favour of the `httpx2` fork; it works, the warnings are filtered in pytest. **Open:** move to httpx2 at the next bump.
+**Locked set** (`exclude-newer = "2026-10-07T03:00:00Z"`, the end of 2026-10-06 in Brasília written as an instant: uv reads a plain date in the local timezone, so `uv lock --check` failed on a UTC runner; now the same `uv.lock` from uv 0.12.23 and 0.13.3 in any timezone): exactly §2's versions (starlette 1.7.0, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, argon2-cffi 25.1.0, authlib 1.8.0, httpx 0.28.1, itsdangerous 2.2.0). No pydantic: M3's WebSocket envelopes are checked by `hub.fits` ((H)). authlib 1.8 and starlette 1.7 now warn that their httpx fallback is deprecated in favour of the `httpx2` fork; it works, the warnings are filtered in pytest. **Open:** move to httpx2 at the next bump.
 
 **Changed from §4/§5, or decided where they were silent:**
 - `Referrer-Policy: same-origin`, not `no-referrer`: with `no-referrer` Chrome sends `Origin: null` on the site's own form POSTs, so the Origin check refused every form. Found only in the headless-Chrome walk (TestClient always sends the header); `/senha?t=` still never leaks to another site.
@@ -636,13 +638,100 @@ All three: `X-Content-Type-Options: nosniff`. No COOP/COEP. `ops/nginx/jogo.conf
 
 **Ops (`ops/`), changed from §7 or decided where it was silent:**
 - One venv per deployed commit (`/srv/jogo/venvs/<sha>`, the 3 newest kept, always the running one); `venvs/current` switches by an atomic rename. A redeploy of the running commit reuses its venv.
-- No drain in M2 (no races to drop); M3 adds it before the restart.
+- No drain in M2 (no races to drop); M3 adds it before the restart (see (G)).
 - Before switching, `jogo-deploy` takes a verified database copy (`/var/backups/jogo/deploy-*`, 14 kept apart from the daily ones): the new server may migrate the schema at startup, and a rollback puts the previous server back on it.
 - A failed `/saude` check puts back `www/current` and the previous venv: the previous server would otherwise check its golden against the new build and refuse to start. Commits without `server/` only add their `jogo/<TREE>/` and never write `current` (a running newer server would check a foreign golden at its next restart). A first failed deploy, with no previous venv, leaves the service retrying every 5 s until a good deploy.
 - The deploy's output also goes to `/srv/jogo/cache/deploy.log` through `tee -p`, so a dropped CI connection can no longer kill the script (SIGPIPE) before its rollback.
 - After a failed `nginx -t`, `setup.sh` puts the previous site file back and does not reload: the running nginx never loaded the broken file, and a reload would also apply other sites' unreloaded edits.
 - Backups run at 04:00 America/Sao_Paulo as user `jogo` (a root `sqlite3` could leave root-owned `-wal`/`-shm` files), and each copy is restored and passes `PRAGMA integrity_check` before it joins the 14 kept. `ponytail:` local only; the off-site copy (C8) is the next step.
 - nginx keeps no access log and logs only critical errors (an error line carries the request, so an emailed link's token, and the player's address); `CF-Connecting-IP` is stripped before the app. `jogo.service` is hardened (`systemd-analyze security` 1.7). `setup.sh` writes `SESSION_SECRET` without putting it on a command line.
-- **Open:** uvicorn logs every WebSocket accept with the player's address even with `--no-access-log`: M3 runs it with `--log-level warning`. The deploy user cannot read `journalctl -u jogo`, so a failed deploy in CI only points there. `/` answers 502 from `setup.sh` until the first server deploy finishes. nginx listens on IPv4 only, as before.
+- **Open:** uvicorn logs every WebSocket accept with the player's address even with `--no-access-log`: M3's server lowers uvicorn's loggers to WARNING at startup (done, see (G)). The deploy user cannot read `journalctl -u jogo`, so a failed deploy in CI only points there. `/` answers 502 from `setup.sh` until the first server deploy finishes. nginx listens on IPv4 only, as before.
 
 **Checked by hand:** the dev site in headless Chrome 155 against an aiosmtpd sink: signup, the emailed link opened twice, password, a reserved nickname refused, nickname, a second player's friend request accepted, `/conta`, Sair, a wrong password, login, the used link refused, `/jogar` booting the game. Pages at 1280 and 390 px wide.
+
+---
+
+# (G) M3 operations notes (2026-10-20)
+
+**Changed from §7/§8, or decided where they were silent:**
+- **Drain file:** `/srv/jogo/cache/drain`, not `/srv/jogo/drain`.
+  - `/srv/jogo` belongs to root, so that `jogo` cannot replace its own deploy key, and the deploy runs as `jogo`.
+  - It is the server's `Config.drain` default; no setting names it (the review found `JOGO_DRAIN`, which had only that one allowed value, and the deploy's gate on it redundant: removed, (H)).
+- **Deploy order:** publish the build → newest-commit check → drain and wait → database copy → switch → health check → rollback if needed. The copy comes after the wait, so it holds the drained runs' results.
+- **Wait:**
+  - It polls `/saude` every 5 s.
+  - A server that reports no `ativas` (M2's) or does not answer means no wait.
+  - At 31 min it restarts anyway and says so. Every run that started before the drain has ended by then, so a count above zero is a server bug, and it must not block deploys forever.
+  - It prints a progress line each minute, which also keeps CI's ssh connection from idling out.
+- **Drain file removal:** an `EXIT` trap removes it on success, rollback, failure, timeout and `SIGTERM` (bash runs `EXIT` traps on `SIGTERM`; checked). Only `SIGKILL` leaves it behind: `rm /srv/jogo/cache/drain`. `ponytail:` two deploys queued on the flock drain twice; the second wait is usually seconds.
+- **`setup.sh` never restarts a running server**, because that dropped every live race. It only starts a stopped one. A changed unit or env takes effect at the next deploy, which drains first.
+- **`setup.sh` and an existing `/etc/jogo/env`:** left untouched, as in M2. The M3 keys (`MAX_ATIVAS`, `FLAG_*`) are in `env.example` for new boxes, and their values equal the server's defaults, so an older env behaves the same; add `MAX_ATIVAS` by hand after `jogo-admin load` (the first version appended the missing keys with awk; removed, (H)).
+- **uvicorn's address lines** (closes the (F) open item): with `--no-access-log` alone, uvicorn 0.54 still logs `<ip>:<port> - "WebSocket /ws" [accepted]` and "connection open" at INFO. The app sets `uvicorn.error` and `uvicorn.access` to WARNING in its lifespan, so neither line appears whatever the unit's flags (checked with real uvicorn at its default `info` level; (H)). The unit's `--log-level warning` was dropped as redundant; the app's own `jogo` logger has its own INFO handler and prints one line per finished run.
+- **`jogo-admin`** (`/usr/local/bin`, installed by `setup.sh`):
+  - It runs `python -I -B -m jogo_server.admin`, or `jogo_server.load` when the first argument is `load`, as `jogo`, in `venvs/current`, from `/`.
+  - The environment is clean. It holds exactly `/etc/jogo/env`'s `KEY=value` lines, read as data and passed through the environment (never a command line, never `source`), plus `PATH`, `LANG` and `PYGAME_HIDE_SUPPORT_PROMPT=1`. pygame's banner would otherwise go to stdout and corrupt `export`'s JSON. `load` needs the whole file, because it builds its config with `Config.from_env()`.
+  - A non-root caller is re-executed through sudo.
+  - §8's `python -m server.load --n 100` is `jogo-admin load --n 100`.
+- **New keys in `env.example`:** `MAX_ATIVAS=100`, and `FLAG_MIN_N=30`, `FLAG_P10=7`, `FLAG_MEDIAN=12`, `FLAG_ADHERENCE=0.99`. The `FLAG_*` values are §6.7's rule, with the reaction thresholds in ticks.
+
+**What ops relies on from the server:**
+- The drain file is checked on every new run, never cached at startup: the new server starts while the file still exists.
+- `/saude`'s `ativas` is an int that counts every run from admission to `result`.
+- `admin export` writes only the `--replay` log to stdout.
+
+**Checked** (before the review removed the deploy's `JOGO_DRAIN` gate, `setup.sh`'s env append and the unit's `--log-level warning`, so those lines below describe the earlier version) in a linux/amd64 Ubuntu 24.04 container. `systemctl` was a stub that runs `jogo.service`'s `ExecStart` as `jogo` with its `EnvironmentFile`; uv, the game venv and the server were stubs, and the origin repository was local. Results:
+- **An M2 box:** M2's `setup.sh`, the user's env edits (`MAIL_FROM` with spaces, a line holding `$(…)` and backticks), and the M2 server deployed by M2's `jogo-deploy`.
+- **M3 `jogo-deploy` before M3 `setup.sh`:** refused with the message; `current` and the running server were unchanged.
+- **M3 `setup.sh`:**
+  - The old env is a byte-identical prefix; mode and owner are kept; the six keys were appended with their comments, each key once.
+  - `jogo-admin` was installed, and the unit has `--log-level warning`.
+  - No restart, only `systemctl start`.
+  - A second run appends nothing.
+  - An env missing two keys and its final newline gets exactly those two, after the added newline.
+- **Deploy over the M2 server:** no wait, and the new server runs the M3 unit with `JOGO_DRAIN` and `MAX_ATIVAS`.
+- **Deploy with 2, then 1, then 0 live runs:**
+  - It waited about 18 s and restarted only after 0.
+  - The running server saw the drain file through its own `JOGO_DRAIN`.
+  - The backup came after the wait, and the drain file was gone afterwards.
+- **A new server that never comes up:** drain, rollback, exit 1, drain file removed.
+- **A run that never ends (cap lowered to 65 s for the test):** "(0 min)" and "(1 min)" lines, then "reiniciando assim mesmo", exit 0, file removed.
+- **`SIGTERM` while draining:** exit 143, file removed, nothing switched.
+- **`jogo-admin`:**
+  - It runs as `jogo` with cwd `/`, `-I`, and no `.pyc` written.
+  - `MAIL_FROM` arrives intact; the `$(…)` line arrives literally and nothing ran.
+  - The caller's `FOO` and `PYTHONPATH` did not pass through.
+  - `export` output is byte-identical to the stored log; `load --n 3` gets the env.
+  - A user without sudo rights is refused.
+- **Lint and unit check:** `shellcheck -x` is clean, and `systemd-analyze verify jogo.service` passes.
+
+**Not checked:** the real server under systemd's sandbox, CI's real ssh connection through a long drain, and the real `admin`/`load` modules on the VPS (first M3 deploy).
+
+---
+
+# (H) M3 server and client notes (2026-10-21)
+
+**Server, changed from §5/§6 or decided where they were silent:**
+- **Envelopes:** `hub.fits` against `hub.SHAPES`, no pydantic: exact JSON types (`true` is no int), every field and no other, `mode`/`skin` from the known values, frames up to 16 KB, 30 messages/s with a burst of 60. `fin.score` must also be in `0 ≤ score < 2**53` (it is stored; a 2**63 overflowed SQLite and left the row `live`). A wrong frame voids the run (`invalido`), then `error bad` and close 1008.
+- **Login:** a logged-out or nickname-less socket is accepted, gets `error login` (its own text without a nickname), then 1008, so the game plays offline and CI's `NET OK` gets a reply. A cross-origin socket is refused before accept (uvicorn answers 403). A kicked session (sair de todos, new password, deleted account) gets `login` too; a second tab gets `busy`. The game never reconnects by itself after `login`, `version` or `busy`.
+- **Version:** a mismatch is `error version`, not `update`.
+- **`welcome`** carries only `me`; friends, challenges and requests come with M4/M5.
+- **Order inside `in`:** `feed` (validation), then pacing, then `advance`. `k` must be checked before `k/120`, or a huge int overflows the float. A non-`fin` `in` must have `k` on the 12-tick grid, so `arr` holds at most one entry per 12 ticks.
+- **Give-ups:** `leave` after `go` gives up at the last `k`; before `go` it uses the attempt up (`prazo`). A `fin` must move `k` on, as every other `in` (the client plays one more tick for a give-up on a reported tick); the first version's special case for `k == last k, ev: []` was dead and was removed.
+- **Pacing and stalls:** `adiantado` uses the raw lag (a stall only makes messages later). `ritmo` subtracts a **credit**: the server's stall of the last 3 s (after the run's `go`), from a deque of the ticker's marks. It covers the backlog a stall piles up, and lapses 3 s after it; the first version subtracted every stall since `go` for the rest of the run, so one 3 s stall turned the 2 s limit into 5 s. The rate limit's ceiling grows by 30 messages per second of the same credit, so a 7 s stall's 70-message backlog no longer voids honest runs. `max_lag` stores the compensated lag; the raw arrival of every message is in `arr`.
+- **`arr`:** `[k, ms after t0]` per message (`lag_up` needs `k`). It is the time the server handled the message: a backlog lands at once. `lag_up` leaves out the last wall-clock second, so a run that ends inside a stall does not count the stall as a rise.
+- **The board:** table `bests` (one row per player and mode: the best `ok` solo run), kept by the trigger `runs_bests` whenever a run enters or leaves `ok` (the hub's end, `admin aprovar`, `rejeitar`). `board()` and `place()` read it, so a run's end and the pages cost the same with a million stored runs as with a thousand (measured at 1M runs, 2000 players: `board` 1.9 ms, `place` 0.6 ms; it was 965 ms and 1413 ms). Every run is still stored.
+- **Holds:** a new best that would enter the top 10 waits for review (`review/top10`), unless it scores 0 (nothing to verify: it is `ok`). One run per player and mode waits at a time: a run no better than the one in review is `rejected/substituida`; a better one replaces it (the old one becomes `rejected/substituida`). The bot rule applies to new bests that would place 11–100.
+- **Starts:** 60 ranked starts an hour per player, then `error rate`.
+- **Memory:** a worst-case run (keys toggled every tick until the 54k-event cap) holds about 6.3 MB traced: the events are most of it, and `arr` is a flat `array('i')` (18k arrivals in 144 KB; as lists they took 2.3 MB). `MAX_ATIVAS=100` is about 700 MB with the server's 61 MB, under the unit's `MemoryMax=1G`. Size `MAX_ATIVAS` by CPU with `jogo-admin load` and keep it at 100 or below unless `MemoryMax` grows.
+- **No `matches` table** and no `match_id` yet: M4 adds them.
+- **Known misses** (§6.7, §6.10): corridor readers with a human-scale delay are not flagged; seed shopping by instant give-ups is possible within the start limit. Both are left to the top-10 hold and review.
+
+**Client, changed from §3:**
+- **A version refusal goes to `/jogar`**, not a reload: the page `/jogo/<old tree>/` is immutable, so a reload brings the old build back. At most once per build (`sessionStorage`); refused again, the runtime itself differs and the game plays offline.
+- **A give-up on a tick already reported** plays one more tick with no input and sends `fin` with `k = previous + 1, ev: []`.
+- **The hello names the car**, so a skin changed before JOGAR opens a new socket with a new hello.
+- **Refusals** show the server's own text (`hub.REFUSED`, short enough for the waiting screen's heading); the game keeps no table of its own.
+- **Double `solo`:** Esc before the match and JOGAR again within one round trip can send a second `solo` while the first run is live, which the hub treats as a violation (1008). It needs a round trip over about 0.6 s (menu transitions block input for 0.3 s each).
+- **`result` can arrive before the client's `fin`** (the server's simulation crashed first); the client takes it as the end of the run.
+
+**Ops, after review:** no `JOGO_DRAIN` setting and no deploy gate on it; `setup.sh` no longer appends keys to an existing `/etc/jogo/env`; uvicorn's address lines are silenced by the app alone ((G)). Re-running `setup.sh` from the M3 commit's `ops/` before its deploy is still the rollout (it installs `jogo-admin` and the no-restart behaviour), but the deploy no longer enforces it.

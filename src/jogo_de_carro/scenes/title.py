@@ -44,9 +44,9 @@ class TitleScene(MenuScene):
         self.ctx.audio.play("ui_select")
         scenes = self.ctx.scenes
         if choice == 0:
-            from .race import RaceScene
+            from .online import play
 
-            scenes.switch(RaceScene(self.ctx), Transition.FADE)
+            scenes.switch(play(self.ctx), Transition.FADE)  # ranked when logged in to the site
         elif choice == 1:
             from .garage import GarageScene
 

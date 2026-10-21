@@ -137,9 +137,9 @@ python -m http.server 4173 --directory build/www   # open http://localhost:4173/
 
 `build/www` is the whole static site: `index.html` redirects to `jogo/<tree>/` (and `current` names it, for the server's `/jogar`), the game, named after everything it is built from (`git rev-parse HEAD:src/jogo_de_carro HEAD:web HEAD:tools/web_build.py | git hash-object --stdin`, or `dev` while those have uncommitted changes), and `cdn/` holds pygbag's runtime, checked against `web/cdn.lock`. Everything but the top `index.html` and `current` can be cached forever. In the browser the save lives in localStorage, and `?golden=1` on the game's URL logs `GOLDEN <sha256>` to the browser console instead of starting the game.
 
-On pushes to `main` and `web-platform` and on pull requests, CI builds the site and opens `?golden=1` in headless Chrome with every host but localhost blocked: the digest must equal `python -m jogo_de_carro.golden` on CPython 3.12.12. On a push to `main` or `web-platform` it then sends the build to the VPS, where `ops/jogo-deploy` (the deploy key's only command) installs that commit, refuses it unless the VPS's own digest matches too, and publishes it into `/srv/jogo/www`. Each deploy of a commit with `server/` installs the server into `/srv/jogo/venvs/<sha>`, copies the database, writes `/srv/jogo/www/current` and restarts `jogo.service` (only while that commit is still its branch's newest). `/saude` must report the new build with `golden: true` within 60 s; otherwise the deploy switches back to the previous server and build and fails. Its output is also kept in `/srv/jogo/cache/deploy.log`. One-time VPS setup, as root, from a copy of `ops/` taken outside `/srv/jogo`:
+On pushes to `main` and `web-platform` and on pull requests, CI builds the site and opens `?golden=1` in headless Chrome with every host but localhost blocked: the digest must equal `python -m jogo_de_carro.golden` on CPython 3.12.12. On a push to `main` or `web-platform` it then sends the build to the VPS, where `ops/jogo-deploy` (the deploy key's only command) installs that commit, refuses it unless the VPS's own digest matches too, and publishes it into `/srv/jogo/www`. Each deploy of a commit with `server/` installs the server into `/srv/jogo/venvs/<sha>`, drains the running server (it creates `/srv/jogo/cache/drain`, so no new ranked run starts, and waits until `/saude` reports `"ativas": 0`, at most 31 minutes), copies the database, writes `/srv/jogo/www/current` and restarts `jogo.service` (only while that commit is still its branch's newest). The drain file goes away on every way out; only a killed (`SIGKILL`) deploy can leave it behind: `rm /srv/jogo/cache/drain`. `/saude` must report the new build with `golden: true` within 60 s; otherwise the deploy switches back to the previous server and build and fails. Its output is also kept in `/srv/jogo/cache/deploy.log`. One-time VPS setup, as root, from a copy of `ops/` taken outside `/srv/jogo`:
 
-1. `bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'` (the certificate from `certbot --nginx --no-redirect -d jogo.pericles.dev.br` must already exist) creates the `jogo` user, the pinned Python, the checkout, `/srv/jogo/www`, `/var/lib/jogo`, `/etc/jogo/env` (once, with a random `SESSION_SECRET`; fill Google/SMTP later, then `systemctl restart jogo`), `jogo.service` and its only sudo rule, the needrestart exclusion, the daily backup (`/var/backups/jogo`, 14 copies, each verified by a restore; restore steps in `ops/jogo-backup`) and the nginx site (`nginx -t`, previous file restored if it fails). Re-run it whenever `ops/` changes.
+1. `bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'` (the certificate from `certbot --nginx --no-redirect -d jogo.pericles.dev.br` must already exist) creates the `jogo` user, the pinned Python, the checkout, `/srv/jogo/www`, `/var/lib/jogo`, `/etc/jogo/env` (once, with a random `SESSION_SECRET`; fill Google/SMTP later, then `systemctl restart jogo`; never overwritten: a key `ops/env.example` gained later is the server's default until you add it), `jogo.service` and its only sudo rule, `jogo-admin`, the needrestart exclusion, the daily backup (`/var/backups/jogo`, 14 copies, each verified by a restore; restore steps in `ops/jogo-backup`) and the nginx site (`nginx -t`, previous file restored if it fails). Re-run it whenever `ops/` changes, with the same key. It never restarts a running server (that would drop live races): a changed unit or env takes effect at the next deploy.
 2. In the repository's `deploy` environment, set the secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY` (the private half of that key) and `DEPLOY_KNOWN_HOSTS` (the line `setup.sh` prints). The deploy job is skipped until `DEPLOY_HOST` exists.
 
 ## Servidor
@@ -154,7 +154,33 @@ JOGO_DEV=1 JOGO_DB=jogo-dev.db JOGO_WWW=../build/www SMTP_HOST=localhost SMTP_PO
   uv run uvicorn jogo_server.app:app --port 8090   # open http://localhost:8090 (not 127.0.0.1: POSTs must come from DOMAIN)
 ```
 
-`JOGO_DEV=1` serves the site over http on `localhost:8090` (or `DOMAIN`), skips the runtime check, sends mail without STARTTLS to any local SMTP sink (for example `python -m aiosmtpd -n -l localhost:1025`) and serves `build/www`'s `/jogo/` and `/cdn/` itself. In production the settings come from `/etc/jogo/env` (`ops/env.example`): without `GOOGLE_CLIENT_ID` the Google button is hidden, and without `SMTP_HOST` signup says email is unavailable. `GET /saude` answers `{"build": ..., "golden": true}`.
+`JOGO_DEV=1` serves the site over http on `localhost:8090` (or `DOMAIN`), skips the runtime check, sends mail without STARTTLS to any local SMTP sink (for example `python -m aiosmtpd -n -l localhost:1025`) and serves `build/www`'s `/jogo/` and `/cdn/` itself. In production the settings come from `/etc/jogo/env` (`ops/env.example`): without `GOOGLE_CLIENT_ID` the Google button is hidden, and without `SMTP_HOST` signup says email is unavailable. `GET /saude` answers `{"build": ..., "golden": true, "ativas": ...}` (`ativas`: ranked runs in progress, from M3).
+
+## Ranked runs and review (M3)
+
+Logged in on the web, JOGAR is a ranked run: the server reveals the seed only when the race starts, receives the inputs as they are played, re-simulates the run with the same code and checks it keeps real-time pace, and the score it computes is the official one (`/ranking`: the best run per player and mode). Without a login the game plays offline as before. A run that would enter its mode's top 10, or that the bot detector flags, shows "Em análise" and waits for review; the server emails `ADMIN_EMAIL` at most once an hour while the queue is not empty.
+
+On the VPS, M3 adds:
+
+- **The drain** in `ops/jogo-deploy` (see "Web build and deploy"); `/saude` reports `ativas`.
+- **`jogo-admin`**, the server's admin CLI run as user `jogo` in the running server's venv with `/etc/jogo/env`'s settings.
+- **New settings** in `ops/env.example`: `MAX_ATIVAS` (runs at once; more get "Servidor cheio") and the bot detector's `FLAG_*` thresholds. Their values there are the server's defaults, so an existing `/etc/jogo/env` needs them only to change one: add the line by hand.
+- **No player addresses in the journal:** the server lowers uvicorn's loggers to WARNING at startup (uvicorn otherwise logs every WebSocket connection with the player's address, even with `--no-access-log`).
+
+Rolling it out, once: re-run `setup.sh` from a copy of the M3 commit's `ops/` before its deploy (it installs `jogo-admin` and stops restarting a running server).
+
+Reviewing the queue, from the Mac (`meuhubprod` logs in as root):
+
+```bash
+ssh meuhubprod jogo-admin revisar                  # what waits for review
+ssh meuhubprod 'jogo-admin export 123' > run.json  # run 123's input log
+python -m jogo_de_carro --replay run.json          # watch it here; Esc pauses
+ssh meuhubprod jogo-admin aprovar 123              # into the ranking; or: rejeitar 123, banir <apelido>
+```
+
+The replay is the server's own simulation, so replay it with game code equal to the run's build: `/srv/jogo/cache/deploy.log` pairs each deployed commit with its `jogo/<tree>/`.
+
+Setting `MAX_ATIVAS`: while the site is quiet (the test competes with the live server for the VPS's two vCPUs), run `ssh meuhubprod jogo-admin load --n 100` (then other values of `--n`). It plays that many real-time ranked runs against a scratch copy of the server and reports the event loop's lag, the CPU used and every result: take the largest `n` whose p99 lag stays well under 500 ms with no run rejected for `ritmo` or `adiantado`, leave room for the other sites, and put `MAX_ATIVAS=<n>` in `/etc/jogo/env`. Memory bounds it too: a worst-case run holds about 6.5 MB, so keep `n` at 100 or below unless `MemoryMax=1G` in `jogo.service` grows. The next deploy applies it, draining first; `systemctl restart jogo` applies it at once but drops the races in progress.
 
 ## Credits
 

@@ -286,6 +286,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "starlette" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -305,6 +306,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "starlette", specifier = ">=1.7" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54" },
+    { name = "websockets", specifier = ">=17.2" },
 ]
 
 [package.metadata.requires-dev]

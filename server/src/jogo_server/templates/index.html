@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "placar.html" import placar %}
 {% block main %}
 <section class="hero">
   <img src="/icone.png" alt="" width="96" height="96">
@@ -20,5 +21,14 @@
   {% endif %}
   <p class="muted small">Jogue no computador, com teclado ou controle.</p>
 </div>
-<p class="muted small center">Em breve: ranking, corridas com amigos e desafios.</p>
+<div class="card">
+  <h1>Ranking</h1>
+  {% for m, top in tops %}
+  <section>
+    <h2><a href="/ranking?modo={{ m.key }}">{{ m.name }}</a></h2>
+    {% if top %}{{ placar(top, user) }}{% else %}<p class="muted small">Ninguém ainda.</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+<p class="muted small center">Em breve: corridas com amigos e desafios.</p>
 {% endblock %}

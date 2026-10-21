@@ -37,13 +37,14 @@ def config(tmp_path, **changes) -> site.Config:
         smtp_password="",
         mail_from="Jogo de Carro <nao-responda@jogo.test>",
         admin_email="admin@jogo.test",
+        drain=tmp_path / "drain",
     )
     return dataclasses.replace(cfg, **changes)
 
 
 class Site:
-    def __init__(self, app) -> None:
-        self.app = app
+    def __init__(self, app, main: TestClient) -> None:
+        self.app, self.main = app, main  # main runs the lifespan: its event loop is the hub's
         self.outbox: list[tuple[str, EmailMessage]] = []  # (to, message) instead of SMTP
         app.state.send_mail = lambda *message: self.outbox.append(message)
 
@@ -51,10 +52,20 @@ class Site:
     def db(self):
         return self.app.state.db
 
+    @property
+    def hub(self):
+        return self.app.state.hub
+
+    @property
+    def portal(self):
+        return self.main.portal
+
     def client(self, ip: str = "203.0.113.7") -> TestClient:
-        return TestClient(
+        client = TestClient(
             self.app, base_url=BASE, headers={"origin": BASE}, client=(ip, 50000), follow_redirects=False
         )
+        client.portal = self.main.portal  # one event loop for every request and socket, as in production
+        return client
 
     def user(
         self, email: str, nick: str | None = None, password: str | None = None, google_sub: str | None = None
@@ -84,14 +95,18 @@ class Site:
 
 @pytest.fixture
 def make_site(tmp_path, monkeypatch):
-    """make_site(**config changes) -> a started Site (the startup golden check is tested on its own)."""
+    """make_site(clock=None, **config changes) -> a started Site (the startup golden check is tested on its
+    own). With a clock, the hub's ticker does not run: the test calls hub.tick() as its clock advances."""
     monkeypatch.setattr(site, "check_runtime", lambda cfg, build: None)
     with contextlib.ExitStack() as stack:
 
-        def make(**changes) -> Site:
+        def make(clock=None, **changes) -> Site:
             app = site.create_app(config(tmp_path, **changes))
-            stack.enter_context(TestClient(app))  # runs the lifespan until the test ends
-            return Site(app)
+            if clock:
+                app.state.clock = clock
+            main = TestClient(app)
+            stack.enter_context(main)  # runs the lifespan until the test ends
+            return Site(app, main)
 
         yield make
 

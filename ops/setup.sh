@@ -4,8 +4,10 @@
 #   bash setup.sh 'ssh-ed25519 AAAA... jogo-ci'
 # Re-run it after changing anything under ops/: every step is safe to repeat. It creates the "jogo" user that
 # the CI logs in as and that runs the server, the pinned Python runtime and a checkout of the repo; installs
-# ops/jogo-deploy as that key's only command, jogo.service and its one sudo rule, the daily backup, and the
-# nginx site (whose certificate must already exist). /etc/jogo/env is created once and never overwritten.
+# ops/jogo-deploy as that key's only command, jogo.service and its one sudo rule, the daily backup, the
+# jogo-admin wrapper and the nginx site (whose certificate must already exist). /etc/jogo/env is created once and
+# never overwritten. A running server is never restarted (that would drop live races): a changed unit or env
+# takes effect at the next deploy, which drains first.
 set -euo pipefail
 here=$(realpath "$(dirname "$0")")
 [[ $here != /srv/jogo* ]] || { echo "rode de uma cópia fora de /srv/jogo" >&2; exit 2; }
@@ -46,8 +48,8 @@ install -d -m 750 -o jogo -g jogo /var/lib/jogo  # the database; the only place 
 install -d -m 700 -o jogo -g jogo /var/backups/jogo
 [[ -d /srv/jogo/app/.git ]] || runuser -u jogo -- git clone --quiet "$REPO" /srv/jogo/app
 runuser -u jogo -- git -C /srv/jogo/app fetch --quiet origin
-# the deploy and backup scripts come from the commit this setup.sh was downloaded from
-install -m 755 -o root -g root "$here/jogo-deploy" "$here/jogo-backup" /usr/local/bin/
+# the deploy, backup and admin scripts come from the commit this setup.sh was downloaded from
+install -m 755 -o root -g root "$here/jogo-deploy" "$here/jogo-backup" "$here/jogo-admin" /usr/local/bin/
 echo "restrict,command=\"/usr/local/bin/jogo-deploy\" $key" >/srv/jogo/.ssh/authorized_keys
 chmod 644 /srv/jogo/.ssh/authorized_keys
 
@@ -88,7 +90,8 @@ systemctl daemon-reload
 systemctl enable --quiet --now jogo-backup.timer
 systemctl enable --quiet jogo.service
 if [[ -e /srv/jogo/venvs/current ]]; then
-    systemctl restart jogo.service  # picks up a changed unit or env; the first deploy starts it otherwise
+    systemctl start jogo.service  # only if stopped: a restart drops live races; the first deploy starts it otherwise
+    echo "jogo.service não foi reiniciado: mudanças na unit ou no /etc/jogo/env valem no próximo deploy"
 fi
 
 # The nginx site. The running nginx only ever loads a config that passed nginx -t; when it fails, the previous
