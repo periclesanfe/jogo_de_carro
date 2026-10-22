@@ -46,7 +46,10 @@ async def main() -> None:
     if query.get("selftest") == ["1"]:
         say(await selftest())
         return
-    await Game(net=Net()).run()
+    game = Game(net=Net())
+    # tools/web_build.py's loading screen goes with the first frame, which run() draws before it first yields
+    platform.window.eval("document.getElementById('loader')?.remove()")
+    await game.run()
 
 
 asyncio.run(main())
