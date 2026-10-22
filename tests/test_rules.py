@@ -118,9 +118,10 @@ def test_corrupt_save_falls_back_to_defaults(tmp_path, content):
 
 def test_partial_save_keeps_valid_fields(tmp_path):
     path = tmp_path / "save.json"
-    path.write_text(json.dumps({"skin": "red", "best": {"normal": 50, "bogus": 1}}), encoding="utf-8")
+    raw = {"skin": "tank", "best": {"normal": 50, "bogus": 1}, "best_by_skin": {"tank": 7, "purple": 1}}
+    path.write_text(json.dumps(raw), encoding="utf-8")
     data = save.load(path)
-    assert data.skin == "red" and data.best == {"normal": 50}
+    assert data.skin == "tank" and data.best == {"normal": 50} and data.best_by_skin == {"tank": 7}
 
 
 def test_unwritable_save_does_not_crash(tmp_path):

@@ -12,6 +12,8 @@ import sys
 
 import pygame
 
+from .settings import CARS
+
 try:
     from ._build import BUILD  # written into the web build by tools/web_build.py
 except ImportError:
@@ -35,10 +37,11 @@ class Net:
     def __init__(self) -> None:
         platform.window.eval(_JS)
         self.up = False  # a socket is open or opening
-        self.skin = ""  # the car its hello named
+        self.skin = ""  # the car its hello named, then the one the server races with (welcome)
         self.error: str | None = None  # the last error code the server sent on it
         self.me: dict | None = None  # {"id", "nick"} once welcomed
         self.coins: int | None = None  # the wallet as the server last said it (welcome, each result's wallet)
+        self.owned: list[str] = []  # the paid cars the account owns (welcome, wallet)
         self.friends: dict[int, dict] = {}  # id -> {"id", "nick", "s": "menu|racing|off"}, kept by presence
         self.requests = 0  # friend requests waiting on the site
         self.challenges: list[dict] = []  # received, open: {"id", "from", "mode", "secs", "score"}
@@ -48,7 +51,7 @@ class Net:
         """A new socket (any open one is closed); its hello goes first."""
         py = ".".join(map(str, sys.version_info[:3]))
         hello = {"t": "hello", "build": BUILD, "py": py, "pg": pygame.version.ver, "skin": skin}
-        self.up, self.skin, self.error, self.me, self.coins = True, skin, None, None, None
+        self.up, self.skin, self.error, self.me, self.coins, self.owned = True, skin, None, None, None, []
         self.friends, self.challenges = {}, []
         self._out = [json.dumps(hello)]
         platform.window.eval("window.jopen()")
@@ -72,9 +75,13 @@ class Net:
                 self.me, self.requests = msg.get("me"), msg.get("requests", 0)
                 self.friends = {f["id"]: f for f in msg.get("friends", [])}
                 self.challenges = list(msg.get("challenges", []))
-                self.coins = msg.get("coins")
+                self.coins, self.owned = msg.get("coins"), msg.get("owned", [])
+                if msg.get("skin") in CARS:  # the hello's car, or yellow when the account does not own it
+                    self.skin = msg["skin"]
             elif msg.get("t") == "result":  # the balance itself: never added up here
                 self.coins = msg.get("wallet")
+            elif msg.get("t") == "wallet":  # the answer to every buy, bought or not
+                self.coins, self.owned = msg.get("coins"), msg.get("owned", [])
             elif msg.get("t") == "challenge_new":
                 self.challenges.append(msg)
             elif msg.get("t") == "presence" and msg.get("id") in self.friends:

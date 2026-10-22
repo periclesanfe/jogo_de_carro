@@ -13,8 +13,10 @@ import pytest
 from jogo_de_carro.app import NEW_BUILD, Game
 from jogo_de_carro.net import _JS, Net
 from jogo_de_carro.run import MAX_MESSAGE, MAX_STEP, Run
-from jogo_de_carro.scenes import online, race, results, title, versus
+from jogo_de_carro.save import load
+from jogo_de_carro.scenes import garage, online, race, results, title, versus
 from jogo_de_carro.scenes.base import Transition
+from jogo_de_carro.scenes.garage import KEYS, GarageScene
 from jogo_de_carro.scenes.online import LOST, NO_RESULT, VERIFYING, AmigosScene, ConviteScene, WaitScene
 from jogo_de_carro.scenes.race import NO_PAUSE, Outcome, Phase, RaceScene
 from jogo_de_carro.scenes.results import VERDICTS, ResultsScene
@@ -437,9 +439,9 @@ def invited(game: Game, window: Window, id: str, mode: str = "facil", ttl: int =
 
 @pytest.fixture
 def drawn(monkeypatch) -> list[str]:
-    """Every string the online, versus, results and title scenes draw."""
+    """Every string the online, versus, results, title and garage scenes draw."""
     seen: list[str] = []
-    for module in (online, versus, results, title):
+    for module in (online, versus, results, title, garage):
         real = module.blit_text
         monkeypatch.setattr(
             module,
@@ -1167,3 +1169,125 @@ def test_offline_races_on_the_web_say_coins_need_the_site(game, monkeypatch, dra
             frames(game, 2)
             assert game.scenes.top.stats.wallet == (online.NO_COINS if web else "")
             assert (online.NO_COINS in drawn) == web
+
+
+# --- Garagem e loja (E2) ----------------------------------------------------------------------------------
+
+
+def garage_at(game: Game, key: str) -> GarageScene:
+    scene = GarageScene(game.ctx)
+    scene.target = KEYS.index(key)
+    game.scenes.switch(scene, Transition.NONE)
+    frames(game, 2)
+    return scene
+
+
+def test_the_server_names_the_car_it_races_with(game, window):
+    """welcome's skin is the car the server races with, yellow for a car the account does not own: the save
+    takes it too, so JOGAR keeps the socket; welcome lists the cars the account owns."""
+    game.ctx.save.skin = "tank"
+    game.ctx.persist()
+    game.ctx.net.connect("tank")
+    window.accept()
+    me = {"id": 7, "nick": "pericles"}
+    window.reply(t="welcome", me=me, friends=[], requests=0, coins=320, skin="yellow", owned=["beetle"])
+    frames(game, 2)
+    net = game.ctx.net
+    assert (net.skin, game.ctx.save.skin, net.owned) == ("yellow", "yellow", ["beetle"])
+    assert load(game.ctx.save_path).skin == "yellow"
+    key(game, pygame.K_RETURN, 1)  # JOGAR
+    assert len(window.sockets) == 2 and window.sent[-1] == {"t": "solo", "mode": "normal"}
+
+
+def test_a_car_chosen_before_the_welcome_stays_chosen(game, window):
+    """A welcome answers the hello that went out: a car picked since then stays (JOGAR takes it to a new
+    socket), and a paid car the account owns is picked like a free one."""
+    garage_at(game, "blue")  # the hello named yellow; its welcome is on the way
+    key(game, pygame.K_RETURN)
+    me = {"id": 7, "nick": "pericles"}
+    window.reply(t="welcome", me=me, friends=[], requests=0, coins=0, skin="yellow", owned=["beetle"])
+    frames(game, 2)
+    assert game.ctx.save.skin == "blue" == load(game.ctx.save_path).skin
+    scene = garage_at(game, "beetle")
+    assert not scene.locked("beetle")
+    key(game, pygame.K_RETURN)
+    assert game.ctx.save.skin == "beetle"
+    until(game, lambda: not game.scenes.busy, 2)
+    key(game, pygame.K_UP, 2)
+    key(game, pygame.K_RETURN, 1)  # JOGAR
+    window.accept()
+    frames(game, 1)
+    assert len(window.sockets) == 2 and window.sent[0]["skin"] == "beetle"
+
+
+def test_a_locked_car_is_never_chosen_offline(tmp_path, monkeypatch, drawn):
+    """Offline every paid car is locked but the one already chosen: ENTER picks nothing, and the line says
+    where to buy it."""
+    game = Game(save_path=tmp_path / "save.json", seed=3)
+    for web, line in ((False, "Disponível na versão online"), (True, "Entre no site para comprar")):
+        monkeypatch.setattr(garage, "WEB", web)
+        scene = garage_at(game, "beetle")
+        key(game, pygame.K_RETURN)
+        assert game.scenes.top is scene and game.ctx.save.skin == "yellow" and line in drawn
+    game.ctx.save.skin = "beetle"  # chosen online before: still its own
+    drawn.clear()
+    garage_at(game, "beetle")
+    assert "Recorde com este carro: 0 · SELECIONADO" in drawn
+    key(game, pygame.K_RETURN)
+    assert isinstance(game.scenes.top, TitleScene) and game.ctx.save.skin == "beetle"
+
+
+def test_the_garage_sells_a_car_on_the_second_enter(game, window, monkeypatch, drawn):
+    monkeypatch.setattr(garage, "WEB", True)
+    played, popped = [], []
+    monkeypatch.setattr(game.ctx.audio, "play", lambda name, *a: played.append(name))
+    monkeypatch.setattr(garage, "blit_pop", lambda surface, label, *a, **k: popped.append(label))
+    me = {"id": 7, "nick": "pericles"}
+    window.reply(t="welcome", me=me, friends=[], requests=0, coins=1640, skin="yellow", owned=["beetle"])
+    scene = garage_at(game, "bat")
+    assert "Faltam 6.360 moedas" in drawn
+    key(game, pygame.K_RETURN, 2)
+    key(game, pygame.K_RETURN, 2)  # too dear: nothing to confirm
+    scene.target = KEYS.index("sedan67")
+    drawn.clear()
+    frames(game, 2)
+    assert "1.500 moedas · você tem 1.640" in drawn
+    key(game, pygame.K_RETURN, 2)
+    assert "ENTER de novo para comprar por 1.500" in drawn
+    key(game, pygame.K_RIGHT, 2)
+    key(game, pygame.K_LEFT, 2)  # moving on asks again
+    key(game, pygame.K_RETURN, 2)
+    assert not [m for m in window.sent if m["t"] == "buy"] and game.scenes.top is scene
+    key(game, pygame.K_RETURN, 2)
+    assert [m for m in window.sent if m["t"] == "buy"] == [{"t": "buy", "skin": "sedan67"}]
+    assert scene.locked("sedan67") and game.ctx.save.skin == "yellow" and "record" not in played
+
+    key(game, pygame.K_RETURN, 2)  # asks again while the answer is on its way
+    window.reply(t="wallet", coins=1640, owned=["beetle"])  # not bought: nothing to celebrate, ask anew
+    frames(game, 2)
+    assert game.ctx.save.skin == "yellow" and "record" not in played and not popped and scene.armed is None
+    key(game, pygame.K_RETURN, 2)
+    key(game, pygame.K_RETURN, 2)
+    key(game, pygame.K_RIGHT, 2)  # the answer finds the carousel on another car
+
+    window.reply(t="wallet", coins=140, owned=["beetle", "sedan67"])
+    frames(game, 2)
+    assert (game.ctx.net.coins, game.ctx.net.owned) == (140, ["beetle", "sedan67"])
+    assert game.ctx.save.skin == "sedan67" == load(game.ctx.save_path).skin
+    assert "record" in played and scene.particles.items and "LIBERADO!" in popped
+    key(game, pygame.K_LEFT, 2)
+    assert game.scenes.top is scene and "Recorde com este carro: 0 · SELECIONADO" in drawn
+
+
+def test_the_garage_says_what_stops_a_buy(game, window, monkeypatch, drawn):
+    """One coin short, and a dropped socket: it keeps its last wallet, but a buy could not go out."""
+    monkeypatch.setattr(garage, "WEB", True)
+    me = {"id": 7, "nick": "pericles"}
+    window.reply(t="welcome", me=me, friends=[], requests=0, coins=1499, skin="yellow", owned=[])
+    garage_at(game, "sedan67")
+    assert "Falta 1 moeda" in drawn
+    window.drop()
+    scene = garage_at(game, "jdm94")  # 800: in the wallet
+    key(game, pygame.K_RETURN, 2)
+    key(game, pygame.K_RETURN, 2)
+    assert "Sem conexão com o servidor" in drawn and scene.armed is None and scene.buying is None

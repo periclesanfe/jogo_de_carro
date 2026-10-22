@@ -8,6 +8,7 @@
     export <corrida>    o log de entradas (v1), para: python -m jogo_de_carro --replay run.json
 
 O banco é $JOGO_DB (/var/lib/jogo/jogo.db). Banido, o jogo aberto cai na próxima corrida que tentar começar.
+Estorno de um carro, sem comando: DELETE FROM garage WHERE user_id = ? AND skin = ? (o preço volta ao saldo).
 """
 
 import json

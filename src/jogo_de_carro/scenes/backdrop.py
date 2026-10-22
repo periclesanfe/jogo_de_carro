@@ -4,7 +4,7 @@ import random
 
 import pygame
 
-from ..settings import HEIGHT, NORMAL, SKINS, WIDTH
+from ..settings import CARS, HEIGHT, NORMAL, SKINS, WIDTH
 from ..world.autopilot import autopilot
 from ..world.world import World
 from .base import Context
@@ -25,7 +25,7 @@ class Backdrop:
             ctx.backdrop = cls(ctx)
             for _ in range(240):  # warm up so traffic is already on screen
                 ctx.backdrop.update(1 / 60)
-        ctx.backdrop.world.player.skin = ctx.save.skin if ctx.save.skin in SKINS else SKINS[0]
+        ctx.backdrop.world.player.skin = ctx.save.skin if ctx.save.skin in CARS else SKINS[0]
         return ctx.backdrop
 
     def update(self, dt: float) -> None:

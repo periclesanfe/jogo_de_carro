@@ -70,19 +70,43 @@ class Item(Enum):
     SHIELD = "shield"
 
 
-SKINS: tuple[str, ...] = ("yellow", "black", "blue", "pink", "red", "white")
-SKIN_NAMES = {
-    "yellow": "Amarelo",
-    "black": "Preto",
-    "blue": "Azul",
-    "pink": "Rosa",
-    "red": "Vermelho",
-    "white": "Branco",
+SKINS: tuple[str, ...] = ("yellow", "black", "blue", "pink", "red", "white")  # the free cars; traffic's paint
+# every car, in the garage's order: key (what runs.skin, the garage table and the save store) -> (name,
+# price in coins, 0: free). A name or price changes with no migration; the key never does.
+CARS: dict[str, tuple[str, int]] = {
+    "yellow": ("Amarelo", 0),
+    "black": ("Preto", 0),
+    "blue": ("Azul", 0),
+    "pink": ("Rosa", 0),
+    "red": ("Vermelho", 0),
+    "white": ("Branco", 0),
+    "beetle": ("Herbie 53", 300),
+    "moto": ("Moto", 300),
+    "taxi": ("Táxi", 300),
+    "kombi": ("Kombi", 300),
+    "jdm94": ("Toyota Supra MK4", 800),
+    "muscle70": ("Dodge Charger R/T 70", 800),
+    "fins59": ("Cadillac Series 62", 800),
+    "rc_buggy": ("Carrinho RC (Toy Story)", 800),
+    "sedan67": ("Impala 67 (Sobrenatural)", 1500),
+    "mystery_van": ("Máquina Mistério", 1500),
+    "stone_age": ("Carro dos Flintstones", 1500),
+    "formula": ("Fórmula 1", 1500),
+    "monster": ("Monster Truck", 1500),
+    "robot_camaro": ("Bumblebee", 3000),
+    "cyber": ("Cybertruck", 3000),
+    "racer5": ("Mach 5", 3000),
+    "racer95": ("Relâmpago McQueen", 5000),
+    "tank": ("Tanque de Guerra", 5000),
+    "bat": ("Batmóvel", 8000),
+    "robot_truck": ("Optimus Prime", 8000),
 }
+PRICE = {k: p for k, (_, p) in CARS.items() if p}
+assert tuple(CARS)[: len(SKINS)] == SKINS
 
 # name -> (frame width, frame height, frame count) at native resolution; frames are laid out horizontally.
 SPRITES: dict[str, tuple[int, int, int]] = {
-    **{f"car_{skin}": (24, 40, 2) for skin in SKINS},
+    **{f"car_{key}": (24, 40, 2) for key in CARS},
     "truck": (28, 64, 2),
     "van": (26, 48, 2),
     "stone": (24, 22, 1),
