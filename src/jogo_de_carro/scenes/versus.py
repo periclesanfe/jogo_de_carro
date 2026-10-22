@@ -30,7 +30,7 @@ from ..world.autopilot import BOT_LEVELS, Bot
 from ..world.scoring import Score
 from ..world.world import Controls
 from .base import Context, MenuScene, Scene, Transition, menu_hint
-from .online import CHALLENGE_LOST, LOST, NO_RESULT, WHY
+from .online import CHALLENGE_LOST, LOST, NO_RESULT, WHY, paid
 from .race import REPORT, Outcome, Phase, RaceScene
 
 BOT_NAMES = {"facil": "FÁCIL", "medio": "MÉDIO", "dificil": "DIFÍCIL"}
@@ -132,6 +132,7 @@ class VersusScene(RaceScene):
             self.line(),
             self.official,
             button=self.button,
+            wallet=self.wallet,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
@@ -320,6 +321,7 @@ class LiveScene(VersusScene):
             self.end = (msg["k"], str(msg.get("why")))
         elif t == "result" and self.result is None:
             self.result, self.reported = msg, True  # it ended my run too: nothing more to send
+            self.wallet = paid(msg)
             self.verdict = VERDICTS.get(msg.get("verdict"))
             if self.verdict is None:  # void
                 self.finish(self._outcome(), "Corrida encerrada pelo servidor")

@@ -13,7 +13,7 @@ import pytest
 from jogo_de_carro.app import NEW_BUILD, Game
 from jogo_de_carro.net import _JS, Net
 from jogo_de_carro.run import MAX_MESSAGE, MAX_STEP, Run
-from jogo_de_carro.scenes import online, race, results, versus
+from jogo_de_carro.scenes import online, race, results, title, versus
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.online import LOST, NO_RESULT, VERIFYING, AmigosScene, ConviteScene, WaitScene
 from jogo_de_carro.scenes.race import NO_PAUSE, Outcome, Phase, RaceScene
@@ -406,9 +406,8 @@ def welcome(
     game: Game, window: Window, friends: list = FRIENDS, requests: int = 0, challenges: tuple = ()
 ) -> None:
     me = {"id": 7, "nick": "pericles"}
-    window.reply(
-        t="welcome", me=me, friends=copy.deepcopy(friends), requests=requests, challenges=list(challenges)
-    )
+    friends, challenges = copy.deepcopy(friends), list(challenges)
+    window.reply(t="welcome", me=me, friends=friends, requests=requests, challenges=challenges, coins=320)
     frames(game, 2)
 
 
@@ -438,9 +437,9 @@ def invited(game: Game, window: Window, id: str, mode: str = "facil", ttl: int =
 
 @pytest.fixture
 def drawn(monkeypatch) -> list[str]:
-    """Every string the online and versus scenes draw."""
+    """Every string the online, versus, results and title scenes draw."""
     seen: list[str] = []
-    for module in (online, versus):
+    for module in (online, versus, results, title):
         real = module.blit_text
         monkeypatch.setattr(
             module,
@@ -1094,3 +1093,77 @@ def test_jogar_with_the_socket_down(game, window):
     window.drop()
     frames(game, 1)
     assert game.scenes.top.label == "Desafio perdido: conexão perdida"
+
+
+# --- Carteira (E1) ----------------------------------------------------------------------------------------
+
+
+def test_the_wallet_is_the_servers_number(window):
+    """net.coins is welcome's coins, then each result's wallet as it comes (never added up here); a new socket
+    has none until its welcome."""
+    net = Net()
+    net.connect("yellow")
+    window.accept()
+    window.reply(t="welcome", me={"id": 7, "nick": "pericles"}, friends=[], requests=0, coins=320)
+    net.poll()
+    assert net.coins == 320
+    window.reply(t="result", m=5, state="ok", why=None, rank=3, coins=37, wallet=300)  # a rejection meanwhile
+    net.poll()
+    assert net.coins == 300
+    net.connect("yellow")
+    assert net.coins is None
+
+
+def test_the_title_shows_the_wallet_once_the_server_said_it(game, window, drawn):
+    frames(game, 2)
+    before = set(drawn)
+    window.reply(t="welcome", me={"id": 7, "nick": "pericles"}, friends=[], requests=0, coins=4321)
+    drawn.clear()
+    frames(game, 2)
+    assert set(drawn) ^ before == {"4.321"}, "the chip, and nothing else, once the balance came"
+
+
+def test_the_results_say_what_the_run_paid(game, window, drawn):
+    """The server's numbers on the official line: what the run paid (0 too) and the wallet after it."""
+    assert online.paid({"coins": 1, "wallet": 321}) == "+1 moeda · carteira 321"
+    race = jogar(game, window)
+    until(game, lambda: race.phase is Phase.RACING, 4)
+    key(game, pygame.K_r, 1)  # gives up
+    results = game.scenes.top
+    paid = {"coins": 37, "wallet": 357}
+    window.reply(t="result", m=901, run=1, state="ok", why=None, outcome="giveup", rank=37, **paid)
+    drawn.clear()
+    frames(game, 30)
+    assert results.stats.wallet == "+37 moedas · carteira 357" and game.ctx.net.coins == 357
+    assert "#37 no ranking Normal · +37 moedas · carteira 357" in drawn  # its ✓ is drawn apart
+
+    race = jogar(game, window, 902)  # JOGAR DE NOVO; the server stops it while racing: it paid nothing
+    race.world.invulnerable = True
+    until(game, lambda: race.phase is Phase.RACING, 4)
+    window.reply(t="result", m=902, run=2, state="rejected", why="ritmo", rank=None, coins=0, wallet=357)
+    frames(game, 1)
+    assert game.scenes.top.stats.wallet == "+0 moedas · carteira 357"
+
+
+def test_a_live_race_card_says_what_it_paid(game, window):
+    race = live(game, window)
+    race.world.invulnerable = True
+    tick(race)
+    result = {"t": "result", "m": M, "run": M, "state": "ok", "why": None, "outcome": "decided", "score": 1}
+    window.reply(**result, secs=None, rank=None, verdict="win", op={"nick": "ana_42"}, coins=12, wallet=332)
+    until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
+    assert game.scenes.top.stats.wallet == "+12 moedas · carteira 332" and game.ctx.net.coins == 332
+
+
+def test_offline_races_on_the_web_say_coins_need_the_site(game, monkeypatch, drawn):
+    """Offline on the web (logged out, or the bot) nothing is paid, and the card says so; the desktop does
+    not speak of a wallet."""
+    for web in (False, True):
+        monkeypatch.setattr(race, "WEB", web)
+        for scene in (RaceScene(game.ctx), VersusScene(game.ctx, "medio")):
+            game.scenes.switch(scene, Transition.NONE)
+            scene.finish(Outcome.GAVE_UP)
+            drawn.clear()
+            frames(game, 2)
+            assert game.scenes.top.stats.wallet == (online.NO_COINS if web else "")
+            assert (online.NO_COINS in drawn) == web

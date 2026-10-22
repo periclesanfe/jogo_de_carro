@@ -14,6 +14,7 @@ VERIFYING = "verificando…"
 LOST = "Corrida invalidada: conexão perdida"  # the socket closed mid-race
 CHALLENGE_LOST = "Desafio perdido: conexão perdida"  # ...in a challenge: the server counts it as a loss
 NO_RESULT = "Conexão perdida antes do resultado"  # ...after the run ended, before the server's result
+NO_COINS = "Moedas só ficam na carteira nas corridas online"  # the web build's offline races (bot included)
 WHY = {
     "ritmo": "ritmo irregular",
     "adiantado": "mais rápida que o relógio",
@@ -45,6 +46,12 @@ def official(result: dict, mode: Difficulty, to: str = "") -> str:
     if result.get("state") == "review":
         return "Em análise — entra no ranking após revisão"
     return f"Corrida invalidada: {why}"
+
+
+def paid(result: dict) -> str:
+    """What a result message's run paid, and the wallet after it: the server's numbers, as they are."""
+    n = result.get("coins", 0)  # 1.200 moedas · carteira 46.900
+    return f"+{n:,} moeda{'' if n == 1 else 's'} · carteira {result.get('wallet', 0):,}".replace(",", ".")
 
 
 def play(ctx: Context) -> Scene:

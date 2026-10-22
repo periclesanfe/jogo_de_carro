@@ -139,6 +139,7 @@ def test_honest_run_is_ok_with_the_servers_score(s, clock, board, no_bot_rule):
     assert res == {
         "t": "result", "m": r.m, "run": r.m, "state": "ok", "why": None, "outcome": "crash",
         "score": want.score.total, "secs": round(want.seconds, 1), "rank": 11, "verdict": None, "op": None,
+        "coins": want.score.coins, "wallet": want.score.coins,
     }  # fmt: skip
     db, score = row(s, r.m), want.score.total
     assert (db["state"], db["ticks"], db["score"], db["client_score"]) == ("ok", want.tick, score, score)

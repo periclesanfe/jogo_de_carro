@@ -102,8 +102,10 @@ CREATE TABLE garage(user_id INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
 
 ```python
 PAID = "(state IN ('ok', 'review') OR why IN ('substituida', 'conexao'))"
-BALANCE = (f"(SELECT coalesce(sum(coins), 0) FROM runs WHERE user_id = :u AND {PAID})"
-           " - (SELECT coalesce(sum(price), 0) FROM garage WHERE user_id = :u)")
+BALANCE = (
+    f"(SELECT coalesce(sum(coins), 0) FROM runs WHERE user_id = :u AND {PAID})"
+    " - (SELECT coalesce(sum(price), 0) FROM garage WHERE user_id = :u)"
+)
 BUY = f"INSERT OR IGNORE INTO garage SELECT :u, :skin, :price WHERE {BALANCE} >= :price"  # atômico: 1 comando
 # ponytail: o saldo é um SUM pelo índice runs_user; guardar em users só se um profile mostrar custo
 ```
@@ -239,6 +241,7 @@ owned = {r[0] for r in self.db.execute("SELECT skin FROM garage WHERE user_id = 
 sock.skin = d["skin"] if d["skin"] not in PRICE or d["skin"] in owned else "yellow"  # troca, nunca recusa
 welcome |= {"skin": sock.skin, "coins": self.balance(sock.uid), "owned": sorted(owned)}
 
+
 async def on_buy(self, sock, d, now):  # SHAPES["buy"] = {"skin": tuple(PRICE)}
     self.db.execute(BUY, {"u": sock.uid, "skin": d["skin"], "price": PRICE[d["skin"]]})  # já tem/falta: nada
     await self.send(sock, self.wallet(sock.uid))  # {"t": "wallet", "coins": n, "owned": [...]}
@@ -373,8 +376,11 @@ NO_NEAR_MISS = PROTECT | {Item.SLOW}
 # spawner: a rolagem, a chance (0,04), o cooldown (25 s) e o primeiro em 15 s de hoje; um sorteio a mais escolhe
 if t >= self.next_item_t and rng.random() < ITEM_CHANCE:
     self.next_item_t = t + ITEM_COOLDOWN
-    pool = [i for i, p in POWERS.items()
-            if (self.mode.win_s or not p.capped) and not (i is Item.LIFE and self.life_placed)]
+    pool = [
+        i
+        for i, p in POWERS.items()
+        if (self.mode.win_s or not p.capped) and not (i is Item.LIFE and self.life_placed)
+    ]
     item = rng.choices(pool, weights=[POWERS[i].weight for i in pool])[0]
     self.life_placed |= item is Item.LIFE
     return [ItemPlacement(item, LANE_CENTERS[lane], g)]  # na faixa livre reservada

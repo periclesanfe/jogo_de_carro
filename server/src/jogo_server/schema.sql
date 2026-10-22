@@ -104,3 +104,11 @@ CREATE TRIGGER runs_void AFTER UPDATE OF state ON runs
 BEGIN
   UPDATE matches SET state = 'void', winner = NULL WHERE id = NEW.match_id;
 END;
+
+-- migration 5
+ALTER TABLE runs ADD COLUMN coins INTEGER;  -- run.score.coins as the server simulated it, paid or not (audit)
+-- an account deleted: the cascade through its matches would delete the rival's runs too, and their coins
+CREATE TRIGGER matches_keep_runs BEFORE DELETE ON matches
+BEGIN
+  UPDATE runs SET match_id = NULL WHERE match_id = OLD.id;
+END;

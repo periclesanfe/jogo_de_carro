@@ -91,6 +91,7 @@ class TitleScene(MenuScene):
         self._draw_logo(surface)
         self.menu.draw(surface)
         self._draw_footer(surface)
+        self._draw_wallet(surface)
 
     def _draw_logo(self, surface: pygame.Surface) -> None:
         bob = math.sin(self.clock * 1.8) * 5
@@ -102,6 +103,21 @@ class TitleScene(MenuScene):
         surface.blit(self.icon, self.icon.get_rect(midleft=(x, cy - 4 * math.sin(self.clock * 3.1))))
         surface.blit(self.logo, self.logo.get_rect(midleft=(x + self.icon.get_width() + 18, cy)))
         blit_text(surface, "desvie · colete · sobreviva", 30, (WIDTH // 2, cy + 70), ACCENT)
+
+    def _draw_wallet(self, surface: pygame.Surface) -> None:
+        """The wallet as the server last said it, top right: online only (offline and desktop have none)."""
+        net = self.ctx.net
+        if not net or net.coins is None:
+            return
+        label = f"{net.coins:,}".replace(",", ".")  # 46.900
+        rect = pygame.Rect(0, 20, 68 + text(label, 30).get_width(), 44)
+        rect.right = WIDTH - 24
+        panel(surface, rect, alpha=190, radius=22)
+        coin = self.ctx.assets.frame("coin")
+        surface.blit(coin, coin.get_rect(midleft=(rect.x + 6, rect.centery)))
+        blit_text(
+            surface, label, 30, (rect.right - 18, rect.centery), ACCENT, anchor="midright", shadow=False
+        )
 
     def _draw_footer(self, surface: pygame.Surface) -> None:
         save, mode = self.ctx.save, self.ctx.mode
