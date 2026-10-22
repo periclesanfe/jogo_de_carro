@@ -32,10 +32,9 @@ TOOLS = ROOT / "tools"
 Color = tuple[int, ...]
 Surf = pygame.Surface
 
-SKINS = ("yellow", "black", "blue", "pink", "red", "white")
-# name -> (frames, frame_w, frame_h). Everything is transparent except the road tile.
+# name -> (frames, frame_w, frame_h). Everything is transparent except the road tile. The cars (car_<key>,
+# one per CAR_DESIGNS key) join it further down.
 SPRITES: dict[str, tuple[int, int, int]] = {
-    **{f"car_{c}": (2, 24, 40) for c in SKINS},
     "truck": (2, 28, 64),
     "van": (2, 26, 48),
     "stone": (1, 24, 22),
@@ -492,19 +491,700 @@ def deco_van(s: Surf, g: dict) -> None:  # teal delivery van: roof ribs + vent
         put(s, 12, y, VAN[0])
 
 
-CAR_DESIGNS: dict[str, tuple[str, Callable[[Surf, dict], None] | None, Sequence[Color]]] = {
+# Shop cars on vehicle() (route A): pearl Herbie 53, Supra MK4, Bumblebee, Mach 5, McQueen; 3x5 race digits
+CAR_RAMPS["beetle"] = [(122, 122, 142), (180, 180, 198), (224, 224, 234), (244, 243, 248), (255, 255, 255)]
+CAR_RAMPS["jdm94"] = [(132, 36, 8), (206, 74, 12), (248, 116, 24), (255, 164, 70), (255, 216, 160)]
+CAR_RAMPS["robot_camaro"] = [(150, 100, 0), (222, 168, 0), (255, 212, 18), (255, 236, 102), (255, 252, 204)]
+CAR_RAMPS["racer5"] = WHITE
+CAR_RAMPS["racer95"] = [(104, 8, 20), (176, 18, 30), (224, 34, 38), (255, 92, 76), (255, 184, 164)]
+BEETLE_RED, BEETLE_BLUE, RACER95_YELLOW = (214, 36, 44), (34, 70, 182), (255, 214, 40)
+
+STYLES["beetle"] = dict(  # round nose and tail, fenders bulging 2 px out of the cabin
+    insets={1: 6, 2: 4, 3: 2, 4: 1, 5: 0, 13: 1, 14: 2, 25: 1, 26: 0, 35: 1, 36: 2, 37: 3, 38: 5},
+    wheels=[(6, 12), (28, 34)],
+    ws=(12, 14), roof=(15, 23), rear=(24, 25), glass_in=3, roof_in=4, head=3,
+)  # fmt: skip
+
+# 3x5 race-number font (Herbie, Mach 5, McQueen)
+DIGITS = {
+    "0": ("###", "#.#", "#.#", "#.#", "###"), "1": (".#.", "##.", ".#.", ".#.", "###"),
+    "2": ("###", "..#", "###", "#..", "###"), "3": ("###", "..#", "###", "..#", "###"),
+    "4": ("#.#", "#.#", "###", "..#", "..#"), "5": ("###", "#..", "###", "..#", "###"),
+    "6": ("###", "#..", "###", "#.#", "###"), "7": ("###", "..#", "..#", ".#.", ".#."),
+    "8": ("###", "#.#", "###", "#.#", "###"), "9": ("###", "#.#", "###", "..#", "###"),
+}  # fmt: skip
+
+
+def digits(s: Surf, x: int, y: int, text: str, c: Color) -> None:
+    for i, ch in enumerate(text):
+        s.blit(art(DIGITS[ch], {"#": c}), (x + 4 * i, y))
+
+
+BEETLE_ROUNDEL = (  # Herbie's "53" plate: thin grey ring, white field, 1 px margin round 7x5 of digits
+    "..ooooooo..", ".o.......o.", "o.........o", "o.........o", "o.........o",
+    "o.........o", "o.........o", ".o.......o.", "..ooooooo..",
+)  # fmt: skip
+
+
+def beetle_disc(s: Surf, x: int, y: int, w: int, h: int, c: Color) -> None:
+    """Filled ellipse in the box (x, y, w, h): roundels for race numbers."""
+    for py in range(y, y + h):
+        for px in range(x, x + w):
+            if ((px + 0.5 - x - w / 2) / (w / 2)) ** 2 + ((py + 0.5 - y - h / 2) / (h / 2)) ** 2 < 1.1:
+                put(s, px, py, c)
+
+
+def deco_beetle(s: Surf, g: dict) -> None:  # Herbie: fenders, RWB stripe, "53" roundels, louvres
+    r = CAR_RAMPS["beetle"]
+    # repaint the panels by column: fender | crease | lid | crease | fender (fender tops catch the light)
+    shade = {3: 3, 4: 4, 5: 1, 6: 3, 17: 1, 18: 1, 19: 3, 20: 1}
+    for y in range(g["top"], g["bot"] + 1):
+        for x in range(g["x0"][y], g["x1"][y] + 1):
+            if g["ws"][0] <= y <= 25 and 5 <= x <= 18:  # cabin: leave glass and roof alone
+                continue
+            i = shade.get(x, 2)
+            if y == g["top"]:  # nose row lit, last two rows in shade, as vehicle() does
+                i = min(4, i + 1)
+            elif y >= g["bot"] - 1:
+                i = 0 if y == g["bot"] else min(i, 1)
+            put(s, x, y, r[i])
+    for x in (6, 7, 16, 17):  # small, rounded rear window; round the roof dome's corners
+        put(s, x, 24, r[3] if x < 12 else r[1])
+        put(s, x, 25, r[3] if x < 12 else r[1])
+    for x, y in ((7, 15), (16, 15), (7, 23), (16, 23)):
+        put(s, x, y, GLASS[1])
+    for x, y, c in ((5, 3, HEAD[1]), (4, 4, HEAD[1]), (5, 4, HEAD[0])):  # round headlamps on the fenders
+        put(s, x, y, c)
+        put(s, 23 - x, y, c)
+    for x, y in ((4, 35), (5, 36)):  # small tail lamps on the rear fenders
+        put(s, x, y, TAIL[1])
+        put(s, 23 - x, y, TAIL[1])
+    for y in range(1, 39):  # stripe: red, white, blue, left of centre, over everything but glass
+        if g["ws"][0] <= y <= g["ws"][1] or 24 <= y <= 25:
+            continue
+        for x, c in ((8, BEETLE_RED), (9, BEETLE_RED), (10, r[4]), (11, BEETLE_BLUE), (12, BEETLE_BLUE)):
+            if s.get_at((x, y))[3]:
+                put(s, x, y, c)
+    for y in (26, 28):  # engine-lid louvres either side of the stripe
+        hline(s, 6, 7, y, r[0])
+        hline(s, 13, 16, y, r[0])
+    for y in (2, 29):  # "53" in a ringed white roundel on the front lid and the engine lid
+        s.blit(art(BEETLE_ROUNDEL, {"o": r[0], ".": r[4]}), (6, y))
+        digits(s, 8, y + 2, "53", OUT)
+
+
+def deco_jdm94(s: Surf, g: dict) -> None:  # Supra MK4: hoop wing on two legs, four round tail lamps
+    r = CAR_RAMPS["jdm94"]
+    hline(s, 5, 18, 28, r[4])  # the raised blade: lit top, trailing edge...
+    hline(s, 5, 18, 29, r[2])
+    hline(s, 6, 17, 30, (64, 16, 4))  # ...and its shadow on the deck between the legs
+    hline(s, 6, 17, 31, r[0])
+    for y in range(29, 36):  # legs arch out and down to the rear quarters
+        lx = 5 if y < 31 else 4
+        put(s, lx, y, r[4] if y < 33 else r[3])
+        put(s, lx + 1, y, r[1])
+        put(s, 23 - lx, y, r[1])
+        put(s, 22 - lx, y, r[3] if y < 31 else r[2])
+    hline(s, 6, 17, 37, r[1])
+    hline(s, 6, 17, 38, r[0])
+    for cx in (4, 7, 15, 18):  # four round lamps: 2x2 with a hot top-left
+        for dx, dy, c in ((0, 0, TAIL[2]), (1, 0, TAIL[1]), (0, 1, TAIL[1]), (1, 1, TAIL[0])):
+            put(s, cx + dx, 36 + dy, c)
+
+
+def deco_robot_camaro(s: Surf, g: dict) -> None:  # Bumblebee: twin black stripes, red Autobot face
+    for y in range(g["top"] + 1, g["bot"]):
+        if g["ws"][0] <= y < g["r0"] or 23 <= y <= 25:  # not over the glass
+            continue
+        for x in (8, 9, 14, 15):
+            put(s, x, y, (20, 20, 28) if x in (8, 14) else (44, 44, 56))
+    for x, y in ((10, 3), (13, 3), (10, 4), (11, 4), (12, 4), (13, 4), (11, 5), (12, 5)):
+        put(s, x, y, (226, 30, 40))
+
+
+def deco_racer5(s: Surf, g: dict) -> None:  # Mach 5: pointed nose, red M on the hood, 5 in a red disc
+    r = CAR_RAMPS["racer5"]
+    for y, half in ((1, 1), (2, 2), (3, 3), (4, 4), (5, 6)):  # carve a long beak between the fenders
+        for x in range(g["x0"][y], g["x1"][y] + 1):
+            if not 12 - half <= x < 12 + half:
+                s.set_at((x, y), (0, 0, 0, 0))
+            else:
+                put(s, x, y, r[3] if x == 12 - half else r[1] if x == 11 + half else r[2])
+    for x, c in ((4, HEAD[1]), (5, HEAD[0])):  # lamps on the fender fronts
+        put(s, x, 6, c)
+        put(s, 23 - x, 6, c)
+    s.blit(art(("#....#", "##..##", "#.##.#", "#....#"), {"#": BEETLE_RED}), (9, 6))
+    beetle_disc(s, 8, 28, 7, 7, BEETLE_RED)
+    digits(s, 10, 29, "5", r[4])
+
+
+def deco_racer95(s: Surf, g: dict) -> None:  # McQueen: eyes on the windshield, bolts, 95, spoiler
+    r = CAR_RAMPS["racer95"]
+    eye = art((".WWW.", "WBPWW", "WBBWW", ".WWW."), {"W": (250, 250, 255), "B": (40, 110, 220), "P": OUT})
+    s.blit(eye, (5, 12))
+    s.blit(pygame.transform.flip(eye, True, False), (14, 12))
+    for y in range(13, 34):  # sawtooth bolts along both flanks, teeth pointing forward
+        n = 1 + (y - 13) % 7 // 2
+        if g["r0"] <= y <= g["r1"] + 2:  # short teeth beside the cabin: side windows and 95 stay clear
+            n = min(n, 2)
+        for k in range(n):
+            put(s, g["x0"][y] + k, y, RACER95_YELLOW if k < n - 1 else (240, 150, 20))
+            put(s, g["x1"][y] - k, y, RACER95_YELLOW if k < n - 1 else (240, 150, 20))
+    hline(s, 9, 14, 4, OUT)  # the grin on the nose
+    put(s, 8, 3, OUT)
+    put(s, 15, 3, OUT)
+    digits(s, 8, 17, "95", RACER95_YELLOW)
+    for x in range(g["x0"][35] - 1, g["x1"][35] + 2):  # spoiler blade across the tail
+        put(s, x, 34, r[4] if x < 8 else r[3])
+        put(s, x, 35, r[0])
+
+
+# Shop cars on vehicle(): gloss-black Charger R/T 70, Cadillac 59, Impala 67, Batmobile 89, taxi
+CAR_RAMPS["muscle70"] = [(10, 10, 18), (24, 26, 38), (40, 44, 62), (66, 74, 100), (214, 224, 248)]
+CAR_RAMPS["fins59"] = [(150, 62, 96), (210, 108, 146), (242, 156, 184), (255, 198, 214), (255, 236, 242)]
+CAR_RAMPS["sedan67"] = [(14, 14, 18), (28, 28, 36), (44, 44, 56), (68, 70, 86), (196, 198, 212)]
+CAR_RAMPS["bat"] = [(8, 8, 14), (20, 22, 32), (34, 38, 52), (66, 74, 98), (138, 150, 182)]
+CAR_RAMPS["taxi"] = [(168, 98, 6), (228, 160, 0), (255, 204, 0), (255, 232, 88), (255, 250, 196)]
+CLEAR = (0, 0, 0, 0)
+
+STYLES["classic"] = dict(  # long hood, short roof, long boxy trunk (Impala 67)
+    insets={1: 1, 2: 0, 17: 1, 28: 0, 38: 1},
+    wheels=[(5, 11), (29, 35)],
+    ws=(13, 16), roof=(17, 23), rear=(24, 27), glass_in=2, roof_in=3, head=2,
+)  # fmt: skip
+
+
+def deco_muscle70(s: Surf, g: dict) -> None:  # Charger R/T: chrome loop, black grille, blower, tail stripe
+    r = CAR_RAMPS["muscle70"]
+    hline(s, g["x0"][1], g["x1"][1], 1, CHROME[3])
+    for y in (2, 3):  # hidden headlights: the grille fills the whole nose
+        hline(s, g["x0"][y], g["x1"][y], y, CHROME[2])
+        hline(s, g["x0"][y] + 1, g["x1"][y] - 1, y, OUT)
+    put(s, 11, 2, CHROME[1])
+    put(s, 12, 2, CHROME[1])
+    # chrome blower through the hood: a wide open scoop over a narrower ribbed case and its shadow
+    blower = ("444442", "3oooo1", "222221", ".3221.", ".3331.", ".3221.", ".0000.")
+    s.blit(art(blower, dict(zip("01234", CHROME, strict=True), o=OUT)), (9, 4))
+    for y in range(4, 10):  # gloss reflections down both front fenders
+        put(s, 5, y, r[3])
+        put(s, 18, y, r[2])
+    for y, c in ((31, (244, 244, 250)), (32, (196, 200, 214))):  # bumblebee stripe round the tail
+        hline(s, g["x0"][y], g["x1"][y], y, c)
+    for x, y in ((5, 34), (6, 34), (5, 35)):  # gloss glint on the trunk
+        put(s, x, y, r[3])
+
+
+def deco_fins59(s: Surf, g: dict) -> None:  # '59 Cadillac: jewel grille, skirts, fins, bullet lights
+    r = CAR_RAMPS["fins59"]
+    hline(s, g["x0"][1], g["x1"][1], 1, CHROME[4])
+    for x in range(g["x0"][2], g["x1"][2] + 1):
+        put(s, x, 2, CHROME[3] if x % 2 else CHROME[2])
+    for x in (4, 5, 18, 19):
+        put(s, x, 2, HEAD[1])
+    for y in range(28, 35):  # fender skirts hide the rear wheels
+        for x in (1, 2, 21, 22):
+            s.set_at((x, y), CLEAR)
+    for y in (36, 37, 38):  # notch the tail between the fins
+        hline(s, 5, 18, y, CLEAR)
+    hline(s, 6, 17, 35, CHROME[3])  # bumper
+    # left fin, cols 1-5 from row 28: lit ridge flaring out and back past the notch, a dark crease
+    # standing it off the deck, bullet lights at the tip
+    fin = (
+        "   hd", "   hd", "  mhd", "  mhd", " mmhd", " mmhd", " mmhd", ".mmhs", "..mh ", "..mT ", "...t ",
+    )  # fmt: skip
+    both = {"h": r[4], "d": r[0], "T": TAIL[2], "t": TAIL[1], ".": CLEAR}
+    left, right = both | {"m": r[3], "s": r[1]}, both | {"m": r[1], "s": r[3]}
+    for j, row in enumerate(fin):
+        for i, ch in enumerate(row):
+            if ch in left:
+                s.set_at((1 + i, 28 + j), left[ch])
+                s.set_at((22 - i, 28 + j), right[ch])
+
+
+def deco_sedan67(s: Surf, g: dict) -> None:  # Impala 67: chrome nose, quad lamps, 3 tail lights a side
+    r = CAR_RAMPS["sedan67"]
+    hline(s, g["x0"][1], g["x1"][1], 1, CHROME[3])
+    for x in range(g["x0"][2], g["x1"][2] + 1):
+        put(s, x, 2, CHROME[2] if x in (3, 20) else OUT)
+    for x in (4, 6, 17, 19):  # quad headlights
+        put(s, x, 2, HEAD[1])
+    hline(s, 8, 15, 2, CHROME[1])
+    for y in range(3, 12):  # hood centre crease, caught by the light
+        put(s, 11, y, r[3])
+        put(s, 12, y, r[1])
+    for y in (36, 37):
+        hline(s, 3, 20, y, CHROME[3] if y == 36 else CHROME[2])
+        for x in (4, 6, 8, 15, 17, 19):
+            put(s, x, y, TAIL[2] if y == 36 else TAIL[1])
+    hline(s, 4, 19, 38, CHROME[2])
+
+
+BAT_FIN = (  # left rear quarter, cols 0-6 from row 20: ridge sweeping out, scalloped wing, '.' cut away
+    "     R ", "     R ", "    Rw ", "    Rw ", "   Rww ", "   Rww ", "  Rwww ", "  Rwww ",
+    " Rwwww ", " Rwwww ", " wRwww ", " .wRww ", " wwRww ", " Rwwww ", " .wRww ", " wwRww ",
+    " Rwwww ", " Rw.   ", " R.    ",
+)  # fmt: skip
+
+
+def deco_bat(s: Surf, g: dict) -> None:  # 1989 Batmobile: turbine nose, canopy, bat fins, afterburner
+    r = CAR_RAMPS["bat"]
+    cyber_panel(s, g, 2, 37, r)  # one smooth hull: no cabin, no lamps
+    hline(s, 6, 17, 1, CLEAR)  # the turbine pokes out alone at the front
+    for y in range(3, 22):  # long fender pods either side of a low centre channel
+        put(s, 5, y, r[3])
+        put(s, 6, y, r[3])
+        put(s, 18, y, r[1])
+        put(s, 7, y, r[1])
+        put(s, 17, y, r[3])
+    turbine = art(
+        [".MMMM.", "MdbddM", "MbHHdM", "MddbdM", ".MMMM."],
+        {"M": METAL[3], "b": METAL[1], "d": (16, 16, 24), "H": METAL[0]},
+    )
+    s.blit(turbine, (9, 1))
+    canopy = [(11, 12), (10, 13), (9, 14), (9, 14), (9, 14), (9, 14), (9, 14), (9, 14), (10, 13)]
+    for j, (a, b) in enumerate(canopy):
+        for x in range(a, b + 1):
+            c = GLASS[3] if x - a + j == 3 else GLASS[2] if x == a else GLASS[0] if x == b else GLASS[1]
+            s.set_at((x, 14 + j), c)
+    for y in range(26, 36, 2):  # engine-deck slats
+        hline(s, 7, 16, y, r[0])
+    legend = {"R": (r[4], r[4]), "w": (r[3], r[2]), ".": (CLEAR, CLEAR)}  # (left, right): crests lit on both
+    for j, row in enumerate(BAT_FIN):
+        for x, ch in enumerate(row):
+            if ch in legend:
+                s.set_at((x, 20 + j), legend[ch][0])
+                s.set_at((23 - x, 20 + j), legend[ch][1])
+    hline(s, 5, 18, 38, CLEAR)
+    flame = {"y": (255, 150, 40), "Y": (255, 232, 140)}
+    nozzle = art(["oMMo", "MyYM", "MYyM"], {"o": OUT, "M": METAL[1], **flame})
+    s.blit(nozzle, (10, 36))
+
+
+def deco_taxi(s: Surf, g: dict) -> None:  # yellow cab: roof sign + checker band
+    for y in range(16, 20):  # 4x2 sign with a dark frame
+        hline(s, 9, 14, y, OUT)
+    hline(s, 10, 13, 17, (255, 255, 236))
+    hline(s, 10, 13, 18, (232, 210, 150))
+    for y in (22, 23):
+        for x in range(g["rx0"], g["rx1"] + 1):
+            put(s, x, y, OUT if (x + y) % 2 else (246, 246, 250))
+
+
+# Shop cars on vehicle(): turquoise Mystery Machine, Kombi, Cybertruck, Optimus Prime
+CAR_RAMPS["mystery_van"] = [(14, 74, 100), (22, 116, 146), (40, 160, 186), (84, 200, 214), (180, 240, 246)]
+MYSTERY_VAN_GREEN = [(34, 100, 30), (62, 150, 38), (110, 196, 54), (170, 232, 96)]
+CAR_RAMPS["kombi"] = [(104, 16, 26), (168, 28, 36), (214, 48, 50), (244, 102, 90), (255, 176, 156)]
+KOMBI_WHITE = [(150, 146, 140), (196, 192, 184), (230, 226, 216), (248, 246, 238), (255, 255, 250)]
+KOMBI_BOARD = [(196, 120, 10), (255, 196, 40), (255, 232, 130)]  # surfboard: shade, body, lit rail
+CAR_RAMPS["cyber"] = [(74, 80, 90), (122, 128, 138), (162, 168, 176), (198, 202, 208), (232, 235, 238)]
+CAR_RAMPS["robot_truck"] = [(110, 14, 24), (176, 22, 32), (226, 40, 44), (252, 100, 86), (255, 176, 154)]
+ROBOT_TRUCK_BLUE = [(16, 30, 92), (28, 58, 156), (46, 98, 214), (100, 154, 248), (184, 216, 255)]
+
+# box: a forward-control van, flat windshield right behind a short rounded nose
+STYLES["box"] = dict(
+    insets={1: 3, 2: 1, 3: 0, 37: 1, 38: 3},
+    wheels=[(5, 11), (29, 35)],
+    ws=(6, 8), roof=(9, 36), rear=None, glass_in=1, roof_in=1, head=2,
+)  # fmt: skip
+
+
+def cyber_panel(s: Surf, g: dict, y0: int, y1: int, ramp: Sequence[Color]) -> None:
+    """Repaint body rows y0..y1 with the house shading: lit left edge, dark right edge."""
+    for y in range(y0, y1 + 1):
+        a, b = g["x0"][y], g["x1"][y]
+        for x in range(a, b + 1):
+            s.set_at((x, y), ramp[3 if x == a else 1 if x == b else 2])
+
+
+MYSTERY_VAN_FLOWER = (".oo.oo.", "ooo.ooo", ".ooYoo.", "...Y...", ".ooYoo.", "ooo.ooo", ".oo.oo.")
+MYSTERY_VAN_SPARE = (".TTTt.", "TgOOgt", "tgOOgt", ".tttt.")  # front spare: green cover, orange flower
+
+
+def mystery_van_flower(s: Surf, cx: int, cy: int) -> None:  # four orange petals round a yellow heart
+    for j, line in enumerate(MYSTERY_VAN_FLOWER):
+        for i, ch in enumerate(line):
+            if ch != ".":
+                c = GOLD[3] if ch == "Y" else ORANGE[3] if i + j < 6 else ORANGE[2]
+                put(s, cx + i - 3, cy + j - 3, c)
+
+
+def deco_mystery_van(s: Surf, g: dict) -> None:  # turquoise van, green skirt, orange flowers, front spare
+    gr = MYSTERY_VAN_GREEN
+    cyber_panel(s, g, 1, g["ws"][0] - 1, gr)  # the green lower body shows at the nose, flanks and tail
+    cyber_panel(s, g, g["r1"], g["bot"], gr)
+    for y in range(g["r0"] + 4, g["r1"]):  # behind the cab windows
+        for x, c in ((3, gr[3]), (4, gr[2]), (19, gr[2]), (20, gr[1])):
+            s.set_at((x, y), c)
+    for cx, cy in ((9, 16), (14, 24), (9, 32)):
+        mystery_van_flower(s, cx, cy)
+    s.blit(art(MYSTERY_VAN_SPARE, {"T": TIRE[1], "t": TIRE[0], "g": gr[2], "O": ORANGE[2]}), (9, 1))
+    for x, y, c in ((5, 2, HEAD[1]), (6, 2, HEAD[0]), (4, 3, HEAD[0])):  # round headlamps
+        put(s, x, y, c)
+        put(s, 23 - x, y, c)
+
+
+def deco_kombi(s: Surf, g: dict) -> None:  # white roof over a red band, split windshield, V nose, surfboard
+    w, k, b = KOMBI_WHITE, CAR_RAMPS["kombi"], KOMBI_BOARD
+    for y in range(g["r0"], 33):
+        for x in range(6, 18):
+            s.set_at((x, y), w[4] if y == g["r0"] else w[3] if x < 17 else w[2])
+        pillar = (y - g["r0"]) % 4 == 0  # a row of small side windows
+        s.set_at((5, y), w[3] if pillar else GLASS[2 if y < g["r0"] + 3 else 1])
+        s.set_at((18, y), w[1] if pillar else GLASS[0])
+    for y in range(g["r0"], g["r1"] + 1):  # the red band shows along both sides
+        for x, c in ((3, k[3]), (4, k[2]), (19, k[2]), (20, k[1])):
+            s.set_at((x, y), c)
+    for y in range(33, 36):  # engine-lid vents in the red tail
+        hline(s, 9, 14, y, k[0] if y % 2 else k[2])
+    cyber_panel(s, g, 1, 5, k)  # nose: the white V comes down to a round badge
+    for y, (a, c) in ((5, (5, 18)), (4, (7, 16)), (3, (9, 14))):
+        hline(s, a, c, y, w[3])
+        put(s, c, y, w[2])
+    s.blit(art((".cc.", "cddc", ".cc."), {"c": CHROME[3], "d": k[0]}), (10, 1))
+    for x, y, c in ((5, 2, HEAD[1]), (4, 3, HEAD[0]), (5, 3, HEAD[0])):  # round headlamps
+        put(s, x, y, c)
+        put(s, 23 - x, y, c)
+    for y in range(g["ws"][0], g["ws"][1] + 1):  # split windshield
+        hline(s, 11, 12, y, w[2])
+    for y in (13, 28):  # roof rack
+        hline(s, 6, 17, y, METAL[0])
+    for y in range(12, 31):  # narrow surfboard: the white roof still shows either side
+        half = 1 if y in (12, 30) else 2
+        for x in range(12 - half, 12 + half):
+            s.set_at((x, y), b[2] if x == 12 - half else b[0] if x == 11 + half else b[1])
+
+
+def deco_cyber(s: Surf, g: dict) -> None:  # two-tone steel split at the ridge, glass strip, LED bars
+    r = CAR_RAMPS["cyber"]
+    dark = r[:1] + r[:4]  # the rear slope: the same steel one step darker
+    cyber_panel(s, g, 1, 18, r)
+    cyber_panel(s, g, 20, 38, dark)
+    for x, y in ((4, 1), (19, 1), (3, 2), (20, 2), (3, 37), (20, 37), (4, 38), (19, 38)):  # chamfered corners
+        s.set_at((x, y), (0, 0, 0, 0))
+    for x, y in ((6, 5), (7, 4), (8, 3), (7, 5)):  # glint on the hood
+        put(s, x, y, r[4])
+    for y in range(9, 19):  # black glass; the side windows lean in toward the ridge
+        k = (y - 9) // 3
+        hline(s, g["x0"][y] + 1 + k, g["x1"][y] - 1 - k, y, (18, 20, 26))
+    for i in range(3):
+        put(s, 7 + i, 11 + i, (70, 76, 92))  # reflection
+    hline(s, g["x0"][19], g["x1"][19], 19, r[4])  # the ridge, halfway back
+    for y in range(22, 36, 3):  # tonneau slats
+        hline(s, 6, 17, y, dark[1])
+    hline(s, 5, 18, 2, r[0])  # dark seam under the LED bar
+    hline(s, 5, 18, 1, HEAD[1])
+    put(s, 4, 2, HEAD[0])
+    put(s, 19, 2, HEAD[0])
+    hline(s, 4, 19, 37, TAIL[1])
+    put(s, 4, 37, TAIL[2])
+    put(s, 19, 37, TAIL[2])
+    for wy0, wy1 in STYLES["jeep"]["wheels"]:  # angular black arches
+        for y in range(wy0 - 1, wy1 + 2):
+            s.set_at((g["x0"][y], y), (66, 68, 80))
+            s.set_at((g["x1"][y], y), (40, 42, 52))
+            if wy0 < y < wy1:
+                s.set_at((g["x0"][y] + 1, y), (54, 56, 68))
+                s.set_at((g["x1"][y] - 1, y), (40, 42, 52))
+
+
+def deco_robot_truck(s: Surf, g: dict) -> None:  # red cab, chrome grille + stacks, blue rear, fifth wheel
+    c, r = CHROME, CAR_RAMPS["robot_truck"]
+    cyber_panel(s, g, 1, 19, r)
+    cyber_panel(s, g, 21, 38, ROBOT_TRUCK_BLUE)
+    hline(s, g["x0"][1], g["x1"][1], 1, c[3])  # bumper, headlamps at its ends
+    for x in (4, 5, 18, 19):
+        put(s, x, 1, HEAD[1])
+    for y in range(2, 7):  # full-width chrome grille
+        for x in range(g["x0"][y] + 1, g["x1"][y]):
+            s.set_at((x, y), c[4] if y == 2 else c[3] if x % 2 else c[1])
+    for y in range(8, 11):  # two-pane windshield
+        hline(s, 5, 18, y, GLASS[0] if y == 8 else GLASS[1])
+        hline(s, 11, 12, y, r[2])
+    put(s, 6, 9, GLASS[3])
+    put(s, 14, 9, GLASS[2])
+    for x in range(6, 18, 3):  # amber cab-roof marker lights
+        put(s, x, 12, HEAD[0])
+    hline(s, g["x0"][20], g["x1"][20], 20, OUT)  # back wall of the cab
+    for x0 in (1, 21):  # exhaust stacks behind the cab, open tops
+        for y in range(14, 24):
+            s.set_at((x0, y), OUT if y == 14 else c[3])
+            s.set_at((x0 + 1, y), OUT if y == 14 else c[1])
+    for y in range(25, 37):  # fifth-wheel plate, its slot flaring open to the rear
+        for x in range(6, 18):
+            d = math.hypot(x + 0.5 - 12, y + 0.5 - 30)
+            slot = y > 30 and abs(x + 0.5 - 12) < 1 + (y - 30) / 3
+            if d < 5:
+                put(s, x, y, OUT if slot else c[3] if d < 2 else c[2] if x < 12 else c[1])
+    for x in (4, 5, 18, 19):  # tail lights
+        put(s, x, 37, TAIL[1])
+    for x in (1, 2, 21, 22):  # mud flaps behind the drive wheels
+        s.set_at((x, 37), OUT)
+
+
+# Shop cars drawn whole (route B): moto, RC buggy, Flintstones car, tank, F1, monster truck
+MOTO_JACKET = [(22, 30, 62), (34, 50, 100), (52, 76, 140), (88, 120, 190), (150, 180, 230)]  # blue leathers
+RC_BUGGY = [(26, 92, 24), (46, 140, 30), (90, 192, 40), (156, 228, 72), (222, 252, 160)]
+RC_BUGGY_HUB = [(24, 56, 150), (50, 116, 236), (150, 200, 255)]
+MONSTER = [(56, 24, 96), (92, 40, 150), (132, 64, 200), (176, 112, 236), (226, 190, 255)]
+MONSTER_FLAME = {"R": (214, 44, 24), "O": (255, 136, 28), "Y": (255, 228, 96)}
+TANK = [(44, 52, 24), (72, 84, 36), (104, 118, 50), (140, 154, 74), (188, 198, 118)]
+FORMULA = [(110, 8, 16), (180, 16, 24), (228, 30, 32), (255, 88, 72), (255, 172, 152)]
+STONE_AGE_HIDE = [(150, 84, 26), (206, 130, 42), (238, 174, 66), (255, 212, 116), (255, 238, 180)]
+
+
+def tank_box(s: Surf, x0: int, y0: int, x1: int, y1: int, ramp: Sequence[Color]) -> None:
+    """Panel in the house shading: lit left column and top row, dark right column and bottom row."""
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            i = 3 if x == x0 else 1 if x == x1 else 2
+            i = i + 1 if y == y0 else 0 if y == y1 else i
+            s.set_at((x, y), ramp[min(i, len(ramp) - 1)])  # short ramps (METAL, TAIL) top out early
+
+
+def tank_tread(s: Surf, x0: int, y0: int, x1: int, y1: int, frame: int, c: Sequence[Color] = TIRE) -> None:
+    """Tyre or track from above: tread bands that move one band per frame, so it rolls."""
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if x1 - x0 > 1 and y in (y0, y1) and x in (x0, x1):
+                continue  # rounded corners
+            s.set_at((x, y), c[0] if x == x1 else c[(y + frame) % 2])
+
+
+def formula_body(s: Surf, half: dict[int, int], y0: int, y1: int, ramp: Sequence[Color]) -> None:
+    """Symmetric body from a {row: half-width} table, shaded like vehicle() does."""
+    hw = expand(half, y0, y1)
+    for y in range(y0, y1 + 1):
+        for x in range(12 - hw[y], 12 + hw[y]):
+            i = 3 if x == 12 - hw[y] else 1 if x == 11 + hw[y] else 2
+            s.set_at((x, y), ramp[min(4, i + 1) if y == y0 else 0 if y == y1 else i])
+
+
+MOTO_ART = (
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "..........CwPc..........",
+    "...CM.....CPRc.....Mc...",
+    "...Mn.....CyYc.....cn...",
+    "....c....nMMMMn....c....",
+    "...jKKCCCMMMMMMcccKKj...",
+    "....KK....PwRr....KK....",
+    ".....KK..PwwRRr..KK.....",
+    ".....KK..PwRRRr..KK.....",
+    ".....KK..PRRRRr..KK.....",
+    "......KK.PRRRRr.KK......",
+    "......KK.PRRRRr.KK......",
+    "......KK.gvVvvg.KK......",
+    "......KK.HI!HHh.KK......",
+    "......KK.IIIHHh.KK......",
+    "......JKKIIHHHhKKk......",
+    "......JKKHHHHhhKKk......",
+    "......JKKKhhhgKKKk......",
+    "......JKKKKKKKKKKk......",
+    ".......JKKKKKKKKk.......",
+    "........JKKKKKKk........",
+    "........jKKKKKKj........",
+    "...LLLb..jjjjjj..LLLb...",
+    "...LBBb..ojjjjo..LBBb...",
+    "...LBBb..jkkkkj.CLBBb...",
+    "...xxxx..jkkkkj.Cxxxx...",
+    "...LBBb..jjjjjj.CLBBb...",
+    "...LBBb...PRRr..CLBBb...",
+    "...bbbx...PRRr..cbbbx...",
+    "..........tTTt..c.......",
+    "................n.......",
+)
+
+
+def draw_moto(frame: int) -> Surf:  # wheels in line, red tank, white helmet, bars + mirrors, saddlebags
+    legend = {"v": GLASS[0], "V": GLASS[2], "y": HEAD[1], "Y": HEAD[0], "t": TAIL[1], "T": TAIL[2], "o": OUT}
+    for keys, ramp in (
+        ("drRPw", CAR_RAMPS["red"]), ("jkKJ", MOTO_JACKET), ("ghHI!", CAR_RAMPS["white"]),
+        ("ncMC", CHROME), ("xbBL", BARK),
+    ):  # fmt: skip
+        legend |= dict(zip(keys, ramp, strict=False))  # dark -> light; a short key skips the top tones
+    s = new(24, 40)
+    tank_tread(s, 11, 1, 12, 10, frame)
+    tank_tread(s, 10, 30, 13, 38, frame)  # fat rear tyre
+    s.blit(art(MOTO_ART, legend), (0, 0))
+    return outline(s)
+
+
+def rc_buggy_wheel(s: Surf, x0: int, y0: int, w: int, h: int, frame: int, hub: Sequence[Color]) -> None:
+    """Big knobbly tyre: rolling tread, notches on the outer side, a round hub in the middle."""
+    tank_tread(s, x0, y0, x0 + w - 1, y0 + h - 1, frame)
+    out = x0 if x0 < 12 else x0 + w - 1
+    for y in range(y0 + 1, y0 + h - 1):
+        if (y + frame) % 2:
+            s.set_at((out, y), (0, 0, 0, 0))  # the outline() pass fills these -> knobs
+    rim = art((".hh.", "hHLh", "hHHh", ".hh."), dict(zip("hHL", hub, strict=True)))
+    s.blit(rim, (x0 + (w - 4) // 2, y0 + h // 2 - 2))
+
+
+RC_BUGGY_LOGO = ("##...##", "#.#.#..", "##..#..", "#.#.#..", "#.#..##")  # "RC" on the hood
+
+
+def draw_rc_buggy(frame: int) -> Surf:  # green open buggy, black wheels with blue hubs, red-tipped antenna
+    s, g = new(24, 40), RC_BUGGY
+    for x, y, h in ((1, 3, 11), (18, 3, 11), (1, 23, 13), (18, 23, 13)):
+        rc_buggy_wheel(s, x, y, 5, h, frame, RC_BUGGY_HUB)
+    for y in (6, 10, 27, 32):  # suspension arms
+        hline(s, 6, 17, y, METAL[0])
+    formula_body(s, {3: 4, 10: 5, 23: 4, 34: 3}, 3, 35, g)
+    hline(s, 7, 16, 2, METAL[1])  # front bumper
+    s.blit(art(RC_BUGGY_LOGO, {"#": (250, 252, 240)}), (8, 5))
+    tank_box(s, 9, 12, 14, 20, (g[0], g[0], g[0], g[1], g[1]))  # open cockpit
+    tank_box(s, 10, 15, 13, 19, CAR_RAMPS["black"])  # seat
+    for y in range(11, 22):  # black roll cage
+        put(s, 8, y, OUT)
+        put(s, 15, y, OUT)
+    for y in (11, 21, 22):
+        hline(s, 8, 15, y, OUT)
+    for y in range(24, 32, 2):  # engine fins
+        hline(s, 10, 13, y, METAL[3])
+        hline(s, 10, 13, y + 1, METAL[1])
+    for y in range(23, 37):  # silver whip antenna, bent back by the wind
+        put(s, 14 + (y - 23) // 5, y, CHROME[3])
+    tank_box(s, 16, 36, 17, 37, TAIL)
+    return outline(s)
+
+
+MONSTER_STYLE = dict(  # a pickup cab on the body only; the giant wheels come from rc_buggy_wheel
+    insets={1: 1, 2: 0, 30: 1}, wheels=[],
+    ws=(10, 12), roof=(13, 19), rear=(20, 20), glass_in=1, roof_in=2, head=1,
+)  # fmt: skip
+MONSTER_FLAMES = ("YYYYYYYY", "OYYYYYYO", "OYOYYOYO", "ROORROOR", "RO.RR.OR", "R..R...R", "R.......")
+
+
+def monster_deco(s: Surf, g: dict) -> None:  # hood flames + pickup bed
+    s.blit(art(MONSTER_FLAMES, MONSTER_FLAME), (4, 2))
+    tank_box(s, 4, 22, 11, 29, CAR_RAMPS["black"])
+
+
+def draw_monster(frame: int) -> Surf:  # jeep on huge wheels out of the corners, flames on the hood
+    s = new(24, 40)
+    for x, y in ((1, 1), (15, 1), (1, 23), (15, 23)):
+        rc_buggy_wheel(s, x, y, 8, 16, frame, CHROME[1:4])
+    s.blit(vehicle(16, 32, (1, 30), MONSTER_STYLE, MONSTER, frame, monster_deco), (4, 4))
+    return outline(s)
+
+
+def draw_stone_age(frame: int) -> Surf:  # stone rollers, log frame, leopard-print canopy
+    s, rng = new(24, 40), random.Random("stone_age")
+    for y0, y1 in ((2, 8), (29, 38)):  # stone drums: lit top, shaded bottom, grooves roll round
+        for y in range(y0, y1 + 1):
+            for x in range(2, 22):
+                if (y in (y0, y1) and x in (2, 3, 20, 21)) or (y in (y0 + 1, y1 - 1) and x in (2, 21)):
+                    continue  # rounded ends
+                i = 4 if y == y0 else 0 if y == y1 else 3 if y < y0 + 3 else 2 if y < y1 - 2 else 1
+                if (y + 2 * frame) % 4 == 0 and y0 < y < y1:
+                    i = 0
+                s.set_at((x, y), STONE[max(0, i - (rng.random() < 0.15))])
+        for x in (1, 22):  # wooden axle ends
+            put(s, x, (y0 + y1) // 2, BARK[3])
+    for x in (4, 17):  # side logs ride over the drums: bark grain, sawn ends with rings
+        tank_box(s, x, 1, x + 2, 37, BARK)
+        for y in range(4, 36, 3):
+            put(s, x + 1, y, BARK[1])
+        for y in (1, 37):
+            hline(s, x, x + 2, y, BARK[4])
+            put(s, x + 1, y, BARK[2])
+    for y in (11, 26):  # cross logs
+        tank_box(s, 4, y, 19, y + 1, BARK)
+    for y in range(13, 26):  # canopy, scalloped front and back
+        for x in range(5, 19):
+            if not (y in (13, 25) and x % 2):
+                s.set_at((x, y), STONE_AGE_HIDE[3 if x == 5 or y == 13 else 1 if x == 18 else 2])
+    for gy in range(14, 24, 4):  # leopard rosettes on a jittered grid
+        for gx in range(6, 17, 4):
+            spot = rng.choice((("dd", "d."), (".d", "dd"), ("d.d", ".d."), ("dd", ".d")))
+            x, y = gx + rng.randint(0, 1) + (gy // 4) % 2, gy + rng.randint(0, 1)
+            s.blit(art(spot, {"d": (64, 34, 16)}), (x, y))
+    return outline(s)
+
+
+def draw_tank(frame: int) -> Surf:  # tracks, olive hull, round turret, gun to row 0, white star
+    s = new(24, 40)
+    for x in (1, 18):
+        tank_tread(s, x, 2, x + 4, 38, frame, (METAL[0], METAL[2]))
+    tank_box(s, 6, 3, 17, 38, TANK)
+    hline(s, 7, 16, 4, TANK[4])  # glacis plate catches the light
+    for y in range(33, 37, 2):  # engine grille
+        hline(s, 8, 15, y, TANK[0])
+    turret = (TANK[0], TANK[1], TANK[2], TANK[2], TANK[3])  # darker than the hull: cast steel, not a ball
+    s.blit(blob(16, 15, [(8, 7.5, 7, 6.5, 0)], turret, "turret", jitter=0), (4, 11))  # room for its ring
+    tank_box(s, 13, 18, 15, 20, TANK)  # hatch
+    tank_box(s, 10, 0, 13, 2, TANK)  # muzzle brake
+    tank_box(s, 9, 11, 14, 13, TANK)  # mantlet
+    for y in range(3, 11):
+        put(s, 11, y, TANK[3])
+        put(s, 12, y, TANK[1])
+    star = ("...#...", "...#...", "#######", ".#####.", "..###..", ".##.##.", ".#...#.")
+    s.blit(art(star, {"#": (240, 240, 232)}), (9, 25))
+    return outline(s)
+
+
+def draw_formula(frame: int) -> Surf:  # narrow red nose, wide wings, four exposed wheels
+    s, cab = new(24, 40), CAR_RAMPS["black"]
+    for x0, y0, x1, y1 in ((1, 6, 4, 12), (19, 6, 22, 12), (1, 26, 5, 35), (18, 26, 22, 35)):
+        tank_tread(s, x0, y0, x1, y1, frame)
+    for y in (8, 10, 29, 32):  # wishbones
+        hline(s, 5, 18, y, METAL[0])
+    formula_body(s, {2: 1, 7: 2, 14: 3, 16: 6, 25: 5, 27: 3, 31: 2}, 2, 34, FORMULA)
+    tank_box(s, 1, 1, 22, 3, FORMULA)  # front wing
+    tank_box(s, 3, 35, 20, 38, FORMULA)  # rear wing
+    for x in (1, 22):
+        tank_box(s, x, 1, x, 4, cab)  # endplates
+    for x in (3, 20):
+        tank_box(s, x, 34, x, 38, cab)
+    tank_box(s, 10, 15, 13, 20, cab)  # cockpit
+    s.blit(blob(4, 4, [(2, 2, 2, 2, 0)], CAR_RAMPS["yellow"], "helmet", jitter=0, edge=None), (10, 16))
+    hline(s, 10, 13, 14, METAL[2])  # halo
+    hline(s, 10, 13, 21, OUT)  # airbox
+    return outline(s)
+
+
+# every car in the garage's order (settings.CARS): (style, deco, glass) on vehicle() in CAR_RAMPS[key], or a
+# function that draws a whole frame
+CAR_DESIGNS: dict[str, tuple[str, Callable[[Surf, dict], None], Sequence[Color]] | Callable[[int], Surf]] = {
     "yellow": ("sport", deco_sport, GLASS),
     "black": ("sedan", deco_stripes, GLASS),
     "blue": ("sedan", deco_police, GLASS),
     "pink": ("sport", deco_convertible, GLASS_CYAN),
     "red": ("jeep", deco_jeep, GLASS),
     "white": ("ambulance", deco_ambulance, GLASS),
+    "beetle": ("beetle", deco_beetle, GLASS),
+    "moto": draw_moto,
+    "taxi": ("sedan", deco_taxi, GLASS),
+    "kombi": ("box", deco_kombi, GLASS),
+    "jdm94": ("sport", deco_jdm94, GLASS),
+    "muscle70": ("sedan", deco_muscle70, GLASS),
+    "fins59": ("sedan", deco_fins59, GLASS),
+    "rc_buggy": draw_rc_buggy,
+    "sedan67": ("classic", deco_sedan67, GLASS),
+    "mystery_van": ("box", deco_mystery_van, GLASS),
+    "stone_age": draw_stone_age,
+    "formula": draw_formula,
+    "monster": draw_monster,
+    "robot_camaro": ("sport", deco_robot_camaro, GLASS),
+    "cyber": ("jeep", deco_cyber, GLASS),
+    "racer5": ("sport", deco_racer5, GLASS_CYAN),
+    "racer95": ("sport", deco_racer95, GLASS),
+    "tank": draw_tank,
+    "bat": ("sedan", deco_bat, GLASS),
+    "robot_truck": ("jeep", deco_robot_truck, GLASS),
 }
+SPRITES |= {f"car_{key}": (2, 24, 40) for key in CAR_DESIGNS}
 
 
-def car_sheet(skin: str) -> Surf:
-    style, deco, glass = CAR_DESIGNS[skin]
-    return strip([vehicle(24, 40, (1, 38), STYLES[style], CAR_RAMPS[skin], f, deco, glass) for f in (0, 1)])
+def car_sheet(key: str) -> Surf:
+    design = CAR_DESIGNS[key]
+    if callable(design):
+        return strip([design(f) for f in (0, 1)])
+    style, deco, glass = design
+    return strip([vehicle(24, 40, (1, 38), STYLES[style], CAR_RAMPS[key], f, deco, glass) for f in (0, 1)])
 
 
 def truck_sheet() -> Surf:
@@ -1028,7 +1708,7 @@ def icon() -> Surf:
 
 
 def build_sprites() -> dict[str, Surf]:
-    out = {f"car_{c}": car_sheet(c) for c in SKINS}
+    out = {f"car_{key}": car_sheet(key) for key in CAR_DESIGNS}
     out |= {
         "truck": truck_sheet(),
         "van": van_sheet(),

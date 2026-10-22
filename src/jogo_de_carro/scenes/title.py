@@ -7,7 +7,7 @@ import pygame
 
 from .. import __version__
 from ..input import Action
-from ..settings import ACCENT, FLAME, MUTED, SKIN_NAMES, WHITE, WIDTH
+from ..settings import ACCENT, CARS, FLAME, MUTED, WHITE, WIDTH
 from ..ui import Menu, blit_text, glow, gradient_text, panel, text
 from .base import WEB, Context, MenuScene, Transition
 
@@ -122,7 +122,7 @@ class TitleScene(MenuScene):
     def _draw_footer(self, surface: pygame.Surface) -> None:
         save, mode = self.ctx.save, self.ctx.mode
         chips = [
-            f"Carro: {SKIN_NAMES[save.skin]}",
+            f"Carro: {CARS[save.skin][0]}",
             f"Modo: {mode.name}",
             f"Recorde: {save.best.get(mode.key, 0)}",
         ]

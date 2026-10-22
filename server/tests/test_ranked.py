@@ -89,9 +89,9 @@ def closed(ws) -> int:
 class Racer:
     """A client in ranked solo: hello, solo, ready, then a log's inputs every 12 ticks."""
 
-    def __init__(self, s, clock: Clock, ws, mode: str = "normal") -> None:
+    def __init__(self, s, clock: Clock, ws, mode: str = "normal", skin: str = "yellow") -> None:
         self.s, self.clock, self.ws = s, clock, ws
-        ws.send_json(HELLO)
+        ws.send_json({**HELLO, "skin": skin})
         assert ws.receive_json()["t"] == "welcome"
         ws.send_json({"t": "solo", "mode": mode})
         self.match = ws.receive_json()

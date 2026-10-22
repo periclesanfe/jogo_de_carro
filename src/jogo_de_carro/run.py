@@ -14,7 +14,7 @@ from collections import deque
 from collections.abc import Callable
 
 from .assets import Assets
-from .settings import FIXED_DT, MODE_BY_KEY, RANKED_CAP_S, SKINS, VERSUS_CAP_S
+from .settings import CARS, FIXED_DT, MODE_BY_KEY, RANKED_CAP_S, VERSUS_CAP_S
 from .world.scoring import Score
 from .world.world import Controls, EventKind, World, WorldEvent
 
@@ -41,7 +41,8 @@ class Run:
         driver: Driver | None = None,
         rival: str | None = None,  # the other driver's skin, for the traffic colours only
     ) -> None:
-        if not (type(mode_key) is str and mode_key in MODE_BY_KEY and skin in SKINS and type(shared) is bool):
+        ok = type(mode_key) is str and mode_key in MODE_BY_KEY and type(skin) is str and skin in CARS
+        if not (ok and type(shared) is bool):
             raise BadInput("bad run")
         if type(seed) is not int or seed < 0:  # Random(1.5) seeds from hash(): another road on wasm32
             raise BadInput("bad seed")

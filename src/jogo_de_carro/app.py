@@ -18,7 +18,7 @@ from .scenes.online import ConviteScene, WaitScene
 from .scenes.race import RaceScene
 from .scenes.title import TitleScene
 from .scenes.versus import LiveScene, RecordingScene
-from .settings import FIXED_DT, FPS, HEIGHT, MUTED, TITLE, WIDTH
+from .settings import FIXED_DT, FPS, HEIGHT, MUTED, PRICE, TITLE, WIDTH
 from .ui import blit_text, panel, text
 
 MAX_FRAME = 0.1  # longer hitches are not simulated (e.g. the window was dragged)
@@ -215,6 +215,9 @@ class Game:
         else:
             if t == "closed":
                 self._retry = None if net.error in FINAL else RETRY
+            if t == "welcome" and self.ctx.save.skin in PRICE and self.ctx.save.skin not in net.owned:
+                self.ctx.save.skin = net.skin  # yellow, as the server races it (a car it may race, picked
+                self.ctx.persist()  # since the hello went out, stays: JOGAR takes it to a new socket)
             held = self._invite and self._invite[0].get("id")
             if t in ("closed", "welcome") or (t == "invite_gone" and msg.get("id") == held):
                 self._invite = None  # it is over, or was on the socket before

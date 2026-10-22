@@ -8,11 +8,15 @@ progress (invalido) and closes the socket with 1008:
     S→C {"t":"welcome","me":{"id":7,"nick":"pericles"},"requests":2,     requests: friend requests to answer
          "friends":[{"id":42,"nick":"ana_42","s":"off|menu|racing"}],
          "challenges":[{"id":77,"from":"ana_42","mode":"normal","secs":83.2,"score":5321}],    open, to me
-         "coins":320}     my wallet: the coins of my paid runs (PAID)
+         "coins":320,"skin":"yellow","owned":["beetle"]}    coins: my wallet, the coins of my paid runs (PAID)
+         less the cars I bought (owned); skin: the car I race with, the hello's if free or mine, else yellow
       | {"t":"error","code":"login|version|busy|bad|rate","msg":"<pt-BR>"}, then the socket closes (rate: 20
          sockets a minute, each one's presence goes to every friend)
     S→C {"t":"presence","id":42,"s":"off|menu|racing"}      a friend's new status (menu: said hello, no run;
          racing: a run in progress, an old tab's race not decided yet included)
+    C→S {"t":"buy","skin":"beetle"}      a paid car (PRICE), any time after hello (a run keeps its car)
+    S→C {"t":"wallet","coins":20,"owned":["beetle"]}      the only answer: bought, or nothing changed (owned
+         already, or the wallet short of the server's price, a debt included)
     C→S {"t":"solo","mode":"normal"}
     S→C {"t":"match","m":901,"kind":"solo","mode":"normal","op":null}     no seed yet
       | {"t":"error","code":"full|drain|rate|racing","msg":"<pt-BR>"}    the socket stays open (racing: an old
@@ -101,7 +105,7 @@ from starlette.websockets import WebSocket
 
 from jogo_de_carro.assets import Assets
 from jogo_de_carro.run import BadInput, Run, verdict
-from jogo_de_carro.settings import FIXED_DT, MODE_BY_KEY, SKINS
+from jogo_de_carro.settings import CARS, FIXED_DT, MODE_BY_KEY, PRICE
 
 from . import auth, db, flags
 
@@ -142,7 +146,8 @@ REFUSED = {
 CODES = {"nick": "login", "ended": "login", "invites": "rate", "sockets": "rate", "challenges": "rate"}
 # each message's fields: a JSON type (exactly: true is no int), or the strings allowed
 SHAPES: dict[str, dict[str, Any]] = {
-    "hello": {"build": str, "py": str, "pg": str, "skin": SKINS},
+    "hello": {"build": str, "py": str, "pg": str, "skin": tuple(CARS)},
+    "buy": {"skin": tuple(PRICE)},
     "solo": {"mode": tuple(MODE_BY_KEY)},
     "invite": {"to": int, "mode": tuple(MODE_BY_KEY)},
     "invite_reply": {"id": str, "ok": bool},
@@ -164,9 +169,14 @@ OFFERS = (  # the challenges open to a player (b), with the challenger's run: of
 FIN = {"outcome": ("crash", "win", "giveup"), "score": int}
 # the runs whose coins count (plan §2.2): never a reward for winning, which pairs of accounts could farm
 PAID = "(state IN ('ok', 'review') OR why IN ('substituida', 'conexao'))"
-# the wallet, derived: no ledger (an admin rejection takes a run's coins back by itself)
+# the wallet, derived: the paid runs' coins less the cars bought. No ledger: an admin rejection takes a run's
+# coins back by itself (spent already: a debt, which buys nothing), and DELETE FROM garage refunds a car
 # ponytail: a SUM over the runs_user index; keep it in users only if a profile shows its cost
-BALANCE = f"(SELECT coalesce(sum(coins), 0) FROM runs WHERE user_id = :u AND {PAID})"
+BALANCE = (
+    f"(SELECT coalesce(sum(coins), 0) FROM runs WHERE user_id = :u AND {PAID})"
+    " - (SELECT coalesce(sum(price), 0) FROM garage WHERE user_id = :u)"
+)
+BUY = f"INSERT OR IGNORE INTO garage SELECT :u, :skin, :price WHERE {BALANCE} >= :price"  # one statement
 log = logging.getLogger("jogo")
 
 
@@ -178,6 +188,11 @@ def expire(db: sqlite3.Connection) -> None:
 def wallet(db: sqlite3.Connection, uid: int) -> int:
     """The player's coins (0 for a deleted account)."""
     return db.execute(f"SELECT {BALANCE}", {"u": uid}).fetchone()[0]
+
+
+def owned(db: sqlite3.Connection, uid: int) -> list[str]:
+    """The paid cars the player bought, sorted."""
+    return [r[0] for r in db.execute("SELECT skin FROM garage WHERE user_id = ? ORDER BY skin", (uid,))]
 
 
 def offer(mid: int, nick: str, mode: str, secs: float, score: int) -> dict:
@@ -519,7 +534,8 @@ class Hub:
     async def on_hello(self, sock: Sock, d: dict, now: float) -> None:
         if (d["build"], d["py"], d["pg"]) != (self.state.build, *RUNTIME):
             return await self.close(sock, "version")
-        sock.skin = d["skin"]
+        mine = owned(self.db, sock.uid)
+        sock.skin = d["skin"] if d["skin"] not in PRICE or d["skin"] in mine else "yellow"  # never refused
         rows = self.db.execute(auth.FRIENDS, {"me": sock.uid}).fetchall()
         friends = [
             {"id": f["id"], "nick": f["nick"], "s": self.status(f["id"])} for f in rows if f["accepted"]
@@ -529,8 +545,18 @@ class Hub:
         expire(self.db)
         challenges = [offer(*r) for r in self.db.execute(OFFERS, (sock.uid,))]
         welcome = {"t": "welcome", "me": me, "friends": friends, "requests": requests}
-        await self.send(sock, {**welcome, "challenges": challenges, "coins": wallet(self.db, sock.uid)})
+        cars = {"coins": wallet(self.db, sock.uid), "skin": sock.skin, "owned": mine}
+        await self.send(sock, {**welcome, "challenges": challenges, **cars})
         self.announce(sock.uid)
+
+    async def on_buy(self, sock: Sock, d: dict, now: float) -> None:
+        """A paid car at the server's price, if the wallet covers it (owned already, or short: nothing). A run
+        keeps its car: the new one races from the next hello."""
+        if not await self.signed_in(sock):  # banned, or its account deleted meanwhile (no user to own it)
+            return
+        self.db.execute(BUY, {"u": sock.uid, "skin": d["skin"], "price": PRICE[d["skin"]]})
+        cars = {"coins": wallet(self.db, sock.uid), "owned": owned(self.db, sock.uid)}
+        await self.send(sock, {"t": "wallet", **cars})
 
     def start(
         self, sock: Sock, mode: str, seed: int, now: float, match: int | None = None, kind: str = "solo"

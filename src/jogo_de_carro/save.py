@@ -10,7 +10,7 @@ from collections.abc import Container
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .settings import DEFAULT_MODE, MODE_BY_KEY, SKINS
+from .settings import CARS, DEFAULT_MODE, MODE_BY_KEY, SKINS
 
 log = logging.getLogger(__name__)
 APP_DIR = "jogo-de-carro"
@@ -55,7 +55,7 @@ class SaveData:
         data = cls()
         if not isinstance(raw, dict):
             return data
-        if raw.get("skin") in SKINS:
+        if isinstance(raw.get("skin"), str) and raw["skin"] in CARS:
             data.skin = raw["skin"]
         if isinstance(raw.get("mode"), str) and raw["mode"] in MODE_BY_KEY:
             data.mode = raw["mode"]
@@ -65,7 +65,7 @@ class SaveData:
             data.races = raw["races"]
         data.best = _numbers(raw.get("best"), MODE_BY_KEY, int)
         data.best_time = _numbers(raw.get("best_time"), MODE_BY_KEY, float)
-        data.best_by_skin = _numbers(raw.get("best_by_skin"), SKINS, int)
+        data.best_by_skin = _numbers(raw.get("best_by_skin"), CARS, int)
         return data
 
 

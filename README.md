@@ -50,7 +50,7 @@ The four difficulties keep the win times of the 2022 version. Normal is the defa
 
 ## Features
 
-- Six cars, each with a record of its own, picked on a turntable in the garage.
+- 26 cars, each with a record of its own, picked on a turntable in the garage: six free, and 20 bought in the garage with the coins online runs pay (the server keeps the wallet and the cars).
 - Contra o bot: the same road side by side against a FÁCIL, MÉDIO or DIFÍCIL bot; whoever lasts longer wins, then points decide. It sets no records.
 - A spawner that always leaves a reachable free lane, sized for the lane-change time at the current speed and kept close to the lane you are in; a test checks 10,000 rows per mode with an independent solver.
 - Traffic that signals with a blinker before changing lanes, logs that roll across lanes, potholes that only hurt in the middle.

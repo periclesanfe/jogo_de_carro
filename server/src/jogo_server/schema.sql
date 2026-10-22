@@ -112,3 +112,11 @@ CREATE TRIGGER matches_keep_runs BEFORE DELETE ON matches
 BEGIN
   UPDATE runs SET match_id = NULL WHERE match_id = OLD.id;
 END;
+
+-- migration 6
+CREATE TABLE garage(                        -- the paid cars a player bought (the free ones are everyone's)
+  user_id INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
+  skin TEXT NOT NULL,
+  price INTEGER NOT NULL,                   -- what it cost: the wallet subtracts it (a refund: delete the row)
+  PRIMARY KEY (user_id, skin)
+) WITHOUT ROWID;

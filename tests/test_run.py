@@ -10,11 +10,12 @@ import pygame
 import pytest
 
 from jogo_de_carro.app import Game
+from jogo_de_carro.assets import Assets
 from jogo_de_carro.golden import REPLAYS, digest
 from jogo_de_carro.run import MAX_EVENTS, BadInput, Run, simulate, verdict
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.race import Phase, RaceScene
-from jogo_de_carro.settings import DIFICIL, FACIL, FIXED_DT, MODES
+from jogo_de_carro.settings import CARS, DIFICIL, FACIL, FIXED_DT, MODES, PRICE
 from jogo_de_carro.world.autopilot import BOT_LEVELS, Bot, autopilot
 from jogo_de_carro.world.world import Controls
 
@@ -180,7 +181,8 @@ def test_feed_rejects_junk(assets):
     assert run.tick == 24 and run.log()["ev"][-5:] == good
 
     log = load("normal_crash")
-    bad = [{"mode": "x"}, {"mode": ["normal"]}, {"skin": "nope"}, {"seed": 1.5}, {"seed": -2}, {"seed": True}]
+    bad = [{"mode": "x"}, {"mode": ["normal"]}, {"skin": "nope"}, {"skin": ["yellow"]}, {"seed": 1.5}]
+    bad += [{"seed": -2}, {"seed": True}]
     bad += [{"shared": 0}, {"ev": "LR"}, {"ev": {"0": "L"}}, {"end": 10**9}]
     for change in bad:
         with pytest.raises(BadInput):
@@ -212,6 +214,22 @@ def test_boost_needs_up_alone(assets):
         both.play(0, 3)
         up.play(0, 1)
     assert both.score.distance_points == both.score.meters < up.score.distance_points
+
+
+def test_every_car_races_alike(game):
+    """A car is only a look: each races with car_yellow's hitbox and body, even drawn as thin as can be."""
+    assets = Assets()
+    thin = pygame.Surface((24, 40), pygame.SRCALPHA)
+    thin.fill((200, 40, 40), (10, 2, 4, 36))
+    for key in PRICE:
+        assets._native[f"car_{key}"] = [thin, thin]
+    for name in CORPUS:
+        log = load(name)
+        run = simulate(assets, log)
+        for key in CARS if name == "normal_crash" else ("moto",):  # every car on the short one
+            assert same(simulate(assets, log | {"skin": key}), run), (name, key)
+    for key in CARS:
+        assert assets.bounds(f"car_{key}") == assets.bounds("car_yellow")
 
 
 @pytest.mark.parametrize("mode", [m.key for m in MODES])
