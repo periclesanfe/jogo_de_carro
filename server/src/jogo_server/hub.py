@@ -7,7 +7,8 @@ progress (invalido) and closes the socket with 1008:
     C→S {"t":"hello","build":"<tree>","py":"3.12.12","pg":"2.5.7","skin":"yellow"}      first, and once
     S→C {"t":"welcome","me":{"id":7,"nick":"pericles"},"requests":2,     requests: friend requests to answer
          "friends":[{"id":42,"nick":"ana_42","s":"off|menu|racing"}],
-         "challenges":[{"id":77,"from":"ana_42","mode":"normal","secs":83.2,"score":5321}]}    open, to me
+         "challenges":[{"id":77,"from":"ana_42","mode":"normal","secs":83.2,"score":5321}],    open, to me
+         "coins":320}     my wallet: the coins of my paid runs (PAID)
       | {"t":"error","code":"login|version|busy|bad|rate","msg":"<pt-BR>"}, then the socket closes (rate: 20
          sockets a minute, each one's presence goes to every friend)
     S→C {"t":"presence","id":42,"s":"off|menu|racing"}      a friend's new status (menu: said hello, no run;
@@ -52,7 +53,8 @@ progress (invalido) and closes the socket with 1008:
     S→C {"t":"result","m":901,"run":901,"state":"ok|review|rejected","why":null|"top10|bot|desync|adiantado|
          ritmo|invalido|conexao|prazo|substituida|anulada","outcome":"crash|win|giveup|decided"|null,
          "score":2210|null,"secs":12.1|null,"rank":37|null,"verdict":null|"win|loss|draw",
-         "op":null|{"nick":"ana_42","score":5321,"secs":83.2}}
+         "op":null|{"nick":"ana_42","score":5321,"secs":83.2},"coins":37,"wallet":357}   coins: what this run
+         paid (0: none), as the server simulated it, never the client's count; wallet: my balance right after
 
 m is the player's own run id (in a live race too). Messages for a run that is already over (inputs in flight
 when the result went out) are ignored; any other m is a violation, and so is a reply to (or cancel of) someone
@@ -160,12 +162,22 @@ OFFERS = (  # the challenges open to a player (b), with the challenger's run: of
     " WHERE b = ? AND matches.state = 'open' ORDER BY matches.id"
 )
 FIN = {"outcome": ("crash", "win", "giveup"), "score": int}
+# the runs whose coins count (plan §2.2): never a reward for winning, which pairs of accounts could farm
+PAID = "(state IN ('ok', 'review') OR why IN ('substituida', 'conexao'))"
+# the wallet, derived: no ledger (an admin rejection takes a run's coins back by itself)
+# ponytail: a SUM over the runs_user index; keep it in users only if a profile shows its cost
+BALANCE = f"(SELECT coalesce(sum(coins), 0) FROM runs WHERE user_id = :u AND {PAID})"
 log = logging.getLogger("jogo")
 
 
 def expire(db: sqlite3.Connection) -> None:
     """Open challenges past their 7 days are expired: run before any read of them."""
     db.execute("UPDATE matches SET state = 'expired' WHERE state = 'open' AND expires <= ?", (time.time(),))
+
+
+def wallet(db: sqlite3.Connection, uid: int) -> int:
+    """The player's coins (0 for a deleted account)."""
+    return db.execute(f"SELECT {BALANCE}", {"u": uid}).fetchone()[0]
 
 
 def offer(mid: int, nick: str, mode: str, secs: float, score: int) -> dict:
@@ -251,6 +263,10 @@ def place(db: sqlite3.Connection, uid: int, mode: str, score: int) -> int:
 
 
 # --- sockets and runs -----------------------------------------------------------------------------------
+
+# a new run's or match's id, past those the hub holds (?): SQLite gives the highest out again once its row is
+# deleted, and an account deleted mid-race leaves its run, and the race's match, to be ended by their ids
+NEW_ID = "max(coalesce(max(id), 0), ?) + 1"
 
 
 @dataclass(eq=False)
@@ -513,17 +529,18 @@ class Hub:
         expire(self.db)
         challenges = [offer(*r) for r in self.db.execute(OFFERS, (sock.uid,))]
         welcome = {"t": "welcome", "me": me, "friends": friends, "requests": requests}
-        await self.send(sock, {**welcome, "challenges": challenges})
+        await self.send(sock, {**welcome, "challenges": challenges, "coins": wallet(self.db, sock.uid)})
         self.announce(sock.uid)
 
     def start(
         self, sock: Sock, mode: str, seed: int, now: float, match: int | None = None, kind: str = "solo"
     ) -> Live:
         """A new run, stored live until its result, waiting for ready."""
+        row = (sock.uid, kind, match, mode, sock.skin, seed, kind != "solo", self.state.build, time.time())
         rid = self.db.execute(
-            "INSERT INTO runs(user_id, kind, match_id, mode, skin, seed, shared, build, started, state)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'live') RETURNING id",
-            (sock.uid, kind, match, mode, sock.skin, seed, kind != "solo", self.state.build, time.time()),
+            "INSERT INTO runs(id, user_id, kind, match_id, mode, skin, seed, shared, build, started, state)"
+            f" SELECT {NEW_ID}, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'live' FROM runs RETURNING id",
+            (max(self.live, default=0), *row),
         ).fetchone()[0]
         sock.m, sock.live = rid, Live(rid, sock, mode, seed, now + READY_S, match, kind)
         self.live[rid] = sock.live
@@ -531,10 +548,10 @@ class Hub:
         return sock.live
 
     def new_match(self, kind: str, mode: str, seed: int, a: int, b: int) -> int:
-        sql = (
-            "INSERT INTO matches(kind, mode, seed, a, b, state, created) VALUES (?, ?, ?, ?, ?, 'racing', ?)"
-        )
-        return self.db.execute(sql + " RETURNING id", (kind, mode, seed, a, b, time.time())).fetchone()[0]
+        held = max((x.match or 0 for x in self.live.values()), default=0)
+        sql = "INSERT INTO matches(id, kind, mode, seed, a, b, state, created)"
+        sql += f" SELECT {NEW_ID}, ?, ?, ?, ?, ?, 'racing', ? FROM matches RETURNING id"
+        return self.db.execute(sql, (held, kind, mode, seed, a, b, time.time())).fetchone()[0]
 
     async def on_solo(self, sock: Sock, d: dict, now: float) -> None:
         """A ranked run; or (challenge, to a friend) the challenger's run: as solo, but on the shared road and
@@ -824,6 +841,7 @@ class Hub:
                 "ticks": run.tick,
                 "outcome": run.outcome,
                 "score": score,
+                "coins": run.score.coins,
                 "seconds": run.seconds,
                 "client_score": fin and fin["score"],
                 "max_lag": round(live.max_lag, 3),
@@ -850,4 +868,6 @@ class Hub:
         kind = {"solo": "ranqueada", "live": "ao vivo", "challenge": "desafio"}[live.kind]
         log.info("corrida %d %s %s %s %s max_lag %.2f", live.id, kind, live.mode, state, why, live.max_lag)
         out |= {"verdict": None, "op": None}  # a race: settle() fills them
+        sql = f"SELECT coalesce(sum(coins), 0) FROM runs WHERE id = ? AND {PAID}"  # (no row: account deleted)
+        out |= {"coins": self.db.execute(sql, (live.id,)).fetchone()[0], "wallet": wallet(self.db, uid)}
         return {"t": "result", "m": live.id, "run": live.id, "state": state, "why": why, **out}

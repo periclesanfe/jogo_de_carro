@@ -73,6 +73,7 @@ def test_a_challenge_from_start_to_end(s, clock):
         assert ana.result() == {
             "t": "result", "m": ana.m, "run": ana.m, "state": "ok", "why": None, "outcome": "crash",
             "score": hers[0], "secs": hers[1], "rank": None, "verdict": None, "op": None,
+            "coins": crashed.score.coins, "wallet": crashed.score.coins,
         }  # fmt: skip
         r, mt = row(s, ana.m), the_match(s, mid)
         assert (r["kind"], r["shared"], r["state"], r["match_id"]) == ("challenge", 1, "ok", mid)
@@ -122,7 +123,8 @@ def test_a_challenge_from_start_to_end(s, clock):
     assert bia.result() == {
         "t": "result", "m": bia.m, "run": bia.m, "state": "ok", "why": None, "outcome": "decided",
         "score": mine[0], "secs": mine[1], "rank": None, "verdict": "win",
-        "op": {"nick": "ana", "score": hers[0], "secs": hers[1]},
+        "op": {"nick": "ana", "score": hers[0], "secs": hers[1]}, "coins": won.score.coins,
+        "wallet": won.score.coins,
     }  # fmt: skip
     assert ops(bia) == sent(ana, CRASH, CRASH_FIN)  # the messages ana sent, as she sent them
     assert bia.of("op_end") == [{"t": "op_end", "m": bia.m, "k": T, "why": "crash"}]
@@ -228,6 +230,7 @@ def test_a_forfeit_is_a_loss(s, clock, how):
         assert bia.result() == {
             "t": "result", "m": bia.m, "run": bia.m, "state": "rejected", "why": "prazo",
             "outcome": None, "score": None, "secs": None, "rank": None, "verdict": "loss", "op": hers,
+            "coins": 0, "wallet": 0,
         }  # fmt: skip
         assert bia.of("go") == []
     elif how == "silence":  # at tick 0: ana's inputs up to tick 24 only, then how her run ended

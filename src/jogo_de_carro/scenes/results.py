@@ -14,7 +14,7 @@ from ..tween import out_back, out_cubic
 from ..ui import Menu, blit_pop, blit_text, clock_text, faded, panel
 from ..world.scoring import Score
 from .base import WEB, Context, Scene, Transition
-from .online import NO_RESULT, VERIFYING, official
+from .online import NO_RESULT, VERIFYING, official, paid
 from .pause import blurred
 from .race import Outcome
 
@@ -38,6 +38,7 @@ class RaceStats:
     official: str | None = None  # a ranked run: the server's word on it (online.VERIFYING until it comes)
     button: str = "JOGAR DE NOVO"  # the first button (REVANCHE: a new invite to the same friend; AMIGOS)
     to: str = ""  # a challenge's run: the friend it goes to (the official line says it was sent)
+    wallet: str = ""  # an online run: what it paid (online.paid), once the server said; online.NO_COINS
 
     @property
     def won(self) -> bool:
@@ -102,7 +103,8 @@ class ResultsScene(Scene):
         if self.stats.official != VERIFYING:
             return
         if msg.get("t") == "result":
-            self.stats = replace(self.stats, official=official(msg, self.stats.mode, self.stats.to))
+            line = official(msg, self.stats.mode, self.stats.to)
+            self.stats = replace(self.stats, official=line, wallet=paid(msg))
         elif msg.get("t") == "closed":
             self.stats = replace(self.stats, official=NO_RESULT)
 
@@ -176,8 +178,8 @@ class ResultsScene(Scene):
             anchor="midright",
         )
         self._draw_record(surface, box)
-        if stats.official:
-            self._draw_official(surface, stats.official, box.y + 512)
+        if line := " · ".join(filter(None, (stats.official, stats.wallet))):
+            self._draw_official(surface, line, box.y + 512)
         self.menu.draw(surface)
 
     def _draw_official(self, surface: pygame.Surface, line: str, y: int) -> None:

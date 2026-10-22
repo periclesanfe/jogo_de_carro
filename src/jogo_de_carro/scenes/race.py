@@ -30,8 +30,8 @@ from ..tween import clamp, out_back, out_cubic
 from ..ui import blit_pop, blit_text, clock_text, faded, glow, panel
 from ..world.autopilot import autopilot
 from ..world.world import Controls, EventKind
-from .base import Context, Scene, Transition
-from .online import CHALLENGE_LOST, LOST, NO_RESULT, VERIFYING, official
+from .base import WEB, Context, Scene, Transition
+from .online import CHALLENGE_LOST, LOST, NO_COINS, NO_RESULT, VERIFYING, official, paid
 
 COUNT_STEP = 0.75  # seconds per countdown number
 SLOWMO_TIME, SLOWMO_SCALE = 0.35, 0.25
@@ -108,6 +108,7 @@ class RaceScene(Scene):
             self.button = "AMIGOS"
         self.realtime = online is not None
         self.official = VERIFYING if online is not None else None  # the server's word on the run
+        self.wallet = NO_COINS if WEB and online is None else ""  # ...and what it paid (online.paid)
         self.sent = 0  # run.ev entries sent
         self.reported = online is None  # nothing more goes to the server (fin sent, or it decided)
         self.mode = MODE_BY_KEY[mode] if mode else ctx.mode
@@ -245,6 +246,7 @@ class RaceScene(Scene):
         racing = self.phase in (Phase.COUNTDOWN, Phase.RACING)
         if msg.get("t") == "result" and msg.get("m") == self.online:
             self.official, why = official(msg, self.mode, self.to), "Corrida encerrada pelo servidor"
+            self.wallet = paid(msg)
         elif msg.get("t") == "closed":
             lost = CHALLENGE_LOST if self.to else LOST  # (a challenge: the friend wins it)
             self.official, why = lost if racing else NO_RESULT, "Conexão perdida"
@@ -355,6 +357,7 @@ class RaceScene(Scene):
             official=self.official,
             button=self.button,
             to=self.to,
+            wallet=self.wallet,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 

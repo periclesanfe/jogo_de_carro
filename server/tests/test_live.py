@@ -204,6 +204,7 @@ def test_presence(s):
         assert ana.welcome == {
             "t": "welcome", "me": {"id": ana.uid, "nick": "ana"},
             "friends": [{"id": bia.uid, "nick": "bia", "s": "off"}], "requests": 1, "challenges": [],
+            "coins": 0,
         }  # fmt: skip
         bia.connect(stack)
         assert bia.welcome["friends"] == [{"id": ana.uid, "nick": "ana", "s": "menu"}]
@@ -386,12 +387,14 @@ def test_the_race_is_decided_at_the_crash(s, clock):
     assert a == {
         "t": "result", "m": ana.m, "run": ana.m, "state": "ok", "why": None, "outcome": "decided",
         "score": mine[0], "secs": mine[1], "rank": None, "verdict": "win",
-        "op": {"nick": "bia", "score": hers[0], "secs": hers[1]},
+        "op": {"nick": "bia", "score": hers[0], "secs": hers[1]}, "coins": won.score.coins,
+        "wallet": won.score.coins,
     }  # fmt: skip
     assert b == {
         "t": "result", "m": bia.m, "run": bia.m, "state": "ok", "why": None, "outcome": "crash",
         "score": hers[0], "secs": hers[1], "rank": None, "verdict": "loss",
-        "op": {"nick": "ana", "score": mine[0], "secs": mine[1]},
+        "op": {"nick": "ana", "score": mine[0], "secs": mine[1]}, "coins": crashed.score.coins,
+        "wallet": crashed.score.coins,
     }  # fmt: skip
     assert ops(ana) == sent(bia, CRASH, fin(CRASH))  # every one of bia's messages, in order
     assert ana.of("op_end") == [{"t": "op_end", "m": ana.m, "k": T, "why": "crash"}]
@@ -493,6 +496,7 @@ def test_a_race_that_never_starts_is_void(s, clock, how):
         assert p.result() == {
             "t": "result", "m": p.m, "run": p.m, "state": "rejected", "why": why,
             "outcome": None, "score": None, "secs": None, "rank": None, "verdict": None, "op": None,
+            "coins": 0, "wallet": 0,
         }  # fmt: skip
         assert p.of("go") == []
     assert the_match(s, ana)["state"] == "void" and s.hub.live == {}
