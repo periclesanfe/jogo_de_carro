@@ -54,6 +54,44 @@ MOUSE = (
     "<script>{const g=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext="
     'function(t,...a){return g.call(this,t,...a)||(t=="2d"&&this.id=="canvas"?{}:null)}}</script>'
 )
+# A loading screen in the site's look over pygbag's (its English text hidden), until web/main.py removes
+# it as the game draws its first frame. Its bar follows the template's own milestones: the runtime's download
+# (#progress counts main.data's decoded bytes against its gzipped length, so it ends near 148: *.4 makes
+# ~60%), "Running..." in #status, Python up (#canvas made visible), the game's code in (#infobox hidden).
+# Before the first of them, or with no length to count against, the bar is indeterminate.
+# No "click to start" (--ume_block 0): the game starts in a suspended AudioContext that SDL resumes on the
+# first keydown, mousedown or touchstart only, and a touchstart cannot (a tap's touchend can): any key or tap
+# resumes it.
+LOADER = (
+    "<style>#infobox,#transfer{display:none!important}"
+    "#loader{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;"
+    "justify-content:center;gap:18px;padding:16px;text-align:center;color:#949cb4;"
+    "background:radial-gradient(ellipse 120% 60% at 50% 0,#2a2e4a,#1a1c2c 70%) #1a1c2c;"
+    'font:700 17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
+    "#loader img{image-rendering:pixelated}"
+    "#loader h1{margin:0;font-size:clamp(2rem,10vw,3.3rem);font-weight:900;line-height:1.05;"
+    "white-space:nowrap;background:linear-gradient(180deg,#ffe678 20%,#f77622);-webkit-background-clip:text;"
+    "background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 rgba(0,0,0,.35))}"
+    "#bar{width:min(320px,100%);height:12px;border-radius:6px;background:#0b0d18;overflow:hidden}"
+    "#bar i{display:block;height:100%;width:var(--p,30%);border-radius:inherit;background:#ffcd3c;"
+    "transition:width .3s}"
+    "#bar:not([aria-valuenow]) i{animation:wait 1s ease-in-out infinite alternate}"
+    "@keyframes wait{to{margin-left:70%}}"
+    "@media (prefers-reduced-motion:reduce){#bar i{transition:none}"
+    "#bar:not([aria-valuenow]) i{animation:none;width:100%;opacity:.4}}</style>"
+    '<div id=loader><img src=favicon.png alt="" width=96 height=96><h1>JOGO DE CARRO</h1>'
+    '<div id=bar role=progressbar aria-label="Carregando o jogo"><i></i></div>'
+    "<p id=msg role=status>Baixando o motor…</p></div>"
+    '<script>{const $=document.getElementById.bind(document),bar=$("bar"),msg=$("msg");let at=0;'
+    'new MutationObserver(()=>{const v=$("infobox").style.display=="none"?85:$("canvas").style.visibility?70:'
+    '/^Down/.test($("status").textContent)?$("progress").getAttribute("value")*.4:62;if(v<=at)return;at=v;'
+    'bar.setAttribute("aria-valuenow",at|0);bar.style.setProperty("--p",at+"%");'
+    'const t=at<60?"Baixando o motor…":at<85?"Preparando a pista…":"Aquecendo os pneus…";'
+    "if(msg.textContent!=t)msg.textContent=t}).observe(document.body,"
+    '{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["value","style"]});'
+    'for(const e of["keydown","pointerup","touchend"])'
+    "addEventListener(e,()=>window.Module?.SDL2?.audioContext?.resume(),true)}</script>"
+)
 
 
 def git(*args: str, stdin: str | None = None) -> str:
@@ -100,6 +138,7 @@ def main() -> None:
         # --no_opt: on Linux pygbag would otherwise re-encode the audio and pngquant the sprites (the masks!)
         pygbag = ["--build", "--no_opt", "--title", "Jogo de Carro", "--cdn", f"/cdn/{PYGBAG}/"]
         pygbag += ["--can_close", "1"]  # no "leave this page?" prompt when SITE navigates away
+        pygbag += ["--ume_block", "0"]  # no "click to start": LOADER resumes the audio on any key or tap
         pygbag += ["--template", OUT / "cdn" / PYGBAG / "default.tmpl", "--icon", pkg / "assets" / "icon.png"]
         done = subprocess.run(
             [sys.executable, "-m", "pygbag", *pygbag, app], cwd=app, capture_output=True, text=True
@@ -110,9 +149,9 @@ def main() -> None:
             sys.exit(f"{done.stdout}{done.stderr}\npygbag failed: no index.html loading {RUNTIME_TAG}>")
         shutil.rmtree(dest, ignore_errors=True)
         dest.mkdir(parents=True)
-        (dest / "index.html").write_text(
-            html.replace(RUNTIME_TAG, PYGPI + FIT + MOUSE + RUNTIME_TAG), "utf-8"
-        )
+        html = html.replace(RUNTIME_TAG, PYGPI + FIT + MOUSE + RUNTIME_TAG)
+        html = html.replace('lang="en-us"', 'lang="pt-BR"', 1)  # LOADER's language, for screen readers
+        (dest / "index.html").write_text(html.replace("</body>", LOADER + "</body>"), "utf-8")
         for name in ("jogo.tar.gz", "favicon.png"):
             shutil.copy(web / name, dest)
     url = f"jogo/{tree}/"
