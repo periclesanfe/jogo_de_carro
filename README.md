@@ -4,6 +4,8 @@
 
 A pixel-art endless runner on a five-lane road: dodge traffic, stones, potholes and rolling logs, grab coins and survive until the clock runs out.
 
+**▶ Play it in your browser: [jogo.pericles.dev.br](https://jogo.pericles.dev.br)**
+
 <p align="center">
   <img src="docs/media/gameplay.gif" alt="Gameplay: the yellow car weaves between traffic, cones and stones on a five-lane road, collecting coins while near-miss popups build a x5 combo." width="640">
 </p>
@@ -11,6 +13,8 @@ A pixel-art endless runner on a five-lane road: dodge traffic, stones, potholes 
 Originally a 2022 team project at IFAL (Instituto Federal de Alagoas), rebuilt in 2026 on Python 3.14 and pygame-ce with new art, synthesized music, tests and cross-platform releases. The UI is in Brazilian Portuguese.
 
 ## Play
+
+**In the browser:** open [jogo.pericles.dev.br](https://jogo.pericles.dev.br), create an account (email or Google), pick a nickname and press *Jogar*. Runs there count for the public [ranking](https://jogo.pericles.dev.br/ranking), and you can add friends to race them live or challenge their recorded runs. It is made for a computer with a keyboard or a gamepad; the first load downloads the game (a few seconds).
 
 **Download:** grab the zip for Windows, macOS (Apple Silicon) or Linux from [Releases](https://github.com/periclesanfe/jogo_de_carro/releases/latest), unzip it and run `jogo-de-carro` (`jogo-de-carro.app` on macOS). The builds are not code-signed, so the first launch needs *More info → Run anyway* on Windows. On macOS, open the app once, then allow it in *System Settings → Privacy & Security → Open Anyway* (or run `xattr -dr com.apple.quarantine jogo-de-carro.app`).
 
