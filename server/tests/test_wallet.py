@@ -16,7 +16,7 @@ from test_live import CRASH, LONG, WIN, T, cut, friends, go, idle, race
 from test_ranked import HELLO, LOG, WS, Racer, honest, row
 
 clock, make, s = test_live.clock, test_live.make, test_live.s  # the fixtures
-board, no_bot_rule = test_ranked.board, test_ranked.no_bot_rule
+board, no_bot_rule, flag_all = test_ranked.board, test_ranked.no_bot_rule, test_ranked.flag_all
 
 
 @pytest.fixture
@@ -91,8 +91,8 @@ def test_prazo_and_a_restart_pay_nothing(s, clock, corpus_seed):
     assert hub.wallet(s.db, uid) == 0
 
 
-def test_review_pays_until_the_admin_rejects_it(s, clock, no_bot_rule, corpus_seed, monkeypatch):
-    """An empty board: a run given up at 5 s waits for review, then the whole run replaces it there
+def test_review_pays_until_the_admin_rejects_it(s, clock, flag_all, corpus_seed, monkeypatch):
+    """A bot-like run (the autopilot's) given up at 5 s waits for review, then the whole run replaces it there
     (substituida: still paid); the admin rejects that one and its coins leave the wallet."""
     monkeypatch.setenv("JOGO_DB", s.app.state.cfg.db)
     c, uid = s.player("ana")
@@ -102,8 +102,8 @@ def test_review_pays_until_the_admin_rejects_it(s, clock, no_bot_rule, corpus_se
         with c.websocket_connect(WS) as ws:
             results.append(Racer(s, clock, ws).play(log, fin=honest(log)))
     assert [(r["state"], r["why"], r["coins"], r["wallet"]) for r in results] == [
-        ("review", "top10", coins(short), coins(short)),
-        ("review", "top10", coins(LOG), coins(short) + coins(LOG)),
+        ("review", "bot", coins(short), coins(short)),
+        ("review", "bot", coins(LOG), coins(short) + coins(LOG)),
     ]  # fmt: skip
     assert row(s, results[0]["run"])["why"] == "substituida" and hub.wallet(s.db, uid) == results[1]["wallet"]
     assert admin.main(["rejeitar", str(results[1]["run"])]) == 0

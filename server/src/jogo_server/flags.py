@@ -5,8 +5,8 @@ reads the screen, anticipates some moves and reacts late to others. Features nev
 thresholds come from the environment (FLAG_*) so they can be tuned on beta logs without a deploy.
 
 Not caught: a corridor reader that waits like a person (100-250 ms a move) and still never crashes, since the
-spawner leaves 0.12 s of slack per planned move (plan §6.10). Not flagged is not "human": only the top-10 hold
-and the reviewer's replay stop such a bot.
+spawner leaves 0.12 s of slack per planned move (plan §6.10). Not flagged is not "human": such a bot ranks at
+once, top 10 included, until the admin rejects it (the owner took that risk over holding every top-10 run).
 """
 
 import itertools
@@ -74,7 +74,7 @@ def lag_up(arr: list) -> float:
 
 
 def flagged(f: dict) -> bool:
-    """The rule for ranks 11-100: (n >= MIN_N and (p10 < P10 or median < MEDIAN)) or adherence >= ADHERENCE.
+    """The rule for ranks 1-100: (n >= MIN_N and (p10 < P10 or median < MEDIAN)) or adherence >= ADHERENCE.
     lag_up is only recorded until it is calibrated on beta data."""
     r = {k: float(os.environ.get(f"FLAG_{k.upper()}") or v) for k, v in RULE.items()}
     return (f["n"] >= r["min_n"] and (f["p10"] < r["p10"] or f["median"] < r["median"])) or f[

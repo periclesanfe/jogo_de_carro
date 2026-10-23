@@ -59,8 +59,14 @@ def stored(s, uid: int, mode: str, score: int, state: str = "ok", seconds: float
 
 
 @pytest.fixture
+def flag_all(monkeypatch):
+    """The bot rule flags every run: short ones too, which the autopilot steers too briefly to be caught."""
+    monkeypatch.setenv("FLAG_ADHERENCE", "0")
+
+
+@pytest.fixture
 def board(s):
-    """Ten players far ahead in Normal, so a run is not held for the top 10."""
+    """Ten players far ahead in Normal: a run places 11th or lower."""
     for i in range(10):
         stored(s, s.user(f"top{i}@x.test", f"top{i}"), "normal", 10**6 - i)
 
@@ -174,26 +180,31 @@ def test_a_wrong_claim_is_a_desync(s, clock, board, no_bot_rule):
     assert s.client().get("/saude").json()["desync_24h"] == 1
 
 
-def test_a_run_that_would_enter_the_top_10_waits_for_review(s, clock, no_bot_rule):
+def test_a_run_in_the_top_10_ranks_at_once(s, clock, no_bot_rule):
+    """No hold for the top 10: a run with no sign of a bot is on the board as it ends."""
     c, _ = s.player("ana")
     with c.websocket_connect(WS) as ws:
         res = Racer(s, clock, ws).play(LOG, fin=honest(LOG))
-    assert (res["state"], res["why"], res["rank"]) == ("review", "top10", None)
+    assert (res["state"], res["why"], res["rank"]) == ("ok", None, 1)
+    assert 'class="pos"' in s.client().get("/ranking").text
+
+
+@pytest.mark.parametrize("ranks", ["1-10", "11-100"])
+def test_a_bot_like_run_in_the_top_100_waits_for_review(s, clock, request, ranks):
+    if ranks == "11-100":
+        request.getfixturevalue("board")
+    c, uid = s.player("ana")
+    with c.websocket_connect(WS) as ws:
+        res = Racer(s, clock, ws).play(LOG, fin=honest(LOG))
+    assert (res["state"], res["why"], res["rank"]) == ("review", "bot", None)
     site.review_mail(s.app.state)
     [(to, msg)] = s.outbox
     assert to == "admin@jogo.test" and "1 corrida(s) em análise" in msg["Subject"]
     assert s.client().get("/saude").json()["review"] == 1
-    assert 'class="pos"' not in s.client().get("/ranking").text  # held: not on the board
+    assert s.count("bests WHERE user_id = ?", uid) == 0  # held: not on the board
 
 
-def test_a_bot_like_run_in_ranks_11_to_100_waits_for_review(s, clock, board):
-    c, _ = s.player("ana")
-    with c.websocket_connect(WS) as ws:
-        res = Racer(s, clock, ws).play(LOG, fin=honest(LOG))
-    assert (res["state"], res["why"]) == ("review", "bot")
-
-
-def test_one_run_in_review_per_player_and_mode(s, clock, no_bot_rule):
+def test_one_run_in_review_per_player_and_mode(s, clock, flag_all):
     """An empty board: a 0-point give-up is not held, and only the player's best run waits for review."""
     c, _ = s.player("ana")
     with c.websocket_connect(WS) as ws:
@@ -208,10 +219,10 @@ def test_one_run_in_review_per_player_and_mode(s, clock, no_bot_rule):
             results.append(Racer(s, clock, ws).play(cut, fin=honest(cut)))
     assert 0 < results[1]["score"] < results[0]["score"] < results[2]["score"]
     assert [(r["state"], r["why"]) for r in results] == [
-        ("review", "top10"), ("rejected", "substituida"), ("review", "top10"),
+        ("review", "bot"), ("rejected", "substituida"), ("review", "bot"),
     ]  # fmt: skip
     assert [(row(s, r["run"])["state"], row(s, r["run"])["why"]) for r in results] == [
-        ("rejected", "substituida"), ("rejected", "substituida"), ("review", "top10"),
+        ("rejected", "substituida"), ("rejected", "substituida"), ("review", "bot"),
     ]  # fmt: skip
 
 
@@ -506,7 +517,7 @@ def test_ranking_pages(s, board):
 # --- review tooling ---------------------------------------------------------------------------------------
 
 
-def test_review_tooling(s, clock, capsys, monkeypatch, no_bot_rule):
+def test_review_tooling(s, clock, capsys, monkeypatch):
     monkeypatch.setenv("JOGO_DB", s.app.state.cfg.db)
     c, uid = s.player("ana")
     with c.websocket_connect(WS) as ws:
@@ -514,7 +525,7 @@ def test_review_tooling(s, clock, capsys, monkeypatch, no_bot_rule):
     run = str(res["run"])
     assert admin.main(["revisar"]) == 0
     out = capsys.readouterr().out
-    assert f"{run} ana" in out and "top10" in out and "1 em análise" in out
+    assert f"{run} ana" in out and "bot" in out and "1 em análise" in out
 
     assert admin.main(["export", run]) == 0
     assert json.loads(capsys.readouterr().out) == LOG  # what --replay shows the reviewer
@@ -535,4 +546,4 @@ def test_load_tool(monkeypatch, capsys):
     monkeypatch.setattr(hub, "new_seed", hub.new_seed)  # load.main replaces it: put it back afterwards
     asyncio.run(load.main(2, 0.5))
     out = capsys.readouterr().out
-    assert "2 corridas" in out and "atraso do loop" in out and "review/top10': 2" in out
+    assert "2 corridas" in out and "atraso do loop" in out and "review/bot': 2" in out
