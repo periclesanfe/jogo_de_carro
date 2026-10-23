@@ -17,7 +17,7 @@ from jogo_server import app as site
 
 WS = BASE.replace("https", "wss") + "/ws"  # the cookies' domain (TestClient defaults to ws://testserver)
 HELLO = {"t": "hello", "build": BUILD, "py": "3.12.12", "pg": "2.5.7", "skin": "yellow"}
-LOG = json.loads((REPLAYS / "normal_crash.json").read_text(encoding="utf-8"))  # crashes at 49.6 s
+LOG = json.loads((REPLAYS / "normal_crash.json").read_text(encoding="utf-8"))  # crashes at 51.4 s
 
 
 class Clock:
@@ -144,8 +144,8 @@ def test_honest_run_is_ok_with_the_servers_score(s, clock, board, no_bot_rule):
     want = simulate(hub.assets(), LOG)
     assert res == {
         "t": "result", "m": r.m, "run": r.m, "state": "ok", "why": None, "outcome": "crash",
-        "score": want.score.total, "secs": round(want.seconds, 1), "rank": 11, "verdict": None, "op": None,
-        "coins": want.score.coins, "wallet": want.score.coins,
+        "score": want.score.total, "secs": round(want.seconds, 1), "k": want.tick, "rank": 11,
+        "verdict": None, "op": None, "coins": want.score.coins, "wallet": want.score.coins,
     }  # fmt: skip
     db, score = row(s, r.m), want.score.total
     assert (db["state"], db["ticks"], db["score"], db["client_score"]) == ("ok", want.tick, score, score)
@@ -510,6 +510,7 @@ def test_ranking_pages(s, board):
     assert c.get("/ranking?modo=x").status_code == 404
     home = s.client().get("/").text
     assert home.count('class="pos"') == 10 + 1 and "Ninguém ainda" in home  # Normal's top 10 and Fácil's one
+    assert "<b>Novidade:</b> power-ups" in home  # the E4 notice (plan §7, rollout step 5)
     s.db.execute("DELETE FROM bests")
     assert "top0" in s.client().get("/").text  # cached for 10 s
 

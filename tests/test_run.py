@@ -15,9 +15,10 @@ from jogo_de_carro.golden import REPLAYS, digest
 from jogo_de_carro.run import MAX_EVENTS, BadInput, Run, simulate, verdict
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.race import Phase, RaceScene
-from jogo_de_carro.settings import CARS, DIFICIL, FACIL, FIXED_DT, MODES, PRICE
+from jogo_de_carro.settings import CARS, DIFICIL, FACIL, FIXED_DT, MODES, PRICE, PX_PER_METER, Item
 from jogo_de_carro.world.autopilot import BOT_LEVELS, Bot, autopilot
 from jogo_de_carro.world.road import BIOMES, biome_at, ground
+from jogo_de_carro.world.spawner import LOOKAHEAD
 from jogo_de_carro.world.world import Controls
 
 HELD = [set(), {pygame.K_w}, {pygame.K_w}, {pygame.K_s}, {pygame.K_w, pygame.K_s}]  # W+S: no boost
@@ -25,10 +26,14 @@ HELD = [set(), {pygame.K_w}, {pygame.K_w}, {pygame.K_s}, {pygame.K_w, pygame.K_s
 # writes; re-record it when test_replay_corpus says so (a rules change, or a change to race()).
 CORPUS = {
     "facil_win": ("facil", False, 1, 0, None),
-    "normal_crash": ("normal", False, 2, 0.003, None),
+    "normal_crash": ("normal", False, 9, 0.003, None),
     "dificil_win": ("dificil", False, 2, 0, None),
-    "infinito_trunks_giveup": ("infinito", False, 7, 0, 200),  # the most trunks of seeds 1-8
+    "infinito_trunks_giveup": ("infinito", False, 4, 0, 200),  # the most trunks of seeds 1-8
     "normal_shared_win": ("normal", True, 1, 0, None),
+    # the shared road with every new power, found by a seed search: ESTRELA (smashing an obstacle) and TURBO;
+    # then DEVAGAR, VIDA EXTRA and FANTASMA, given up once it has them
+    "normal_shared_smash_crash": ("normal", True, 67, 0.003, None),
+    "normal_shared_powers_giveup": ("normal", True, 98, 0, 90),
 }
 
 
@@ -87,6 +92,16 @@ def race(game: Game, mode: str, shared: bool, seed: int, sloppy: float, give_up_
 
 def same(a: Run, b: Run) -> bool:
     return (a.outcome, a.tick, a.score, a.seconds) == (b.outcome, b.tick, b.score, b.seconds)
+
+
+def holding(power: Item | None):
+    """The autopilot with ``power`` on (None: no power) whatever it picks up."""
+
+    def drive(world):
+        world.player.power, world.player.power_t = power, 1.0
+        return autopilot(world)
+
+    return drive
 
 
 @pytest.mark.parametrize("shared", [False, True], ids=["solo", "shared"])
@@ -261,13 +276,17 @@ def test_a_run_builds_no_ground(assets):
 
 @pytest.mark.parametrize("mode", [m.key for m in MODES])
 def test_shared_road_is_the_same_for_every_driver(assets, mode):
-    def placements(driver, skin: str, shared: bool) -> list:
+    """Even for drivers whose DEVAGAR or TURBO run their worlds' clocks apart."""
+    end = 8000.0
+
+    def placements(driver, skin: str, shared: bool) -> set:
         run = Run(assets, mode, skin, 99, shared, driver)
         run.world.invulnerable = True
         out, spawn = [], run.world._spawn
         run.world._spawn = lambda p: (out.append(p), spawn(p))
-        run.advance(20 * 120)
-        return out
+        while run.world.distance < end:
+            run.advance(run.tick + 1)
+        return {p for p in out if p.g <= end + LOOKAHEAD}  # all out by now, whatever the last tick's step
 
     def keep_lane(world):
         return Controls()
@@ -278,7 +297,19 @@ def test_shared_road_is_the_same_for_every_driver(assets, mode):
     road = placements(autopilot, "yellow", True)
     assert len(road) > 30
     assert placements(keep_lane, "red", True) == road == placements(hug_left, "white", True)
+    for power in (Item.TURBO, Item.SLOW):
+        assert placements(holding(power), "blue", True) == road, power
     assert placements(keep_lane, "red", False) != placements(hug_left, "red", False)  # solo: it follows you
+
+
+def test_turbo_gets_no_meters(assets):
+    """It runs the world's clock 1.5 times as fast: a win comes sooner, the same distance away."""
+    plain, turbo = (Run(assets, FACIL.key, "yellow", 1, False, holding(p)) for p in (None, Item.TURBO))
+    for run in (plain, turbo):
+        run.world.invulnerable = True
+        run.advance(run.cap)
+    assert plain.outcome == turbo.outcome == "win" and turbo.tick < plain.tick
+    assert abs(turbo.score.meters - plain.score.meters) < plain.world.px / PX_PER_METER  # one tick
 
 
 def test_bot_levels_are_ordered(assets):

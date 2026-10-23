@@ -14,13 +14,12 @@ from ..run import BadInput, Run, Scored, verdict
 from ..settings import (
     ACCENT,
     COMBO_TIME,
-    CYAN,
     DANGER,
     FIXED_DT,
     FLAME,
     HEIGHT,
     MUTED,
-    SHIELD_TIME,
+    POWERS,
     WHITE,
     WIDTH,
 )
@@ -54,6 +53,11 @@ UNSTABLE = 60  # live: ticks the rival may fall behind its place before "conexã
 # drawn behind me for late inputs (a jitter buffer: one-way latency up to about 200 ms stays smooth)
 HOLD_S = 12.0  # live: my run is over; the race waits this long at most for the server's result
 VERDICTS = {"win": 1, "draw": 0, "loss": -1}
+
+
+def tick_mss(k: int) -> str:
+    """m:ss after k ticks: real time, which decides a race (DEVAGAR and TURBO move only the world's clock)."""
+    return mss(k * FIXED_DT)
 
 
 def bar(surface: pygame.Surface, rect: pygame.Rect, k: float, color: tuple[int, int, int]) -> None:
@@ -119,7 +123,7 @@ class VersusScene(RaceScene):
         self._results(outcome)
 
     def _results(self, outcome: Outcome, why: str = "", seconds: float | None = None) -> None:
-        """The results card: the verdict, why (or `why`), and the rival's line."""
+        """The results card: the verdict, why (or `why`), and the rival's line, its times real (tick_mss)."""
         from .results import RaceStats, ResultsScene
 
         unlocked = self.ctx.save.drove(self.score.meters)
@@ -127,7 +131,7 @@ class VersusScene(RaceScene):
         stats = RaceStats(
             outcome,
             self.mode,
-            self.run.seconds if seconds is None else seconds,
+            self.run.tick * FIXED_DT if seconds is None else seconds,
             self.score,
             False,
             self.best,
@@ -141,27 +145,27 @@ class VersusScene(RaceScene):
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
-    def _theirs(self) -> tuple[str | None, dict]:
-        """How the rival's run ended, and the server's numbers for it (a live race's)."""
-        return self.rival.outcome, {}
+    def _theirs(self) -> tuple[str | None, int, dict]:
+        """How the rival's run ended, on which tick, and the server's numbers for it (a live race's)."""
+        return self.rival.outcome, self.rival.tick, {}
 
     def line(self) -> str:
-        theirs, op = self._theirs()
+        theirs, k, op = self._theirs()
         line = f"{self.nick}: {op.get('score', self.rival.score.total)} pontos"
         if theirs in ENDS:
-            line += f" · {ENDS[theirs]} aos {mss(op.get('secs') or self.rival.seconds)}"
+            line += f" · {ENDS[theirs]} aos {tick_mss(k)}"
         return line
 
     def reason(self) -> str:
         me, bot, v = self.run, self.rival, self.verdict
         assert v is not None
-        if me.tick != bot.tick or (me.outcome == "win") != (bot.outcome == "win"):  # who lasted longer
-            loser, who = (me, "Você") if v < 0 else (bot, "O bot")
-            return f"{who} {'desistiu' if loser.outcome == 'giveup' else 'bateu'} aos {mss(loser.seconds)}"
-        if me.outcome == "win":
+        if me.outcome == bot.outcome == "win":  # on different ticks, if a world's clock ran faster
             both = "Os dois chegaram ao fim"
-        else:
-            both = f"Os dois {'bateram' if me.outcome == 'crash' else 'pararam'} aos {mss(me.seconds)}"
+        elif me.tick == bot.tick and "win" not in (me.outcome, bot.outcome):
+            both = f"Os dois {'bateram' if me.outcome == 'crash' else 'pararam'} aos {tick_mss(me.tick)}"
+        else:  # who lasted longer
+            loser, who = (me, "Você") if v < 0 else (bot, "O bot")
+            return f"{who} {'desistiu' if loser.outcome == 'giveup' else 'bateu'} aos {tick_mss(loser.tick)}"
         return (
             both + {1: ": você fez mais pontos", 0: " com os mesmos pontos", -1: ": o bot fez mais pontos"}[v]
         )
@@ -204,20 +208,19 @@ class VersusScene(RaceScene):
         coin = self.ctx.assets.frame("coin")
         surface.blit(coin, coin.get_rect(midleft=(x + 8, box.y + 96)))
         blit_text(surface, f"x {score.coins}", 26, (x + 50, box.y + 96), ACCENT, anchor="midleft")
+        if self.world.player.lives:
+            heart = self.ctx.assets.frame("life", int(self.clock * 6))
+            surface.blit(heart, heart.get_rect(midright=(box.right - 6, box.y + 96)))
         if score.combo >= 2:
             scale = 1 + 0.35 * out_cubic(self.combo_pop)
             blit_pop(
                 surface, f"COMBO x{score.combo}", 26, ACCENT, (box.centerx, box.y + 126), scale, peak=1.35
             )
             bar(surface, pygame.Rect(x + 12, box.y + 142, w - 24, 5), score.combo_timer / COMBO_TIME, ACCENT)
-        if self.world.player.shield > 0:
-            blit_text(surface, "ESCUDO", 22, (x + 12, box.y + 152), CYAN, anchor="topleft", shadow=False)
-            bar(
-                surface,
-                pygame.Rect(x + 12, box.y + 172, w - 24, 6),
-                self.world.player.shield / SHIELD_TIME,
-                CYAN,
-            )
+        if power := self.world.player.power:  # the rival's power shows only on its car
+            label, colour = POWERS[power].label, POWERS[power].colour
+            blit_text(surface, label, 22, (x + 12, box.y + 152), colour, anchor="topleft", shadow=False)
+            bar(surface, pygame.Rect(x + 12, box.y + 172, w - 24, 6), self._power_left(), colour)
 
         vs = outlined("VS", 56, FLAME)
         surface.blit(vs, vs.get_rect(center=(COLUMN.centerx, 342)))
@@ -236,7 +239,7 @@ class VersusScene(RaceScene):
     def state(self) -> tuple[str, Color] | None:
         """The rival card's pill."""
         if self.rival.outcome == "crash":
-            return f"BATEU {mss(self.rival.seconds)}", DANGER
+            return f"BATEU {tick_mss(self.rival.tick)}", DANGER
         return None
 
 
@@ -354,29 +357,30 @@ class LiveScene(VersusScene):
             self.over = outcome
             return
         result, seconds = self.result or {}, None
-        secs = result.get("secs")
-        # the server stopped my run (decided, or a forfeit stored as a give-up), maybe after I ran on
-        if result.get("outcome") in ("decided", "giveup") and isinstance(secs, int | float):
-            mine = dict(self.kept).get(round(secs / FIXED_DT))  # at its last k (a tenth of a second): its
-            if mine:  # numbers, which the rival's card shows too
-                self.score, seconds = mine, secs
+        k = result.get("k")
+        # the server stopped my run (decided, or a forfeit stored as a give-up), maybe after I ran on: its
+        # numbers at its last k, which the rival's card shows too
+        if result.get("outcome") in ("decided", "giveup") and (mine := dict(self.kept).get(k)):
+            self.score, seconds = mine, k * FIXED_DT
         self._results(outcome, why, seconds)
 
-    def _theirs(self) -> tuple[str | None, dict]:
-        """How the rival's run ended (op_end, else as replayed here), and the result's numbers for it."""
-        return (self.end[1] if self.end else self.rival.outcome), (self.result or {}).get("op") or {}
+    def _theirs(self) -> tuple[str | None, int, dict]:
+        """How the rival's run ended and on which tick (op_end, else as replayed here), and the result's
+        numbers for it."""
+        k, theirs = self.end or (self.rival.tick, self.rival.outcome)
+        return theirs, k, (self.result or {}).get("op") or {}
 
     def reason(self) -> str:
         result, v = self.result or {}, self.verdict
         assert v is not None
-        theirs, op = self._theirs()
+        theirs, k, _ = self._theirs()
         mine, why = result.get("outcome") or self.run.outcome, result.get("why")
         if v < 0 and why in WHY:  # the server stopped my run
             return f"Você perdeu: {WHY[why]}"
         if v > 0 and theirs in ENDS:
-            return f"{self.nick} {ENDS[theirs]} aos {mss(op.get('secs') or self.rival.seconds)}"
+            return f"{self.nick} {ENDS[theirs]} aos {tick_mss(k)}"
         if v < 0 and mine in ENDS:
-            return f"Você {ENDS[mine]} aos {mss(result.get('secs') or self.run.seconds)}"
+            return f"Você {ENDS[mine]} aos {tick_mss(result.get('k') or self.run.tick)}"
         return {
             1: "Você fez mais pontos",
             0: "Os dois fizeram os mesmos pontos",

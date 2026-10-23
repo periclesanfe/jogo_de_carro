@@ -30,7 +30,7 @@ from jogo_de_carro.scenes.versus import (
     RecordingScene,
     VersusScene,
 )
-from jogo_de_carro.settings import FIXED_DT, FLAME, MODE_BY_KEY, MUTED
+from jogo_de_carro.settings import FIXED_DT, FLAME, MODE_BY_KEY, MUTED, Item
 from jogo_de_carro.world.autopilot import autopilot
 
 FRAME = 1 / 60
@@ -673,10 +673,11 @@ def test_the_live_rival_runs_24_ticks_behind_and_catches_up_gently(game, window)
         "outcome": "decided",
         "score": 1,
         "secs": 8.3,
+        "k": 996,
     }
     race.on_net(
-        {**result, "rank": None, "verdict": "win", "op": {"nick": "ana_42", "score": 90, "secs": 7.5}}
-    )
+        {**result, "rank": None, "verdict": "win", "op": {"nick": "ana_42", "score": 90, "secs": 9.5}}
+    )  # her secs: the world's clock, which a TURBO ran 2 s ahead of her 900 ticks
     assert race.phase is Phase.WON and race.banner[0] == "VITÓRIA!"
     until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
     stats = game.scenes.top.stats
@@ -712,7 +713,8 @@ def test_crashing_first_waits_for_the_result(game, window):
     race.on_net(
         {
             **result,
-            "secs": race.run.seconds,
+            "secs": race.run.seconds + 2,  # the world's clock, as if a TURBO had run it ahead
+            "k": race.run.tick,
             "rank": None,
             "verdict": "loss",
             "op": {"nick": "ana_42", "score": 9, "secs": 13.0},
@@ -720,7 +722,7 @@ def test_crashing_first_waits_for_the_result(game, window):
     )
     stats = game.scenes.top.stats
     assert (VERDICTS[stats.verdict][0], stats.rival) == ("VOCÊ PERDEU", "ana_42: 9 pontos")
-    assert stats.reason == f"Você bateu aos 0:{int(race.run.seconds):02d}"
+    assert stats.reason == f"Você bateu aos 0:{int(race.run.tick * FIXED_DT):02d}"
     frames(game, 2)
     assert isinstance(game.scenes.top, ResultsScene)
 
@@ -791,12 +793,14 @@ def test_live_races_end_without_a_result(game, window):
 
 def test_a_forfeit_card_shows_the_servers_numbers(game, window):
     """The server cut my run off (5 s of silence) after my client ran on (a frozen tab resumes with a 1 s
-    frame): my card shows the server's numbers, as the rival's does."""
+    frame): my card shows the server's numbers, as the rival's does, at the k it says, and that k's time (with
+    TURBO, the result's secs are the world's clock, ahead of the ticks)."""
     race = live(game, window)
     race.world.invulnerable = True
+    race.world.player.power, race.world.player.power_t = Item.TURBO, 4.0  # the world's clock runs 2 s ahead
     while race.run.tick < 1560:  # my client got to 13 s...
         race.update(FIXED_DT)
-    there = dict(race.kept)[1464]  # ...the server stopped me at my last k it heard, 12.2 s
+    there = dict(race.kept)[1464]  # ...the server stopped me at my last k it heard (12.2 s, 14.2 of world)
     assert there.total != race.run.score.total
     race.on_net(
         {
@@ -807,7 +811,8 @@ def test_a_forfeit_card_shows_the_servers_numbers(game, window):
             "why": "conexao",
             "outcome": "giveup",
             "score": there.total,
-            "secs": 12.2,
+            "secs": 14.2,
+            "k": 1464,
             "rank": None,
             "verdict": "loss",
             "op": {"nick": "ana_42", "score": 953, "secs": 18.6},
@@ -816,7 +821,7 @@ def test_a_forfeit_card_shows_the_servers_numbers(game, window):
     until(game, lambda: isinstance(game.scenes.top, ResultsScene), 4)
     stats = game.scenes.top.stats
     assert stats.reason == "Você perdeu: conexão perdida"
-    assert (stats.seconds, stats.score.total) == (12.2, there.total)
+    assert (stats.seconds, stats.score.total) == (1464 * FIXED_DT, there.total)
 
 
 # --- Desafiar amigo (M5) ----------------------------------------------------------------------------------
@@ -1038,7 +1043,7 @@ def test_a_recording_that_ends_past_my_crash_drives_on(game, window):
             "run": M,
             **lost,
             "verdict": "loss",
-            "op": {"nick": "ana_42", "score": 649, "secs": 16.9},
+            "op": {"nick": "ana_42", "score": 649, "secs": 14.9},  # (a DEVAGAR: the world's clock)
         }
     )
     for _ in range(40):

@@ -73,7 +73,7 @@ class Run:
         world, score = self.world, self.score
         world.running = True
         events = world.update(FIXED_DT, controls)
-        score.drive(world.speed * FIXED_DT, boost)
+        score.drive(world.px, boost)
         score.update(FIXED_DT)
         out = []
         for e in events:  # the events after a crash in the same tick still score
@@ -182,8 +182,9 @@ def verdict(a: Run, b: Run) -> int | None:
     """1 if run a beat run b, -1 if b beat a, 0 for a draw, None while it is open.
 
     A run that ended early (crash, give-up, lost connection) after T ticks loses to a run still alive past T:
-    before a crash the distance is a function of the tick alone, so that is who went farthest. Two runs that
-    both won (or reached the cap), or ended early on the same tick, are decided by score.
+    a tick is real time (DEVAGAR and TURBO only change the world's clock), so that is who lasted longer, as
+    the split screen shows it. Two runs that both won (or reached the cap), or ended early on the same tick,
+    are decided by score.
     """
     early_a, early_b = a.outcome not in (None, "win"), b.outcome not in (None, "win")
     if early_a and early_b and a.tick != b.tick:

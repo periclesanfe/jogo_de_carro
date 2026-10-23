@@ -10,12 +10,17 @@ import pygame
 from ..assets import Assets
 from ..particles import Particles
 from ..settings import (
+    FIXED_DT,
     HEIGHT,
     LANE_CENTERS,
     NEAR_MISS_PX,
+    NO_NEAR_MISS,
     PLAYER_Y,
-    SHIELD_TIME,
+    POWERS,
+    PROTECT,
     SKINS,
+    START_RAMP_S,
+    TIME_SCALE,
     Difficulty,
     Item,
     Kind,
@@ -24,12 +29,11 @@ from ..tween import approach
 from .difficulty import speed_at, versus_rows
 from .obstacles import Obstacle, Trunk
 from .pickups import Pickup
-from .player import Player
+from .player import GRACE, Player
 from .road import Road
 from .spawner import ItemPlacement, Placement, Spawner
 from .traffic import Traffic
 
-START_RAMP_S = 0.7  # seconds to reach cruising speed after "JÁ!"
 ATTRACT_T = 45.0  # difficulty clock used by the title screen's endless demo drive
 SPEED_LINE_BANDS = ((300.0, 396.0), (884.0, 980.0))
 DODGE_WINDOW = 0.2  # seconds after a lane change starts during which passing an obstacle is a dodge
@@ -44,11 +48,13 @@ DEBRIS = {
 class EventKind(Enum):
     LANE_CHANGE = auto()
     COIN = auto()
-    SHIELD_UP = auto()
+    POWER_UP = auto()  # any power, the extra life included (WorldEvent.item)
     SHIELD_BREAK = auto()
     NEAR_MISS = auto()
     BUMP = auto()
     CRASH = auto()
+    SMASH = auto()  # the star destroyed an obstacle
+    LIFE_LOST = auto()  # the extra life took a hit, as a shield would
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,7 @@ class WorldEvent:
     kind: EventKind
     x: float
     y: float
+    item: Item | None = None  # POWER_UP's
 
 
 @dataclass
@@ -95,8 +102,9 @@ class World:
         self.speed = speed_at(mode, ATTRACT_T) if attract else 0.0
         self.running = attract
         self.invulnerable = attract
-        if attract:  # the demo car never wears a shield ring under the title menu
-            self.spawner.next_shield_t = math.inf
+        if attract:  # the demo car never wears a power under the title menu
+            self.spawner.next_item_t, self.spawner.frozen = math.inf, True
+        self.px = 0.0  # how far the world moved on the last update
         self._exhaust = 0.0
 
     # --- simulation ------------------------------------------------------------------------------------
@@ -104,16 +112,18 @@ class World:
     def update(self, dt: float, controls: Controls) -> list[WorldEvent]:
         events: list[WorldEvent] = []
         player = self.player
+        scale = TIME_SCALE.get(player.power, 1.0)
+        wdt = dt * scale  # the world's clock: DEVAGAR and TURBO change it, the player's car keeps real time
         if self.running:
             if not self.attract and not player.crashed:
-                self.elapsed += dt
+                self.elapsed += wdt
             target = speed_at(self.mode, self.elapsed)
-            if player.crashed:
-                self.speed = approach(self.speed, 0.0, 1.8, dt)
+            if player.crashed:  # a crash ends the power: the scale is 1 (and approach() needs no libm)
+                self.speed = approach(self.speed, 0.0, 1.8, wdt)
             else:
-                self.speed = min(target, self.speed + self.mode.base_speed / START_RAMP_S * dt)
-        px = self.speed * dt
-        self.distance += px
+                self.speed = min(target, self.speed + self.mode.base_speed / START_RAMP_S * wdt)
+        self.px = self.speed * wdt
+        self.distance += self.px
         lane = None if self.shared_road else player.lane
         for placement in self.spawner.update(self.distance, self.elapsed, self.speed, lane):
             self._spawn(placement)
@@ -123,12 +133,12 @@ class World:
             self.particles.dust(player.x - controls.steer * 24, player.y + 50, 5)
         player.update(dt, controls.vertical, self.speed)
         for ob in self.obstacles:
-            ob.update(dt, self.speed)
+            ob.update(wdt, self.speed)
         for pickup in self.pickups:
-            pickup.update(dt, self.speed)
-        self.road.update(px)
-        self.particles.update(dt, px)
-        self._effects(dt)
+            pickup.update(wdt, self.speed)
+        self.road.update(self.px)
+        self.particles.update(wdt, self.px)
+        self._effects(dt, self.speed * scale)
         if not player.crashed:
             self._collide(events)
             self._collect(events)
@@ -168,7 +178,8 @@ class World:
             ob = Obstacle(self.assets, p.kind, p.kind.value, p.lane, x, y, y, flat=p.kind is Kind.POTHOLE)
             self.obstacles.append(ob)
 
-    def _effects(self, dt: float) -> None:
+    def _effects(self, dt: float, shown: float) -> None:
+        """Exhaust, crash smoke and speed lines over the verges; ``shown``: the speed the road scrolls at."""
         player = self.player
         if player.crashed:
             if self.rng.random() < dt * 14:
@@ -178,7 +189,7 @@ class World:
         if self._exhaust <= 0:  # idling at the start line puffs more slowly
             self._exhaust = 0.05 if self.speed > 0 else 0.14
             self.particles.exhaust(player.x - 14, player.y + 62)
-        if self.speed > 520 and self.rng.random() < dt * (self.speed - 520) / 18:  # over the verges only
+        if shown > 520 and self.rng.random() < dt * (shown - 520) / 18:
             band = SPEED_LINE_BANDS[self.rng.random() < 0.5]
             self.particles.speed_line(self.rng.uniform(*band), self.speed)
 
@@ -188,16 +199,21 @@ class World:
         for ob in list(self.obstacles):
             orect = ob.rect
             if orect.colliderect(prect) and pmask.overlap(ob.mask, (orect.x - prect.x, orect.y - prect.y)):
-                if self.invulnerable or player.grace > 0:
-                    ob.passed = True  # driving through it is no near miss
-                    continue
                 cx, cy = (player.x + ob.x) / 2, (player.y + ob.y) / 2
-                if player.shield > 0:
-                    player.shield, player.grace = 0.0, 0.9
-                    self.obstacles.remove(ob)
-                    self.particles.debris(ob.x, ob.y, DEBRIS.get(ob.kind, ((200, 200, 210), (90, 90, 110))))
-                    self.particles.burst(cx, cy, (65, 220, 240), 24, 360)
-                    events.append(WorldEvent(EventKind.SHIELD_BREAK, cx, cy))
+                if self.invulnerable or player.grace > 0 or player.power in PROTECT:
+                    ob.passed = True  # driving through it is no near miss
+                    if not self.invulnerable:  # a power's protection never ends inside it
+                        player.grace = max(player.grace, 2 * FIXED_DT)
+                    if player.power is Item.STAR:
+                        self._smash(ob, cx, cy, Item.STAR, EventKind.SMASH, events)
+                    continue
+                if player.power is Item.SHIELD:
+                    player.power, player.power_t, player.grace = None, 0.0, GRACE
+                    self._smash(ob, cx, cy, Item.SHIELD, EventKind.SHIELD_BREAK, events)
+                    continue
+                if player.lives:
+                    player.lives, player.grace = player.lives - 1, GRACE
+                    self._smash(ob, cx, cy, Item.LIFE, EventKind.LIFE_LOST, events)
                     continue
                 direction = player.x - ob.x or self.rng.choice((-1, 1))
                 player.crash(direction)
@@ -220,26 +236,42 @@ class World:
             body = ob.body
             if body.top > pbody.bottom:
                 ob.passed = True
-                if ob.dodged and ob.min_gap <= NEAR_MISS_PX:
+                if ob.dodged and ob.min_gap <= NEAR_MISS_PX and player.power not in NO_NEAR_MISS:
                     events.append(WorldEvent(EventKind.NEAR_MISS, (player.x + ob.x) / 2, player.y - 40))
             elif body.bottom >= pbody.top:  # side by side: only a dodge counts, not cruising past a truck
                 gap = max(body.left - pbody.right, pbody.left - body.right)
                 ob.min_gap = min(ob.min_gap, gap)
                 ob.dodged = ob.dodged or player.steer_age < DODGE_WINDOW
 
+    def _smash(
+        self, ob: Obstacle, x: float, y: float, item: Item, kind: EventKind, events: list[WorldEvent]
+    ) -> None:
+        """An obstacle broken by a power: gone, in debris, for no points."""
+        self.obstacles.remove(ob)
+        self.particles.debris(ob.x, ob.y, DEBRIS.get(ob.kind, ((200, 200, 210), (90, 90, 110))))
+        self.particles.burst(x, y, POWERS[item].colour, 24, 360)
+        events.append(WorldEvent(kind, x, y))
+
     def _collect(self, events: list[WorldEvent]) -> None:
-        reach = self.player.rect.inflate(-14, -24)
+        player = self.player
+        reach = player.rect.inflate(-14, -24)
         for pickup in list(self.pickups):
             if not reach.colliderect(pickup.rect):
                 continue
             self.pickups.remove(pickup)
-            if pickup.item is Item.COIN:
+            item = pickup.item
+            if item is Item.COIN:
                 self.particles.burst(pickup.x, pickup.y, (255, 214, 90), 10)
                 events.append(WorldEvent(EventKind.COIN, pickup.x, pickup.y))
-            else:
-                self.player.shield = SHIELD_TIME
-                self.particles.burst(pickup.x, pickup.y, (65, 220, 240), 22, 300)
-                events.append(WorldEvent(EventKind.SHIELD_UP, pickup.x, pickup.y))
+                continue
+            if player.crashed:  # taken on the crash tick: a wreck holds no power
+                pass
+            elif item is Item.LIFE:
+                player.lives = 1
+            else:  # it takes the one slot
+                player.power, player.power_t = item, POWERS[item].seconds
+            self.particles.burst(pickup.x, pickup.y, POWERS[item].colour, 22, 300)
+            events.append(WorldEvent(EventKind.POWER_UP, pickup.x, pickup.y, item))
 
     # --- drawing ---------------------------------------------------------------------------------------
 

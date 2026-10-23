@@ -150,10 +150,10 @@ def tour(d: Director) -> None:
     d.wait(6.5)
     d.shot("05_race")
     d.game.time_scale = 4.0
-    d.until(lambda: race.world.player.shield > 0)  # fast-forward to the first shield pickup
+    d.until(lambda: race.world.player.power is not None)  # fast-forward to the first power picked up
     d.game.time_scale = 1.0
     d.wait(0.3)
-    d.shot("07_shield")
+    d.shot("07_power")
     d.game.time_scale = 6.0  # fast-forward to the faster, busier part of the run
     d.until(lambda: race.world.elapsed >= 80)
     d.game.time_scale = 1.0

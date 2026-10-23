@@ -13,6 +13,7 @@ from jogo_de_carro.settings import (
     MODES,
     PLAYER_HITBOX,
     PLAYER_Y,
+    POWERS,
     START_LANE,
     Item,
     Kind,
@@ -149,7 +150,11 @@ def test_every_row_is_survivable(mode, shared):
     assert len(obstacles) > ROWS
     kinds = {p.kind for p, _, _ in obstacles}
     assert {Kind.CAR, Kind.STONE, Kind.POTHOLE, Kind.CONE} <= kinds
-    assert any(i.item is Item.SHIELD for i in items)
+    # every power shows, but in Infinito only the ones that protect; one extra life a run
+    powers = [i.item for i in items if i.item is not Item.COIN]
+    infinito = {Item.SHIELD, Item.STAR, Item.GHOST, Item.TURBO}
+    assert set(powers) == (set(POWERS) if mode.win_s else infinito)
+    assert powers.count(Item.LIFE) == (1 if mode.win_s else 0)
 
 
 @pytest.mark.parametrize("mode", MODES, ids=lambda m: m.key)

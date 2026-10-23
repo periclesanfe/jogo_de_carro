@@ -9,7 +9,7 @@ import pytest
 
 from jogo_de_carro.app import Game
 from jogo_de_carro.input import Action
-from jogo_de_carro.run import Run
+from jogo_de_carro.run import Run, verdict
 from jogo_de_carro.scenes import results, title
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.pause import PauseScene
@@ -17,7 +17,7 @@ from jogo_de_carro.scenes.race import Outcome, Phase
 from jogo_de_carro.scenes.results import RaceStats, ResultsScene
 from jogo_de_carro.scenes.title import TitleScene
 from jogo_de_carro.scenes.versus import BotScene, VersusScene
-from jogo_de_carro.settings import FIXED_DT, HEIGHT, NORMAL, WIDTH
+from jogo_de_carro.settings import DANGER, FIXED_DT, HEIGHT, NORMAL, WIDTH, Item
 from jogo_de_carro.world.autopilot import BOT_LEVELS, Bot
 from jogo_de_carro.world.scoring import Score
 from jogo_de_carro.world.world import Controls
@@ -131,6 +131,43 @@ def test_crashing_first_loses(game):
     assert scene.run.outcome == "crash" and scene.rival.tick == scene.run.tick + 1
     assert stats.outcome is Outcome.CRASH and stats.reason.startswith("Você bateu aos ")
     assert not game.ctx.save.best, "a versus sets no solo records"
+
+
+def test_the_card_tells_the_verdict_in_real_time(game):
+    """I held TURBO and the bot DEVAGAR: my world's clock ran 2 s ahead and its 2 s behind. The verdict reads
+    ticks, and so does every time that explains it: the reason, the rival's line and pill, and my TEMPO."""
+    scene = VersusScene(game.ctx, "medio", 3)
+    me, bot = scene.run, scene.rival
+    me.world.invulnerable = bot.world.invulnerable = True  # the crashes are set below
+    me.world.player.power, me.world.player.power_t = Item.TURBO, 4.0
+    bot.world.player.power, bot.world.player.power_t = Item.SLOW, 4.0
+    for tick in range(960):
+        if tick < 900:
+            me.step(Controls(), False)
+        bot.step(Controls(), False)
+    me.outcome = bot.outcome = "crash"  # I at 7.5 s (9.5 s on my clock), the bot at 8 s (6 s on its)
+    scene.verdict = verdict(me, bot)
+    assert scene.verdict == -1 and bot.seconds < me.seconds
+    assert (scene.reason(), scene.state()) == ("Você bateu aos 0:07", ("BATEU 0:08", DANGER))
+    assert scene.line().endswith("bateu aos 0:08")
+    scene._results(Outcome.CRASH)
+    assert game.scenes.top.stats.seconds == 900 * FIXED_DT
+    me.outcome = bot.outcome = "win"  # both at the end, on different ticks: the points decide
+    scene.verdict = verdict(me, bot)
+    assert scene.reason().startswith("Os dois chegaram ao fim")
+
+
+def test_my_card_shows_my_power_and_the_rival_only_its_car(game, monkeypatch):
+    drawn, icons = [], []
+    monkeypatch.setattr("jogo_de_carro.scenes.versus.blit_text", lambda surface, s, *a, **k: drawn.append(s))
+    frame = game.ctx.assets.frame
+    monkeypatch.setattr(game.ctx.assets, "frame", lambda name, i=0: (icons.append(name), frame(name, i))[1])
+    scene = VersusScene(game.ctx, "medio", 3)
+    me, it = scene.world.player, scene.rival.world.player
+    me.power, me.power_t, me.lives = Item.STAR, 3.0, 1
+    it.power, it.power_t = Item.GHOST, 3.0
+    scene.draw(game.screen)
+    assert "ESTRELA" in drawn and "FANTASMA" not in drawn and "life" in icons
 
 
 def test_menus_lead_to_the_bot_and_restarts_keep_its_level(game):
