@@ -1,5 +1,6 @@
 """Game-wide constants, the asset manifest and the difficulty presets."""
 
+from collections import namedtuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -27,6 +28,7 @@ PLAYER_MAX_VY = 460.0  # px/s
 PLAYER_VY_RESPONSE = 9.0  # 1/s, how fast vertical velocity follows input (accel + damping)
 HITBOX_SHRINK = (0.8, 0.88)  # forgiving player hitbox relative to the sprite
 BOOST_SCORE_RATE = 1.15  # holding "up" scores distance 15% faster
+START_RAMP_S = 0.7  # seconds to reach cruising speed after "JÁ!"
 
 # --- scoring ----------------------------------------------------------------------------------------
 PX_PER_METER = 14.4  # makes km/h = px/s * 0.25, an arcade-feeling speedometer
@@ -35,7 +37,6 @@ NEAR_MISS_PX = 30  # only counts when the player was dodging (see World._collide
 NEAR_MISS_POINTS = 25
 COMBO_MAX = 5
 COMBO_TIME = 2.5
-SHIELD_TIME = 8.0
 
 # --- spawning ---------------------------------------------------------------------------------------
 SPAWN_Y = -140  # screen y where new rows appear (above the top edge)
@@ -65,9 +66,14 @@ class Kind(Enum):
         return self in (Kind.CAR, Kind.VAN, Kind.TRUCK)
 
 
-class Item(Enum):
+class Item(Enum):  # the value is the sprite
     COIN = "coin"
     SHIELD = "shield"
+    STAR = "star"
+    GHOST = "ghost"
+    TURBO = "turbo"
+    SLOW = "slow"
+    LIFE = "life"
 
 
 SKINS: tuple[str, ...] = ("yellow", "black", "blue", "pink", "red", "white")  # the free cars; traffic's paint
@@ -114,7 +120,12 @@ SPRITES: dict[str, tuple[int, int, int]] = {
     "trunk": (44, 18, 4),
     "cone": (14, 16, 1),
     "coin": (12, 12, 8),
-    "shield": (16, 16, 4),
+    "shield": (16, 16, 4),  # every power's icon: one size, so one pickup reach
+    "star": (16, 16, 4),
+    "ghost": (16, 16, 4),
+    "turbo": (16, 16, 4),
+    "slow": (16, 16, 4),
+    "life": (16, 16, 4),
     "tree": (32, 32, 2),
     "bush": (16, 12, 4),  # green, in flower, dry, snowy
     "lamp": (10, 28, 1),
@@ -250,3 +261,26 @@ FLAME = (247, 118, 34)
 DANGER = (235, 70, 70)
 CYAN = (65, 220, 240)
 PANEL = (22, 24, 38)
+GOLD = (255, 214, 90)
+LAVENDER = (190, 160, 255)
+SKY = (140, 180, 255)
+PINK = (255, 120, 150)  # a life gained; DANGER is the one lost
+
+# --- power-ups --------------------------------------------------------------------------------------
+# One slot: picking a power up replaces the one on (the extra life is kept apart, in Player.lives). seconds
+# are real seconds; weight is the spawner's draw. Capped powers never show in Infinito: its run "wins" at the
+# input cap, which a slow clock would reach first, and an extra life would inflate it.
+Power = namedtuple("Power", "label colour seconds weight capped")
+POWERS = {  # the dict order is the draw order: reordering it changes the GOLDEN
+    Item.SHIELD: Power("ESCUDO", CYAN, 8.0, 3, False),
+    Item.STAR: Power("ESTRELA", GOLD, 5.0, 2, False),
+    Item.GHOST: Power("FANTASMA", LAVENDER, 6.0, 2, False),
+    Item.TURBO: Power("TURBO", FLAME, 4.0, 2, False),
+    Item.SLOW: Power("DEVAGAR", SKY, 4.0, 2, True),
+    Item.LIFE: Power("VIDA EXTRA", PINK, 0.0, 1, True),
+}
+# the world's clock (exact binary fractions: plain IEEE products); the player's car keeps real time
+TIME_SCALE = {Item.SLOW: 0.5, Item.TURBO: 1.5}
+# nothing hurts; TURBO has to protect: a two-lane change on its clock can outlast the corridor's window
+PROTECT = {Item.STAR, Item.GHOST, Item.TURBO}
+NO_NEAR_MISS = PROTECT | {Item.SLOW}

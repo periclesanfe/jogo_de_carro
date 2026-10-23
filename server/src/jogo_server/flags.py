@@ -23,7 +23,7 @@ class Watch:
     """Follows a Run tick by tick: the hub steps live runs through it, so the features cost no second sim."""
 
     def __init__(self) -> None:
-        self.ticks = self.on = self.boost = 0
+        self.ticks = self.free = self.on = self.boost = 0  # free: the ticks without a power or grace
         self.target: int | None = None
         self.pending: tuple[int, int] | None = None  # (tick, lane) of a corridor move not followed yet
         self.react: list[int] = []
@@ -35,7 +35,9 @@ class Watch:
             tick, lane, logged = run.tick, player.lane, len(run.ev)
             target = world.spawner.corridor_lane(world.distance + (PLAYER_Y - player.y) + 4.0)  # autopilot's
             self.ticks += 1
-            self.on += lane == target
+            if player.power is None and player.grace == 0:  # else protected: off the corridor at no risk
+                self.free += 1
+                self.on += lane == target
             if target != self.target:
                 self.target, self.pending = target, ((tick, target) if target != lane else None)
             run.advance(tick + 1)
@@ -48,7 +50,7 @@ class Watch:
     def features(self, arr: list) -> dict:
         react = sorted(self.react)
         return {
-            "adherence": self.on / max(1, self.ticks),
+            "adherence": self.on / max(1, self.free),
             "n": len(react),
             "p10": react[len(react) // 10] if react else None,
             "median": statistics.median(react) if react else None,

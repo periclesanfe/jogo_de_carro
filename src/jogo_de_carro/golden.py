@@ -62,8 +62,8 @@ def digest() -> str:
         world, player = run.world, run.world.player
         while run.outcome is None and run.tick < log["end"]:
             run.advance(run.tick + 1)
-            state = [player.x, player.y, player.vy, world.speed, world.distance, len(world.pickups)]
-            state += [v for ob in world.obstacles for v in (ob.x, ob.y)]
+            state = [player.x, player.y, player.vy, world.speed, world.distance, world.elapsed]
+            state += [len(world.pickups), *(v for ob in world.obstacles for v in (ob.x, ob.y))]
             h.update(struct.pack(f"<{len(state)}d", *state))
         run.stop("giveup")
         put(path.name, run.outcome, run.tick, world.elapsed, world.distance, *dataclasses.astuple(run.score))

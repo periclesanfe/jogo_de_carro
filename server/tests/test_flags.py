@@ -7,7 +7,7 @@ import pytest
 
 from jogo_de_carro.golden import REPLAYS
 from jogo_de_carro.run import Run
-from jogo_de_carro.settings import LANE_CENTERS, LANE_WIDTH, LANES, PLAYER_Y
+from jogo_de_carro.settings import LANE_CENTERS, LANE_WIDTH, LANES, PLAYER_Y, PROTECT
 from jogo_de_carro.world.autopilot import Bot, autopilot
 from jogo_de_carro.world.world import Controls, World
 from jogo_server import flags, hub
@@ -75,7 +75,7 @@ def test_corridor_bots_are_flagged(mode, seed):
     assert bot["n"] >= 30 and bot["p10"] < 7 and flags.flagged(bot)
 
 
-@pytest.mark.parametrize(("mode", "seed"), [("facil", 1), ("normal", 1)])
+@pytest.mark.parametrize(("mode", "seed"), [("facil", 3), ("normal", 1)])
 def test_human_like_play_is_not(mode, seed):
     person = features(play(mode, seed, reacting(seed)))
     assert (
@@ -83,6 +83,20 @@ def test_human_like_play_is_not(mode, seed):
     )  # the reflex rule did apply
     screen = features(play(mode, seed, screen_reader))
     assert screen["adherence"] < 0.9 and not flags.flagged(screen)
+
+
+def test_protected_ticks_do_not_count_for_adherence():
+    """A corridor bot that leaves the corridor whenever a power makes it safe (plan §5.7) still adheres: only
+    the ticks without a power or grace count."""
+
+    def wander(world: World) -> Controls:
+        p = world.player
+        if p.power not in PROTECT:
+            return autopilot(world)
+        target = world.spawner.corridor_lane(world.distance + (PLAYER_Y - p.y) + 4.0)
+        return Controls(steer=-1 if target > 1 else 1)  # to the far side
+
+    assert features(play("normal", 3, wander))["adherence"] >= 0.99  # 0.90 if every tick counted
 
 
 @pytest.mark.parametrize("path", sorted(REPLAYS.glob("*.json")), ids=lambda p: p.stem)

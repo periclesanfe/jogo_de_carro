@@ -140,6 +140,22 @@ def check_runtime(cfg: Config, build: str) -> None:
         raise RuntimeError(f"recusado: Python {got[0]}, pygame-ce {got[1]}, golden {got[2]} (build: {want})")
 
 
+def void_old_challenges(cfg: Config, conn: sqlite3.Connection, build: str) -> None:
+    """Open challenges recorded on a build that simulates otherwise (its golden.txt differs from this build's,
+    or is gone) are void: the friend would race the stored inputs on another road (plan §5.7). A cosmetic
+    deploy keeps them; jogo-deploy keeps every build's folder."""
+
+    def golden(b: str) -> str | None:
+        path = cfg.www / "jogo" / b / "golden.txt"
+        return path.read_text(encoding="utf-8").strip() if path.exists() else None
+
+    want = golden(build)
+    sql = "SELECT matches.id, build FROM matches JOIN runs ON match_id = matches.id AND user_id = a"
+    for mid, b in conn.execute(sql + " WHERE matches.state = 'open'").fetchall():
+        if golden(b) != want:
+            conn.execute("UPDATE matches SET state = 'void' WHERE id = ?", (mid,))
+
+
 @asynccontextmanager
 async def lifespan(app: Starlette):
     # uvicorn logs each WebSocket it accepts, with the player's address, at INFO (even with --no-access-log):
@@ -157,6 +173,7 @@ async def lifespan(app: Starlette):
         check_runtime(cfg, app.state.build)
         app.state.golden = True
     app.state.db = db.connect(cfg.db)
+    void_old_challenges(cfg, app.state.db, app.state.build)
     app.state.hasher = auth.Hasher()
     app.state.limits = auth.Limits()
     clock = getattr(app.state, "clock", None)  # tests drive the hub's clock and its ticks by hand

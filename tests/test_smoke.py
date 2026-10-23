@@ -5,17 +5,35 @@ import pytest
 
 from jogo_de_carro.app import Game
 from jogo_de_carro.save import load
-from jogo_de_carro.scenes import results
+from jogo_de_carro.scenes import race, results
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.difficulty import DifficultyScene, card_rect
 from jogo_de_carro.scenes.garage import ARROWS, TABS, GarageScene
 from jogo_de_carro.scenes.pause import PauseScene
-from jogo_de_carro.scenes.race import Outcome, Phase, RaceScene
+from jogo_de_carro.scenes.race import SHIELD_BOX, Outcome, Phase, RaceScene
 from jogo_de_carro.scenes.results import ResultsScene
 from jogo_de_carro.scenes.title import TitleScene
 from jogo_de_carro.scenes.versus import VersusScene
-from jogo_de_carro.settings import FACIL, HEIGHT, NORMAL, PLAYER_Y, PX_PER_METER
+from jogo_de_carro.settings import (
+    FACIL,
+    FIXED_DT,
+    FLAME,
+    GOLD,
+    HEIGHT,
+    LANE_CENTERS,
+    NORMAL,
+    PLAYER_Y,
+    POWERS,
+    PROTECT,
+    PX_PER_METER,
+    START_LANE,
+    WHITE,
+    WIDTH,
+    Item,
+)
+from jogo_de_carro.world.player import GRACE, Player
 from jogo_de_carro.world.road import BIOMES, TILE_H
+from jogo_de_carro.world.world import EventKind, WorldEvent
 
 FRAME = 1 / 60
 
@@ -188,3 +206,79 @@ def test_the_garage_previews_every_scenery_and_picks_a_reached_one(game):
     assert isinstance(top(game), TitleScene) and save.biome == 1 == load(game.ctx.save_path).biome
     race, versus = RaceScene(game.ctx), VersusScene(game.ctx, "medio")
     assert [r.start for r in (race.world.road, versus.world.road, versus.rival.world.road)] == [1, 1, 1]
+
+
+def test_the_hud_reads_each_power(game, monkeypatch):
+    """Each power's panel has its label, colour and icon, and a bar that blinks out in the last 2 s; the extra
+    life is a heart beside it (or alone); the speedometer reads the road's speed. A pickup pops the power's
+    name; a hit a power or the life took shakes and flashes, with the shield's sounds."""
+    texts, icons, sounds = [], [], []
+    monkeypatch.setattr(
+        race, "blit_text", lambda surface, s, size, at, colour=WHITE, **k: texts.append((s, colour))
+    )
+    frame = game.ctx.assets.frame
+    monkeypatch.setattr(game.ctx.assets, "frame", lambda name, i=0: (icons.append(name), frame(name, i))[1])
+    monkeypatch.setattr(game.ctx.audio, "play", lambda name, *a: sounds.append(name))
+    scene = RaceScene(game.ctx)
+    player, surface = scene.world.player, pygame.Surface((WIDTH, HEIGHT))
+    x, y = SHIELD_BOX.x + 72, SHIELD_BOX.centery + 10  # the bar's left end, mid-height
+    for item, power in POWERS.items():
+        if item is Item.LIFE:
+            continue
+        player.power, player.power_t = item, power.seconds / 2  # 2 s or more: steady
+        scene._draw_power(surface)
+        assert (power.label, power.colour) in texts and icons[-1] == item.value
+        assert surface.get_at((x + 35, y))[:3] == power.colour != surface.get_at((x + 105, y))[:3]  # half
+        player.power_t, scene.clock = 1.0, 1 / 8
+        assert scene._power_left() == 0, "the last 2 s: it blinks out..."
+        scene.clock = 0.0
+        assert scene._power_left() == 1.0 / power.seconds, "...and back"
+    player.lives = 1
+    heart = (SHIELD_BOX.right + 8 + SHIELD_BOX.height // 2, SHIELD_BOX.centery)  # beside the power's panel
+    surface.fill((0, 0, 0))
+    scene._draw_power(surface)
+    assert icons[-2:] == ["life", player.power.value] and surface.get_at(heart)[:3] != (0, 0, 0)
+    player.power = None
+    icons.clear()
+    surface.fill((0, 0, 0))
+    scene._draw_power(surface)
+    assert icons == ["life"] and surface.get_at(heart)[:3] == (0, 0, 0)  # in its place
+
+    scene.world.speed = 400.0  # 100 km/h
+    for item, kmh in ((Item.TURBO, "150"), (Item.SLOW, "50"), (Item.STAR, "100")):
+        player.power = item
+        texts.clear()
+        scene._draw_speedometer(surface)
+        assert texts[0] == (kmh, WHITE)
+
+    for item, power in POWERS.items():
+        scene._react([(WorldEvent(EventKind.POWER_UP, 640, 500, item), 0)])
+        popup = scene.popups[-1]
+        assert (popup.label, popup.color, sounds[-1]) == (f"{power.label}!", power.colour, "shield_up")
+    for kind in (EventKind.SHIELD_BREAK, EventKind.SMASH, EventKind.LIFE_LOST):
+        scene.trauma = scene.flash = 0.0
+        scene.popups.clear()
+        scene._react([(WorldEvent(kind, 640, 500), 0)])
+        assert scene.trauma > 0 and scene.flash > 0 and sounds[-1] == "shield_break"
+        assert [p.label for p in scene.popups] == (["-1 VIDA"] if kind is EventKind.LIFE_LOST else [])
+
+
+def test_each_power_shows_on_the_car(game):
+    """FANTASMA washes the car out, ESTRELA rings it, TURBO lights its exhaust pipes; and the grace that a
+    protected car gets inside an obstacle never makes it blink, as the grace after a hit does."""
+
+    def drawn(power: Item | None, grace: float = 0.0) -> pygame.Surface:
+        surface = pygame.Surface((WIDTH, HEIGHT))
+        Player(game.ctx.assets, "yellow", power=power, power_t=4.0, grace=grace, clock=0.06).draw(surface)
+        return surface  # (0.06 s: a blink's off frame)
+
+    def lit(surface: pygame.Surface, colour: tuple[int, int, int]) -> int:
+        return pygame.mask.from_threshold(surface, colour, (1, 1, 1, 255)).count()
+
+    plain, centre = drawn(None), (LANE_CENTERS[START_LANE], PLAYER_Y)
+    assert drawn(None, GRACE).get_at(centre) != plain.get_at(centre)  # blinked out
+    for power in PROTECT:
+        steady, floored = (pygame.image.tobytes(drawn(power, grace), "RGB") for grace in (0.0, 2 * FIXED_DT))
+        assert steady == floored, power
+    assert drawn(Item.GHOST).get_at(centre) != plain.get_at(centre)
+    assert lit(drawn(Item.STAR), GOLD) > 500 and lit(drawn(Item.TURBO), FLAME) > 50 and not lit(plain, GOLD)

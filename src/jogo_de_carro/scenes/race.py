@@ -15,7 +15,6 @@ from ..run import Run, Scored
 from ..settings import (
     ACCENT,
     COMBO_TIME,
-    CYAN,
     DANGER,
     FLAME,
     HEIGHT,
@@ -23,7 +22,8 @@ from ..settings import (
     MUTED,
     NEAR_MISS_POINTS,
     PLAYER_Y,
-    SHIELD_TIME,
+    POWERS,
+    TIME_SCALE,
     WHITE,
     WIDTH,
 )
@@ -42,7 +42,8 @@ WIN_CRUISE = 0.6  # the victory lap cruises a moment before zooming off the top
 WIN_TO_RESULTS = 2.0
 HINT_TIME = 4.5  # the controls card shows from the countdown until this long after "JÁ!"
 BIOME_S = 1.6  # a new biome's name shows this long
-SHIELD_BOX = pygame.Rect(24, HEIGHT - 84, 230, 60)
+SHIELD_BOX = pygame.Rect(24, HEIGHT - 84, 230, 60)  # the power on; the extra life's heart beside it
+BREAKS = (EventKind.SHIELD_BREAK, EventKind.SMASH, EventKind.LIFE_LOST)  # a hit a power took: shake, flash
 KEY_HINTS = (
     ("SETAS / A D", "trocar de faixa"),
     ("W / S", "subir e descer"),
@@ -297,10 +298,13 @@ class RaceScene(Scene):
                 self._popup(label, e.x, e.y - 50, WHITE, 34)
                 self.combo_pop = 1.0
                 audio.play("near_miss", 0.8)
-            elif e.kind is EventKind.SHIELD_UP:
-                self._popup("ESCUDO!", e.x, e.y - 30, CYAN, 40)
+            elif e.kind is EventKind.POWER_UP:
+                power = POWERS[e.item]
+                self._popup(f"{power.label}!", e.x, e.y - 30, power.colour, 40)
                 audio.play("shield_up")
-            elif e.kind is EventKind.SHIELD_BREAK:
+            elif e.kind in BREAKS:
+                if e.kind is EventKind.LIFE_LOST:
+                    self._popup("-1 VIDA", e.x, e.y - 30, DANGER, 40)
                 self.trauma = min(1.0, self.trauma + 0.45)
                 self.flash, self.impact = 0.35, (e.x, e.y)
                 audio.play("shield_break")
@@ -478,13 +482,13 @@ class RaceScene(Scene):
 
         if score.combo >= 2:
             self._draw_combo(surface)
-        shield = self.world.player.shield > 0
-        if shield:
-            self._draw_shield(surface)
+        power = self.world.player.power or self.world.player.lives
+        if power:
+            self._draw_power(surface)
         self._draw_speedometer(surface)
         hints = self._hint_alpha()
         if hints > 0:
-            self._draw_hints(surface, hints, bottom=SHIELD_BOX.y - 12 if shield else HEIGHT - 24)
+            self._draw_hints(surface, hints, bottom=SHIELD_BOX.y - 12 if power else HEIGHT - 24)
 
     def _draw_combo(self, surface: pygame.Surface) -> None:
         """A pill hanging under the score panel: the combo and the time left to extend it."""
@@ -499,21 +503,38 @@ class RaceScene(Scene):
         bar.width = round(bar.width * score.combo_timer / COMBO_TIME)
         pygame.draw.rect(surface, ACCENT, bar, border_radius=4)
 
-    def _draw_shield(self, surface: pygame.Surface) -> None:
-        box = SHIELD_BOX
+    def _draw_power(self, surface: pygame.Surface) -> None:
+        player, frame = self.world.player, int(self.clock * 6)
+        if player.lives:  # beside the power's panel, or in its place
+            x = SHIELD_BOX.right + 8 if player.power else SHIELD_BOX.x
+            box = pygame.Rect(x, SHIELD_BOX.y, SHIELD_BOX.height, SHIELD_BOX.height)
+            panel(surface, box, alpha=225)
+            heart = self.ctx.assets.frame("life", frame)
+            surface.blit(heart, heart.get_rect(center=box.center))
+        if not player.power:
+            return
+        box, power = SHIELD_BOX, POWERS[player.power]
         panel(surface, box, alpha=225)
-        icon = self.ctx.assets.frame("shield", int(self.clock * 6))
+        icon = self.ctx.assets.frame(player.power.value, frame)
         surface.blit(icon, icon.get_rect(midleft=(box.x + 10, box.centery)))
         bar = pygame.Rect(box.x + 72, box.centery + 6, 140, 8)
-        blit_text(surface, "ESCUDO", 24, (bar.x, box.y + 9), CYAN, anchor="topleft", shadow=False)
+        blit_text(surface, power.label, 24, (bar.x, box.y + 9), power.colour, anchor="topleft", shadow=False)
         pygame.draw.rect(surface, (40, 60, 80), bar, border_radius=4)
-        bar.width = round(bar.width * self.world.player.shield / SHIELD_TIME)
-        pygame.draw.rect(surface, CYAN, bar, border_radius=4)
+        bar.width = round(bar.width * self._power_left())
+        pygame.draw.rect(surface, power.colour, bar, border_radius=4)
+
+    def _power_left(self) -> float:
+        """The share of the power's time left, for its bar: 0 every other blink in the last 2 s."""
+        player = self.world.player
+        if player.power_t < 2.0 and int(self.clock * 8) % 2:
+            return 0.0
+        return player.power_t / POWERS[player.power].seconds
 
     def _draw_speedometer(
         self, surface: pygame.Surface, center: tuple[int, int] = (WIDTH - 110, HEIGHT - 96), radius: int = 70
     ) -> None:
-        k = min(1.0, self.world.speed / 1000)
+        speed = self.world.speed * TIME_SCALE.get(self.world.player.power, 1.0)  # as the road scrolls
+        k = min(1.0, speed / 1000)
         arc = pygame.Rect(0, 0, radius * 2, radius * 2)
         arc.center = center
         start, sweep = math.radians(-30), math.radians(240)
@@ -522,7 +543,7 @@ class RaceScene(Scene):
         if k > 0:
             color = ACCENT if k < 0.7 else FLAME
             pygame.draw.arc(surface, color, arc, start + sweep * (1 - k), start + sweep, 8)
-        blit_text(surface, f"{round(self.world.speed * 0.25)}", 48, (center[0], center[1] + 2), WHITE)
+        blit_text(surface, f"{round(speed * 0.25)}", 48, (center[0], center[1] + 2), WHITE)
         blit_text(surface, "km/h", 24, (center[0], center[1] + 32), MUTED, shadow=False)
         if self.run.held == 1 and self.phase is Phase.RACING:
             blit_text(surface, "+15%", 26, (center[0], center[1] - 36), ACCENT)

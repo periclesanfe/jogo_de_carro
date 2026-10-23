@@ -56,9 +56,10 @@ progress (invalido) and closes the socket with 1008:
     C→S {"t":"leave","m":901}                   gives up at the last k sent (before go: the attempt is used)
     S→C {"t":"result","m":901,"run":901,"state":"ok|review|rejected","why":null|"bot|desync|adiantado|
          ritmo|invalido|conexao|prazo|substituida|anulada","outcome":"crash|win|giveup|decided"|null,
-         "score":2210|null,"secs":12.1|null,"rank":37|null,"verdict":null|"win|loss|draw",
+         "score":2210|null,"secs":12.1|null,"k":1452|null,"rank":37|null,"verdict":null|"win|loss|draw",
          "op":null|{"nick":"ana_42","score":5321,"secs":83.2},"coins":37,"wallet":357}   coins: what this run
-         paid (0: none), as the server simulated it, never the client's count; wallet: my balance right after
+         paid (0: none), as the server simulated it, never the client's count; wallet: my balance right after;
+         k: the ticks simulated, where the server's score stands (secs is world time: DEVAGAR and TURBO)
 
 m is the player's own run id (in a live race too). Messages for a run that is already over (inputs in flight
 when the result went out) are ignored; any other m is a violation, and so is a reply to (or cancel of) someone
@@ -843,7 +844,7 @@ class Hub:
         self.announce(live.sock.uid)
         run, uid, fin = live.run, live.sock.uid, live.fin
         row: dict[str, Any] = {"ended": time.time(), "state": "rejected" if why else "ok"}
-        out = {"outcome": None, "score": None, "secs": None, "rank": None}
+        out = {"outcome": None, "score": None, "secs": None, "k": None, "rank": None}
         if run is not None:
             run.stop("giveup")  # not over by its last input: given up (or cut off) there
             arr = list(itertools.batched(live.arr, 2))  # [k, ms] pairs
@@ -872,7 +873,7 @@ class Hub:
                 "features": json.dumps(f),
                 "log": zlib.compress(log_json.encode()),
             }
-            out = {"outcome": run.outcome, "score": score, "secs": round(run.seconds, 1), "rank": None}
+            out |= {"outcome": run.outcome, "score": score, "secs": round(run.seconds, 1), "k": run.tick}
             if row["state"] == "ok" and live.kind == "solo":
                 out["rank"] = at or place(self.db, uid, live.mode, best)
         row["why"] = why

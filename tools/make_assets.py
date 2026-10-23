@@ -43,6 +43,11 @@ SPRITES: dict[str, tuple[int, int, int]] = {
     "cone": (1, 14, 16),
     "coin": (8, 12, 12),
     "shield": (4, 16, 16),
+    "star": (4, 16, 16),
+    "ghost": (4, 16, 16),
+    "turbo": (4, 16, 16),
+    "slow": (4, 16, 16),
+    "life": (4, 16, 16),
     "tree": (2, 32, 32),
     "bush": (4, 16, 12),
     "lamp": (1, 10, 28),
@@ -1477,6 +1482,60 @@ def coin(frame: int) -> Surf:
     return outline(s, (70, 34, 20))
 
 
+def powerup_body(s: Surf, inside: Callable[[int, int], bool], ramp: Sequence[Color]) -> None:
+    """Every power icon's bevel: lit rim up-left, dark rim down-right, left half a step lighter."""
+    for y in range(16):
+        for x in range(16):
+            if inside(x, y):
+                i = 3 if x < 8 else 2
+                if not inside(x - 1, y) or not inside(x, y - 1):
+                    i = 4
+                elif not inside(x + 1, y) or not inside(x, y + 1):
+                    i = 1
+                s.set_at((x, y), ramp[i])
+
+
+def powerup_poly(pts: Sequence[tuple[float, float]]) -> Callable[[int, int], bool]:
+    def inside(x: int, y: int) -> bool:  # even-odd test at the pixel centre
+        px, py, hit = x + 0.5, y + 0.5, False
+        for (ax, ay), (bx, by) in zip(pts, pts[1:] + pts[:1], strict=True):
+            if (ay > py) != (by > py) and px < ax + (py - ay) * (bx - ax) / (by - ay):
+                hit = not hit
+        return hit
+
+    return inside
+
+
+def powerup_rows(rows: Sequence[str], x0: int, y0: int) -> Callable[[int, int], bool]:
+    def inside(x: int, y: int) -> bool:  # '#' cells of a hand-drawn mask placed at (x0, y0)
+        return 0 <= y - y0 < len(rows) and 0 <= x - x0 < len(rows[0]) and rows[y - y0][x - x0] == "#"
+
+    return inside
+
+
+def powerup_glow(s: Surf, frame: int, glow: Color, spark: tuple[int, int]) -> Surf:
+    """Outline, then a pulsing glow (two rings fading outward) and the frame-2 sparkle."""
+    outline(s)
+    alpha = (60, 110, 160, 110)[frame]
+    body = {(x, y) for y in range(16) for x in range(16) if s.get_at((x, y))[3] == 255}
+
+    def grow(src: set[tuple[int, int]]) -> set[tuple[int, int]]:
+        return {
+            (x + dx, y + dy) for x, y in src for dx, dy in N4 if 0 <= x + dx < 16 and 0 <= y + dy < 16
+        } - src
+
+    ring1 = grow(body)
+    for p in ring1:
+        s.set_at(p, (*glow, alpha))
+    for p in grow(body | ring1):
+        s.set_at(p, (*glow, alpha // 3))
+    if frame == 2:
+        sx, sy = spark
+        for x, y in ((sx, sy), (sx, sy - 1), (sx, sy + 1), (sx - 1, sy), (sx + 1, sy)):
+            put(s, x, y, (255, 255, 255, 255 if (x, y) == spark else 200))
+    return s
+
+
 def shield(frame: int) -> Surf:
     s = new(16, 16)
 
@@ -1489,38 +1548,130 @@ def shield(frame: int) -> Surf:
         hw = 5.0 if fy < 8 else 5.0 * math.sqrt(max(0.0, 1 - ((fy - 8) / 5.8) ** 2))
         return abs(fx) < hw
 
-    for y in range(16):
-        for x in range(16):
-            if not inside(x, y):
-                continue
-            i = 3 if x < 8 else 2
-            if not inside(x - 1, y) or not inside(x, y - 1):
-                i = 4
-            elif not inside(x + 1, y) or not inside(x, y + 1):
-                i = 1
-            s.set_at((x, y), CYAN[i])
+    powerup_body(s, inside, CYAN)
     for y in range(5, 11):
         for x in range(5, 11):
             if 7 <= x <= 8 or 7 <= y <= 8:
                 s.set_at((x, y), CYAN[4] if x < 8 or y < 8 else (196, 246, 255))
-    outline(s)
-    alpha = (60, 110, 160, 110)[frame]  # pulsing glow, two rings fading outward
-    body = {(x, y) for y in range(16) for x in range(16) if s.get_at((x, y))[3] == 255}
+    return powerup_glow(s, frame, (110, 236, 255), (12, 2))
 
-    def grow(src: set[tuple[int, int]]) -> set[tuple[int, int]]:
-        return {
-            (x + dx, y + dy) for x, y in src for dx, dy in N4 if 0 <= x + dx < 16 and 0 <= y + dy < 16
-        } - src
 
-    ring1 = grow(body)
-    for p in ring1:
-        s.set_at(p, (110, 236, 255, alpha))
-    for p in grow(body | ring1):
-        s.set_at(p, (110, 236, 255, alpha // 3))
-    if frame == 2:
-        for x, y in ((12, 2), (12, 1), (12, 3), (11, 2), (13, 2)):
-            s.set_at((x, y), (255, 255, 255, 255 if (x, y) == (12, 2) else 200))
-    return s
+STAR = [(150, 92, 8), (222, 156, 16), (255, 210, 40), (255, 240, 120), (255, 255, 222)]
+GHOST = [(96, 74, 168), (150, 124, 220), (204, 190, 250), (234, 228, 255), (255, 255, 255)]
+TURBO = [(150, 36, 14), (214, 74, 20), (247, 118, 34), (255, 178, 70), (255, 240, 176)]
+SLOW_CAP = [(28, 44, 120), (44, 72, 176), (74, 112, 222), (124, 164, 250), (196, 220, 255)]
+SLOW_GLASS = (206, 228, 255)
+SLOW_SAND = [(214, 150, 60), (250, 206, 120)]  # shade, lit
+LIFE = [(110, 10, 34), (178, 22, 46), (232, 46, 66), (255, 108, 118), (255, 206, 206)]
+
+
+def star(frame: int) -> Surf:
+    """ESTRELA: a chubby gold star with two eyes, rocking side to side."""
+    s = new(16, 16)
+    tilt = (0, 7, 0, -7)[frame]
+    pts = []
+    for k in range(10):
+        a = math.radians(-90 + tilt + 36 * k)
+        r = 7.0 if k % 2 == 0 else 3.6
+        pts.append((8 + r * math.cos(a), 8.4 + r * math.sin(a)))
+    powerup_body(s, powerup_poly(pts), STAR)
+    for x in (6, 9):
+        for y in (7, 8):
+            s.set_at((x, y), OUT)
+    return powerup_glow(s, frame, (255, 222, 80), (13, 2))
+
+
+GHOST_HEMS = ("##..##..##", "..##..##..")  # the skirt's bottom row, fluttering between 3 and 2 tails
+
+
+def ghost(frame: int) -> Surf:
+    """FANTASMA: a lavender sheet ghost; the hem ripples and the eyes glance left, then right."""
+    s = new(16, 16)
+    hem = GHOST_HEMS[frame % 2]
+
+    def inside(x: int, y: int) -> bool:
+        if not 3 <= x <= 12 or y < 2:
+            return False
+        if y < 7:
+            return math.hypot(x + 0.5 - 8, y + 0.5 - 7) < 5.1
+        return y <= 12 or (y == 13 and hem[x - 3] == "#")
+
+    powerup_body(s, inside, GHOST)
+    look = -1 if frame < 2 else 1
+    for ex in (6 + look, 9 + look):
+        s.set_at((ex, 6), OUT)
+        s.set_at((ex, 7), OUT)
+    s.set_at((8 + look, 9), GHOST[0])  # little "o" of a mouth
+    return powerup_glow(s, frame, (196, 168, 255), (13, 2))
+
+
+TURBO_BOLT = (
+    ".....#####", "....#####.", "...#####..", "..#####...", ".#########", "#########.", "...#####..",
+    "...####...", "..####....", "..###.....", ".###......", ".##.......", "#.........",
+)  # fmt: skip
+
+
+def turbo(frame: int) -> Surf:
+    """TURBO: a flame-orange lightning bolt; a white-hot spark runs down it."""
+    s = new(16, 16)
+    inside = powerup_rows(TURBO_BOLT, 3, 2)
+    powerup_body(s, inside, TURBO)
+    band = (2, 5, 8, 11)[frame]  # rows lit by the travelling spark
+    for y in range(band, band + 2):
+        for x in range(16):
+            if inside(x, y) and s.get_at((x, y))[:3] != TURBO[1]:
+                s.set_at((x, y), TURBO[4])
+    return powerup_glow(s, frame, (255, 146, 56), (2, 3))
+
+
+def slow(frame: int) -> Surf:
+    """DEVAGAR: a blue-capped hourglass, sand trickling through the neck."""
+    s = new(16, 16)
+
+    def glass(x: int, y: int) -> bool:
+        fx = abs(x + 0.5 - 8)
+        return 4 <= y <= 11 and fx < 0.9 + 0.95 * abs(y + 0.5 - 8)
+
+    def cap(x: int, y: int) -> bool:
+        return 3 <= x <= 12 and y in (2, 3, 12, 13)
+
+    for y in range(16):
+        for x in range(16):
+            if glass(x, y):
+                s.set_at((x, y), SLOW_GLASS)
+    for y in range(6, 8):  # top sand, draining
+        for x in range(16):
+            if glass(x, y) and glass(x - 1, y) and glass(x + 1, y):
+                s.set_at((x, y), SLOW_SAND[x < 8])
+    for y in range(10, 12):  # bottom heap
+        for x in range(16):
+            w = 2.6 if y == 10 else 4.0
+            if glass(x, y) and abs(x + 0.5 - 8) < w:
+                s.set_at((x, y), SLOW_SAND[x < 8])
+    for y in range(8, 10):
+        if (y + frame) % 2 == 0:
+            s.set_at((7, y), SLOW_SAND[1])  # falling grains
+    powerup_body(s, cap, SLOW_CAP)
+    return powerup_glow(s, frame, (132, 186, 255), (13, 7))
+
+
+LIFE_HEARTS = (  # full size, and the squeezed beat of frame 1
+    ("..###..###..", ".####..####.", "############", "############", "############",
+     ".##########.", "..########..", "...######...", "....####....", ".....##....."),
+    (".##....##.", "####..####", "##########", "##########", ".########.", "..######..",
+     "...####...", "....##...."),
+)  # fmt: skip
+
+
+def life(frame: int) -> Surf:
+    """VIDA EXTRA: a red heart that squeezes on frame 1 and springs back."""
+    s = new(16, 16)
+    rows = LIFE_HEARTS[frame == 1]
+    x0, y0 = 8 - len(rows[0]) // 2, 3 if frame != 1 else 4
+    powerup_body(s, powerup_rows(rows, x0, y0), LIFE)
+    for x, y in ((x0 + 2, y0 + 2), (x0 + 2, y0 + 3), (x0 + 3, y0 + 2)):
+        s.set_at((x, y), LIFE[4])  # glint on the left lobe
+    return powerup_glow(s, frame, (255, 84, 104), (13, 2))
 
 
 def lamp() -> Surf:
@@ -2118,6 +2269,11 @@ def build_sprites() -> dict[str, Surf]:
         "cone": cone(),
         "coin": strip([coin(f) for f in range(8)]),
         "shield": strip([shield(f) for f in range(4)]),
+        "star": strip([star(f) for f in range(4)]),
+        "ghost": strip([ghost(f) for f in range(4)]),
+        "turbo": strip([turbo(f) for f in range(4)]),
+        "slow": strip([slow(f) for f in range(4)]),
+        "life": strip([life(f) for f in range(4)]),
         "tree": strip([tree_round("tree0"), tree_palm("palm")]),
         "bush": strip([bush(0), bush(1), bush_dry(), bush_snow()]),
         "lamp": lamp(),

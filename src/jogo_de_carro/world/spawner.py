@@ -20,15 +20,18 @@ import random
 from dataclasses import dataclass, field
 
 from ..settings import (
+    FIXED_DT,
     LANE_CENTERS,
     LANE_CHANGE_TIME,
     LANES,
     MAX_LANE_SHIFT,
     PLAYER_HITBOX,
     PLAYER_Y,
+    POWERS,
     REACTION_TIME,
     SPAWN_Y,
     START_LANE,
+    START_RAMP_S,
     Difficulty,
     Item,
     Kind,
@@ -59,8 +62,8 @@ SWERVE_Y = (60.0, 300.0)  # screen y where a signalling car moves over: well ahe
 BLINK_RANGE = (0.45, 0.8)  # seconds of blinker before the move
 SHIFT_WEIGHT = (1.0, 1.7, 0.6)  # preference for keeping / moving the safe lane by 1 / 2 lanes
 COIN_CHANCE = 0.3
-SHIELD_CHANCE = 0.04
-SHIELD_COOLDOWN = 25.0
+ITEM_CHANCE = 0.04  # a power on a row, at most once every ITEM_COOLDOWN seconds, the first after 15 s
+ITEM_COOLDOWN = 25.0
 
 Interval = tuple[float, float]
 
@@ -116,7 +119,10 @@ class Spawner:
     next_g: float = FIRST_ROW
     prev_g: float = FIRST_ROW - 600.0
     reserved_until: float = 0.0
-    next_shield_t: float = 15.0
+    next_item_t: float = 15.0
+    life_placed: bool = False  # one extra life a run at most
+    frozen: bool = False  # plan on the t and speed passed in: the title's demo drive keeps one difficulty
+    clock: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])  # nominal [t, speed, distance]
     blocked: list[list[Interval]] = field(default_factory=lambda: [[] for _ in range(LANES)])
     reserved: list[list[Interval]] = field(default_factory=lambda: [[] for _ in range(LANES)])
     corridor: list[Segment] = field(default_factory=list)
@@ -127,11 +133,18 @@ class Spawner:
     def update(
         self, distance: float, t: float, speed: float, player_lane: int | None = None
     ) -> list[Placement | ItemPlacement]:
-        """Plan rows ahead and return the placements that reached the top of the screen."""
+        """Plan rows ahead and return the placements that reached the top of the screen.
+
+        A row is planned at the time and speed of a run with no time power (DEVAGAR, TURBO) where the
+        previous row is released, not at the world's: on a shared road the rows stay the same whatever powers
+        each driver picks up.
+        """
         self.player_lane = player_lane
-        speed = max(speed, speed_at(self.mode, t))  # the world may still be pulling away from the start
         spawn = distance + LOOKAHEAD
         while self.enabled and self.prev_g <= spawn:  # plan a row while the previous one is still unseen
+            if not self.frozen:
+                t, speed = self._nominal()
+            speed = max(speed, speed_at(self.mode, t))  # the world may still be pulling away from the start
             self.pending += self._plan_row(self.next_g, t, speed)
             self.rows += 1
             self.prev_g = self.next_g
@@ -151,6 +164,15 @@ class Spawner:
         return self.safe_lane if self.corridor and p >= self.corridor[-1].end else START_LANE
 
     # --- planning ----------------------------------------------------------------------------------------
+
+    def _nominal(self) -> tuple[float, float]:
+        """World.update's clock and speed with the time scale at 1, stepped until the previous row is due."""
+        n, mode = self.clock, self.mode
+        while n[2] + LOOKAHEAD < self.prev_g:
+            n[0] += FIXED_DT
+            n[1] = min(speed_at(mode, n[0]), n[1] + mode.base_speed / START_RAMP_S * FIXED_DT)
+            n[2] += n[1] * FIXED_DT
+        return n[0], n[1]
 
     def _plan_row(self, g: float, t: float, speed: float) -> list[Placement | ItemPlacement]:
         v = max(speed, speed_at(self.mode, t + SPEED_LOOKAHEAD_S)) * 1.05
@@ -263,9 +285,16 @@ class Spawner:
         self, g: float, t: float, spans: list[tuple[int, float, float]], lane: int
     ) -> list[Placement | ItemPlacement]:
         rng = self.rng
-        if t >= self.next_shield_t and rng.random() < SHIELD_CHANCE:
-            self.next_shield_t = t + SHIELD_COOLDOWN
-            return [ItemPlacement(Item.SHIELD, LANE_CENTERS[lane], g)]
+        if t >= self.next_item_t and rng.random() < ITEM_CHANCE:
+            self.next_item_t = t + ITEM_COOLDOWN
+            pool = [  # Infinito, with no win time, only draws the powers that protect
+                i
+                for i, p in POWERS.items()
+                if (self.mode.win_s or not p.capped) and not (i is Item.LIFE and self.life_placed)
+            ]
+            item = rng.choices(pool, weights=[POWERS[i].weight for i in pool])[0]
+            self.life_placed |= item is Item.LIFE
+            return [ItemPlacement(item, LANE_CENTERS[lane], g)]
         if rng.random() >= COIN_CHANCE:
             return []
         if len(spans) == 1:  # straight line in the safe lane

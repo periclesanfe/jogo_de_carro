@@ -4,13 +4,17 @@ through the same gate as a live rival's (Player checks every op against its own 
 /partidas."""
 
 import contextlib
+import json
 import re
 import time
 
 import pytest
 
 import test_live
+from conftest import BUILD
+from jogo_de_carro.golden import REPLAYS
 from jogo_de_carro.run import simulate
+from jogo_de_carro.settings import FIXED_DT
 from jogo_server import admin, hub
 from test_live import CRASH, LONG, WIN, Player, T, befriend, cut, friends, heard, idle, ops, race, sent
 from test_ranked import honest as fin
@@ -72,7 +76,7 @@ def test_a_challenge_from_start_to_end(s, clock):
         ]
         assert ana.result() == {
             "t": "result", "m": ana.m, "run": ana.m, "state": "ok", "why": None, "outcome": "crash",
-            "score": hers[0], "secs": hers[1], "rank": None, "verdict": None, "op": None,
+            "score": hers[0], "secs": hers[1], "k": T, "rank": None, "verdict": None, "op": None,
             "coins": crashed.score.coins, "wallet": crashed.score.coins,
         }  # fmt: skip
         r, mt = row(s, ana.m), the_match(s, mid)
@@ -122,7 +126,7 @@ def test_a_challenge_from_start_to_end(s, clock):
     mine = (won.score.total, round(won.seconds, 1))
     assert bia.result() == {
         "t": "result", "m": bia.m, "run": bia.m, "state": "ok", "why": None, "outcome": "decided",
-        "score": mine[0], "secs": mine[1], "rank": None, "verdict": "win",
+        "score": mine[0], "secs": mine[1], "k": 1020, "rank": None, "verdict": "win",
         "op": {"nick": "ana", "score": hers[0], "secs": hers[1]}, "coins": won.score.coins,
         "wallet": won.score.coins,
     }  # fmt: skip
@@ -148,6 +152,19 @@ def test_a_challenge_from_start_to_end(s, clock):
     assert page.status_code == 200
     assert "Derrota" in page.text and "0 vitórias · 1 derrota · 0 empates" in page.text
     assert f"{hers[0]:,} × {mine[0]:,}".replace(",", ".") in page.text
+
+
+def test_the_result_says_where_the_servers_score_stands(s, clock, monkeypatch):
+    """k is the tick the run ended on: with TURBO's faster world clock, secs is ahead of it, so the game looks
+    up its own score at k, never at secs / FIXED_DT (plan §5.4)."""
+    smash = json.loads((REPLAYS / "normal_shared_smash_crash.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(hub, "new_seed", lambda: smash["seed"])
+    with contextlib.ExitStack() as stack:
+        ana, bia = friends(s, stack, "ana", "bia")
+        first(s, clock, ana, bia, smash, fin(smash))
+    run = simulate(hub.assets(), smash)
+    assert run.seconds - run.tick * FIXED_DT > 1  # TURBO was on
+    assert (ana.result()["k"], ana.result()["secs"]) == (run.tick, round(run.seconds, 1))
 
 
 def test_crashing_first_loses_and_never_sees_the_rest(s, clock):
@@ -229,8 +246,8 @@ def test_a_forfeit_is_a_loss(s, clock, how):
     if how in ("deadline", "leave"):
         assert bia.result() == {
             "t": "result", "m": bia.m, "run": bia.m, "state": "rejected", "why": "prazo",
-            "outcome": None, "score": None, "secs": None, "rank": None, "verdict": "loss", "op": hers,
-            "coins": 0, "wallet": 0,
+            "outcome": None, "score": None, "secs": None, "k": None, "rank": None, "verdict": "loss",
+            "op": hers, "coins": 0, "wallet": 0,
         }  # fmt: skip
         assert bia.of("go") == []
     elif how == "silence":  # at tick 0: ana's inputs up to tick 24 only, then how her run ended
@@ -435,6 +452,24 @@ def test_a_restart_voids_a_turn_in_progress(s, clock):
         hub.Hub(s.app.state, clock)
         assert the_match(s, mid)["state"] == "void" and row(s, bia.m)["why"] == "reinicio"
         assert the_match(s, mid + 1)["state"] == "void"
+
+
+def test_a_new_golden_voids_the_open_ones(make, clock):
+    """At startup, a challenge recorded on a build that simulates otherwise (another golden.txt, or none left)
+    is void; one from a build with the same golden (a cosmetic deploy) stays open (plan §5.7)."""
+    s = make()
+    with contextlib.ExitStack() as stack:
+        ana, bia = friends(s, stack, "ana", "bia")
+        mids = [first(s, clock, ana, bia, None) for _ in range(4)]
+    www = s.app.state.cfg.www / "jogo"
+    builds = {BUILD: "f" * 64, "a" * 40: "f" * 64, "b" * 40: "0" * 64, "c" * 40: None}
+    for mid, (build, golden) in zip(mids, builds.items(), strict=True):
+        if golden:
+            (www / build).mkdir(exist_ok=True)
+            (www / build / "golden.txt").write_text(golden + "\n")
+        s.db.execute("UPDATE runs SET build = ? WHERE match_id = ?", (build, mid))
+    make()  # a restart on the same database and web root
+    assert [the_match(s, mid)["state"] for mid in mids] == ["open", "open", "void", "void"]
 
 
 # --- /partidas ----------------------------------------------------------------------------------------------

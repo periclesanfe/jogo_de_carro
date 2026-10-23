@@ -1,4 +1,4 @@
-"""Coins and the shield power-up."""
+"""Coins and power-ups."""
 
 import math
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pygame
 
 from ..assets import Assets
-from ..settings import ACCENT, CYAN, Item
+from ..settings import ACCENT, POWERS, Item
 from ..ui import glow
 
 
@@ -35,7 +35,8 @@ class Pickup:
         bob = math.sin(self.clock * 5 + self.y * 0.02) * 3
         cx, cy = self.x + offset[0], self.y + offset[1] + bob
         is_coin = self.item is Item.COIN
-        halo = glow(28 if is_coin else 46, ACCENT if is_coin else CYAN, 70 if is_coin else 110)
+        colour = ACCENT if is_coin else POWERS[self.item].colour
+        halo = glow(28 if is_coin else 46, colour, 70 if is_coin else 110)
         surface.blit(halo, halo.get_rect(center=(round(cx), round(cy))))
         img = self.assets.frame(self.item.value, int(self.anim))
         surface.blit(img, img.get_rect(center=(round(cx), round(cy))))

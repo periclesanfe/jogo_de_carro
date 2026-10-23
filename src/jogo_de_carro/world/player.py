@@ -1,29 +1,47 @@
-"""The player's car: tweened lane changes with tilt, smooth vertical control, shield and crash spin."""
+"""The player's car: tweened lane changes with tilt, smooth vertical control, powers and crash spin."""
 
 import math
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 import pygame
 
 from ..assets import Assets
+from ..particles import LINE
 from ..settings import (
-    CYAN,
+    FLAME,
+    GOLD,
     HITBOX_SHRINK,
     LANE_CENTERS,
     LANE_CHANGE_TIME,
     LANES,
+    LAVENDER,
     PLAYER_MAX_VY,
     PLAYER_VY_RESPONSE,
     PLAYER_Y,
     PLAYER_Y_MAX,
     PLAYER_Y_MIN,
+    POWERS,
+    PROTECT,
     START_LANE,
     TILT_DEG,
+    WHITE,
+    Item,
 )
 from ..tween import approach, clamp, lerp, out_cubic
 from ..ui import glow
 
 SHADOW_OFFSET = (7, 10)
+GRACE = 0.9  # seconds of blinking invulnerability after a hit was saved or a protecting power ran out
+
+
+@lru_cache(maxsize=64)
+def ghostly(img: pygame.Surface) -> pygame.Surface:
+    """FANTASMA's car: a lavender-washed, see-through copy of a rotated sprite, cached and shared as it is."""
+    img = img.copy()
+    img.fill((70, 50, 110), special_flags=pygame.BLEND_RGB_ADD)
+    img.set_alpha(160)
+    return img
 
 
 @dataclass
@@ -37,8 +55,10 @@ class Player:
     tilt: float = 0.0
     spin: float = 0.0  # current crash rotation (deg)
     spin_speed: float = 0.0
-    shield: float = 0.0  # seconds of shield left
-    grace: float = 0.0  # brief invulnerability after the shield breaks
+    power: Item | None = None  # the one power on (POWERS), for power_t more real seconds
+    power_t: float = 0.0
+    lives: int = 0  # an extra life (VIDA EXTRA): the next hit only breaks it
+    grace: float = 0.0  # brief invulnerability (GRACE)
     crashed: bool = False
     bounded: bool = True  # False lets the victory lap drive off the screen
     anim: float = 0.0
@@ -73,8 +93,12 @@ class Player:
             self._lane_t = min(1.0, self._lane_t + dt / LANE_CHANGE_TIME)
             self.x = lerp(self._from_x, LANE_CENTERS[self.lane], out_cubic(self._lane_t))
         self.tilt = approach(self.tilt, 0.0, 18.0, dt)  # settles with the lane-change tween
-        self.shield = max(0.0, self.shield - dt)
         self.grace = max(0.0, self.grace - dt)
+        self.power_t = max(0.0, self.power_t - dt)
+        if self.power and not self.power_t:
+            if self.power in PROTECT:
+                self.grace = GRACE
+            self.power = None
         if self.crashed:
             self.spin += self.spin_speed * dt
             self.spin_speed = approach(self.spin_speed, 0.0, 2.2, dt)
@@ -88,7 +112,7 @@ class Player:
             self.vy = 0.0
 
     def crash(self, direction: float) -> None:
-        self.crashed = True
+        self.crashed, self.power, self.power_t = True, None, 0.0
         self.spin_speed = 720.0 * (1 if direction >= 0 else -1)
         self.vy = 160.0
 
@@ -116,22 +140,45 @@ class Player:
             angle = 5 * round(angle / 5)
         img = self.assets.rotated(self.sprite, frame, angle)
         cx, cy = self.x + offset[0], self.y + offset[1]
-        shadow = self.assets.shadow(self.sprite, frame)
-        if round(angle) % 360:
-            shadow = pygame.transform.rotate(shadow, round(angle))
-        surface.blit(shadow, shadow.get_rect(center=(cx + SHADOW_OFFSET[0], cy + SHADOW_OFFSET[1])))
-        if self.grace > 0 and int(self.clock * 20) % 2:
+        ghost = self.power is Item.GHOST
+        if not ghost:  # a ghost casts no shadow
+            shadow = self.assets.shadow(self.sprite, frame)
+            if round(angle) % 360:
+                shadow = pygame.transform.rotate(shadow, round(angle))
+            surface.blit(shadow, shadow.get_rect(center=(cx + SHADOW_OFFSET[0], cy + SHADOW_OFFSET[1])))
+        if self.grace > 0 and self.power not in PROTECT and int(self.clock * 20) % 2:
             return  # flicker while invulnerable
+        if ghost:  # a lavender-washed, see-through car in a glow
+            halo = glow(90, LAVENDER, 60)
+            surface.blit(halo, halo.get_rect(center=(round(cx), round(cy))))
+            img = ghostly(img)
+        elif self.power is Item.TURBO:
+            self._draw_turbo(surface, cx, cy)
         surface.blit(img, img.get_rect(center=(round(cx), round(cy))))
-        if self.shield > 0:
-            self._draw_shield(surface, cx, cy)
+        if self.power is Item.SHIELD:
+            self._draw_halo(surface, cx, cy, POWERS[Item.SHIELD].colour)
+        elif self.power is Item.STAR:  # the classic invincibility flash: no yellow shield on a yellow car
+            self._draw_halo(surface, cx, cy, (GOLD, WHITE, FLAME)[int(self.clock * 12) % 3])
 
-    def _draw_shield(self, surface: pygame.Surface, cx: float, cy: float) -> None:
-        if self.shield < 2.0 and int(self.clock * 8) % 2:
+    def _draw_turbo(self, surface: pygame.Surface, cx: float, cy: float) -> None:
+        """Streaks rushing past beside the car and a flame from both exhaust pipes, from the clock alone."""
+        n = self.clock * 30  # a streak every 1/30 s, 0.4 s from 260 px ahead down to the car
+        for k in range(int(n) - 11, int(n) + 1):
+            life = (n - k) / 12
+            x = cx + (1 if k % 2 else -1) * (40 + k * 7 % 21)
+            LINE.set_alpha(round((60 + k * 13 % 50) * min(1.0, 2 - 2 * life)))
+            surface.blit(LINE, (3 * round(x / 3), cy - 260 + 260 * life), (0, 0, 3, 50 + k * 17 % 60))
+        for dx in (-14, 14):  # flickering at 30 Hz, each pipe out of step with the other
+            tip = cy + 70 + 6 * ((int(self.clock * 30) + dx) % 3)
+            pygame.draw.line(surface, FLAME, (cx + dx, cy + 56), (cx + dx, tip), 5)
+            pygame.draw.line(surface, (255, 200, 80), (cx + dx, cy + 56), (cx + dx, tip - 8), 3)
+
+    def _draw_halo(self, surface: pygame.Surface, cx: float, cy: float, colour: tuple[int, int, int]) -> None:
+        if self.power_t < 2.0 and int(self.clock * 8) % 2:
             return  # blink when about to expire
         pulse = 0.5 + 0.5 * math.sin(self.clock * 6)
-        halo = glow(90, CYAN, round(70 + 50 * pulse))
+        halo = glow(90, colour, round(70 + 50 * pulse))
         surface.blit(halo, halo.get_rect(center=(round(cx), round(cy))))
         ring = pygame.Rect(0, 0, 104 + 6 * pulse, 148 + 6 * pulse)
         ring.center = (round(cx), round(cy))
-        pygame.draw.ellipse(surface, CYAN, ring, 3)
+        pygame.draw.ellipse(surface, colour, ring, 3)
