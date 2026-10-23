@@ -4,7 +4,19 @@ import pygame
 import pytest
 
 from jogo_de_carro.assets import AssetError, Assets, default_root
-from jogo_de_carro.settings import ICON_SIZE, MUSIC, SCALE, SOUNDS, SPRITES
+from jogo_de_carro.settings import (
+    CAR_FRAMES,
+    CAR_GLOW,
+    CARS,
+    HEIGHT,
+    ICON_SIZE,
+    MUSIC,
+    SCALE,
+    SOUNDS,
+    SPRITES,
+    WIDTH,
+)
+from jogo_de_carro.world.player import Player
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -59,3 +71,21 @@ def test_shipped_assets_match_the_manifest():
     assert not assets.missing
     assert {p.stem for p in (default_root() / "sounds").glob("*.wav")} >= set(SOUNDS)
     assert {p.stem for p in (default_root() / "music").glob("*.wav")} >= set(MUSIC)
+
+
+def test_car_tables_name_cars_only():
+    assert set(CAR_GLOW) <= set(CARS) and set(CAR_FRAMES) <= set(CARS)
+    assert all(SPRITES[f"car_{key}"][2] == n for key, n in CAR_FRAMES.items())
+
+
+def test_a_four_frame_car_cycles_through_every_frame(monkeypatch):
+    assets = Assets()
+    seen, rotated = [], assets.rotated
+    monkeypatch.setattr(assets, "rotated", lambda name, i, *a: seen.append(i) or rotated(name, i, *a))
+    player = Player(assets, "paint_flames")  # 4 frames, and a glow
+    assert CAR_FRAMES["paint_flames"] == 4 and "paint_flames" in CAR_GLOW
+    surface = pygame.Surface((WIDTH, HEIGHT))
+    for k in range(8):
+        player.anim = k + 0.5
+        player.draw(surface)
+    assert seen == [0, 1, 2, 3] * 2

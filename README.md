@@ -54,7 +54,7 @@ The four difficulties keep the win times of the 2022 version. Normal is the defa
 
 ## Features
 
-- 26 cars, each with a record of its own, picked on a turntable in the garage: six free, and 20 famous ones (Herbie 53, Mach 5, Relâmpago McQueen, Batmóvel, Optimus Prime...) from 300 to 8,000 coins, bought in the garage with the coins online runs pay. The server keeps the wallet and the cars; every car races with the same hitbox.
+- 68 cars, each with a record of its own, picked on a turntable in the garage: six free, and 62 paid ones from 300 to 8,000 coins (famous cars such as Herbie 53, DeLorean, KITT, Relâmpago McQueen, Batmóvel and Optimus Prime, Brazilian classics such as the Opala and the Brasília Amarela, oddities such as the sofa on wheels, eight motorbikes, from the delivery moto to Akira's, Tron's light cycle and the Ghost Rider's, and nine special paint jobs), bought in the garage with the coins online runs pay. The server keeps the wallet and the cars; every car races with the same hitbox.
 - Contra o bot: the same road side by side against a FÁCIL, MÉDIO or DIFÍCIL bot; whoever lasts longer wins, then points decide. It sets no records.
 - A spawner that always leaves a reachable free lane, sized for the lane-change time at the current speed and kept close to the lane you are in; a test checks 10,000 rows per mode with an independent solver.
 - Traffic that signals with a blinker before changing lanes, logs that roll across lanes, potholes that only hurt in the middle.

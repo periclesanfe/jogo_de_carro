@@ -203,6 +203,16 @@ def _glow(radius: int, color: Color, strength: int) -> pygame.Surface:
     return surf
 
 
+@lru_cache(maxsize=32)
+def oval_glow(size: tuple[int, int], color: Color) -> pygame.Surface:
+    """An ellipse of light, solid over its inner half, fading out beyond (round a car, whose body hides the
+    middle). Cached and shared: set_alpha it to dim it."""
+    surf = pygame.Surface((64, 64), pygame.SRCALPHA)
+    for r in range(32, 0, -1):
+        pygame.draw.circle(surf, (*color, round(255 * min(1.0, 2 - r / 16) ** 2)), (32, 32), r)
+    return pygame.transform.smoothscale(surf, size)
+
+
 def clock_text(seconds: float) -> str:
     """mm:ss, the original game's score format."""
     s = int(seconds)

@@ -9,6 +9,7 @@ import pygame
 from ..assets import Assets
 from ..particles import LINE
 from ..settings import (
+    CAR_GLOW,
     FLAME,
     GOLD,
     HITBOX_SHRINK,
@@ -23,13 +24,14 @@ from ..settings import (
     PLAYER_Y_MIN,
     POWERS,
     PROTECT,
+    SCALE,
     START_LANE,
     TILT_DEG,
     WHITE,
     Item,
 )
 from ..tween import approach, clamp, lerp, out_cubic
-from ..ui import glow
+from ..ui import glow, mix, oval_glow
 
 SHADOW_OFFSET = (7, 10)
 GRACE = 0.9  # seconds of blinking invulnerability after a hit was saved or a protecting power ran out
@@ -42,6 +44,18 @@ def ghostly(img: pygame.Surface) -> pygame.Surface:
     img.fill((70, 50, 110), special_flags=pygame.BLEND_RGB_ADD)
     img.set_alpha(160)
     return img
+
+
+def car_glow(skin: str, t: float, scale: int = SCALE) -> pygame.Surface | None:
+    """The pulsing light round a car that shines (CAR_GLOW) drawn x scale, at time t; None for the others."""
+    colours = CAR_GLOW.get(skin)
+    if not colours:
+        return None
+    k = t * 0.8 % len(colours)  # several colours hand over in turn, through a half-and-half blend
+    colour = mix(colours[int(k)], colours[(int(k) + 1) % len(colours)], round(k % 1 * 2) / 2)
+    halo = oval_glow((44 * scale, 60 * scale), colour)  # a car (24 x 40) and 10 px of light all round
+    halo.set_alpha(round(170 + 60 * math.sin(t * 3)))
+    return halo
 
 
 @dataclass
@@ -134,7 +148,7 @@ class Player:
     # --- drawing -------------------------------------------------------------------------------------
 
     def draw(self, surface: pygame.Surface, offset: tuple[float, float] = (0, 0)) -> None:
-        frame = int(self.anim) % 2
+        frame = int(self.anim) % len(self.assets.native(self.sprite))
         angle = self.tilt + self.spin
         if self.spin:  # 5-degree steps keep the cache of rotated sprites small
             angle = 5 * round(angle / 5)
@@ -148,6 +162,9 @@ class Player:
             surface.blit(shadow, shadow.get_rect(center=(cx + SHADOW_OFFSET[0], cy + SHADOW_OFFSET[1])))
         if self.grace > 0 and self.power not in PROTECT and int(self.clock * 20) % 2:
             return  # flicker while invulnerable
+        halo = None if ghost or self.crashed else car_glow(self.skin, self.clock)
+        if halo:  # a car that shines lights up the road round it
+            surface.blit(halo, halo.get_rect(center=(round(cx), round(cy))))
         if ghost:  # a lavender-washed, see-through car in a glow
             halo = glow(90, LAVENDER, 60)
             surface.blit(halo, halo.get_rect(center=(round(cx), round(cy))))
