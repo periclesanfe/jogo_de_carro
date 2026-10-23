@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/periclesanfe/jogo_de_carro/actions/workflows/ci.yml/badge.svg)](https://github.com/periclesanfe/jogo_de_carro/actions/workflows/ci.yml)
 
-A pixel-art endless runner on a five-lane road: dodge traffic, stones, potholes and rolling logs, grab coins and survive until the clock runs out.
+A pixel-art endless runner on a five-lane road: dodge traffic, stones, potholes and rolling logs, grab coins and power-ups and survive until the clock runs out.
 
 **▶ Play it in your browser: [jogo.pericles.dev.br](https://jogo.pericles.dev.br)**
 
@@ -54,11 +54,12 @@ The four difficulties keep the win times of the 2022 version. Normal is the defa
 
 ## Features
 
-- 26 cars, each with a record of its own, picked on a turntable in the garage: six free, and 20 bought in the garage with the coins online runs pay (the server keeps the wallet and the cars).
+- 26 cars, each with a record of its own, picked on a turntable in the garage: six free, and 20 famous ones (Herbie 53, Mach 5, Relâmpago McQueen, Batmóvel, Optimus Prime...) from 300 to 8,000 coins, bought in the garage with the coins online runs pay. The server keeps the wallet and the cars; every car races with the same hitbox.
 - Contra o bot: the same road side by side against a FÁCIL, MÉDIO or DIFÍCIL bot; whoever lasts longer wins, then points decide. It sets no records.
 - A spawner that always leaves a reachable free lane, sized for the lane-change time at the current speed and kept close to the lane you are in; a test checks 10,000 rows per mode with an independent solver.
 - Traffic that signals with a blinker before changing lanes, logs that roll across lanes, potholes that only hurt in the middle.
-- Coins, a shield that absorbs one hit, and near misses (dodging at the last moment) that build a combo up to x5.
+- Coins, near misses (dodging at the last moment) that build a combo up to x5, and six power-ups that share one slot: ESCUDO (absorbs one hit), ESTRELA (smashes what it touches), FANTASMA (drives through everything), TURBO (the world runs 1.5x, protected), DEVAGAR (the world at half speed while you steer in real time) and VIDA EXTRA (keeps one hit, one per run). Infinito draws only the protecting ones.
+- Scenery that changes every kilometre: Campo, Deserto, Neve, Cidade à noite and Vulcão. Reaching N km in one run unlocks the N-th, which the garage's CENÁRIOS tab can pick as the start. It is only scenery: the road, obstacles and score are the same in all.
 - Countdown, slow-motion crash with screen shake and sparks, a victory lap with confetti, pause with a blurred backdrop.
 - Best score per mode and per car saved as JSON in the user data folder; a corrupt save falls back to defaults.
 - Fixed-step simulation (120 Hz) inside an async main loop, so the same code runs in the browser (pygbag).
@@ -173,18 +174,18 @@ On the VPS, M3 adds:
 
 Rolling it out, once: re-run `setup.sh` from a copy of the M3 commit's `ops/` before its deploy (it installs `jogo-admin` and stops restarting a running server).
 
-Reviewing the queue, from the Mac (`meuhubprod` logs in as root):
+Reviewing the queue, from your computer (`jogo-admin` missing? `install -m 755 /srv/jogo/app/ops/jogo-admin /usr/local/bin/`):
 
 ```bash
-ssh meuhubprod jogo-admin revisar                  # what waits for review
-ssh meuhubprod 'jogo-admin export 123' > run.json  # run 123's input log
+ssh root@<vps> jogo-admin revisar                  # what waits for review
+ssh root@<vps> 'jogo-admin export 123' > run.json  # run 123's input log
 python -m jogo_de_carro --replay run.json          # watch it here; Esc pauses
-ssh meuhubprod jogo-admin aprovar 123              # into the ranking; or: rejeitar 123, banir <apelido>
+ssh root@<vps> jogo-admin aprovar 123              # into the ranking; or: rejeitar 123, banir <apelido>
 ```
 
 The replay is the server's own simulation, so replay it with game code equal to the run's build: `/srv/jogo/cache/deploy.log` pairs each deployed commit with its `jogo/<tree>/`.
 
-Setting `MAX_ATIVAS`: while the site is quiet (the test competes with the live server for the VPS's two vCPUs), run `ssh meuhubprod jogo-admin load --n 100` (then other values of `--n`). It plays that many real-time ranked runs against a scratch copy of the server and reports the event loop's lag, the CPU used and every result: take the largest `n` whose p99 lag stays well under 500 ms with no run rejected for `ritmo` or `adiantado`, leave room for the other sites, and put `MAX_ATIVAS=<n>` in `/etc/jogo/env`. Memory bounds it too: a worst-case run holds about 6.5 MB, so keep `n` at 100 or below unless `MemoryMax=1G` in `jogo.service` grows. The next deploy applies it, draining first; `systemctl restart jogo` applies it at once but drops the races in progress.
+Setting `MAX_ATIVAS`: while the site is quiet (the test competes with the live server for the VPS's two vCPUs), run `jogo-admin load --n 100` on the VPS (then other values of `--n`). It plays that many real-time ranked runs against a scratch copy of the server and reports the event loop's lag, the CPU used and every result: take the largest `n` whose p99 lag stays well under 500 ms with no run rejected for `ritmo` or `adiantado`, leave room for the other sites, and put `MAX_ATIVAS=<n>` in `/etc/jogo/env`. Memory bounds it too: a worst-case run holds about 6.5 MB, so keep `n` at 100 or below unless `MemoryMax=1G` in `jogo.service` grows. The next deploy applies it, draining first; `systemctl restart jogo` applies it at once but drops the races in progress.
 
 ## Live races and challenges with friends (M4, M5)
 
@@ -195,6 +196,16 @@ Logged in on the web, AMIGOS on the title lists the challenges you received, the
 - **`/partidas`** on the site lists your last 50 races and challenges, wins/losses/draws against each friend, and your runs "em análise".
 
 Neither kind enters `/ranking`. `MAX_ATIVAS` counts both runs of a race, and a friend's challenge turn as two places (the recording is in memory too); `/saude`'s `ativas` counts runs. The drain refuses new invites and challenges. Protocol and decisions: `docs/web-platform-plan.md`, (I) and (J).
+
+## Wallet, car shop, scenery and power-ups
+
+Plan and measurements: `docs/expansion-plan.md`.
+
+- **Wallet:** an online run (ranked, live race or challenge) pays the coins the server's own simulation collected, never the client's count. The balance is derived from the paid runs minus the cars bought, so an admin rejection takes a run's coins back by itself (it can leave a debt, which blocks buying). Winning never pays extra. A car refund is `DELETE FROM garage WHERE user_id = ? AND skin = ?`.
+- **Car shop:** `buy` is one atomic statement at the server's price; online, only an owned car races (any other is raced as Amarelo).
+- **Scenery** is drawn by the client only: the road keeps its own random generator and builds its ground lazily, so the server never draws one and the golden does not move.
+- **Power-ups** are the only part that changed the simulation (new golden). TURBO and DEVAGAR scale the world's clock by exact binary fractions, and the spawner plans rows on a nominal clock, so a shared road is identical whatever each player collects. They add no points, and a paired test over 200 seeds per mode kept the ranking's p90 within 5% (10% in Infinito).
+- **Ranking:** a verified run ranks at once, top 10 included; only a run the bot detector flags waits for review.
 
 ## Credits
 
