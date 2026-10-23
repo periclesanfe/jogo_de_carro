@@ -20,6 +20,7 @@ from .scenes.title import TitleScene
 from .scenes.versus import LiveScene, RecordingScene
 from .settings import FIXED_DT, FPS, HEIGHT, MUTED, PRICE, TITLE, WIDTH
 from .ui import blit_text, panel, text
+from .world.road import BIOMES, ground
 
 MAX_FRAME = 0.1  # longer hitches are not simulated (e.g. the window was dragged)
 REALTIME_FRAME = 1.0  # ...except online, where the run must keep the server's clock (it allows 2 s of lag)
@@ -46,6 +47,8 @@ class Game:
         self.screen = self._open_window()
         assets = Assets(strict=strict_assets)
         assets.preload()
+        for biome in range(len(BIOMES)):  # behind the web's loading screen: one built mid-race would hitch
+            ground(assets, biome)
         pygame.display.set_icon(assets.icon())
         save_path = save_path or default_save_path()
         save = load(save_path)

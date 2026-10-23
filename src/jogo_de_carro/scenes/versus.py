@@ -66,6 +66,7 @@ def bar(surface: pygame.Surface, rect: pygame.Rect, k: float, color: tuple[int, 
 class VersusScene(RaceScene):
     pause_button = pygame.Rect(16, 20, 48, 48)  # on the left verge
     cannons = (-SHIFT, WIDTH // 2 - SHIFT)  # the corners of my half
+    biome_banner = ((MINE.centerx, 70), 120)  # at the top of my half, over my road: faint
 
     def __init__(self, ctx: Context, level: str, seed: int | None = None) -> None:
         skin = "red" if ctx.save.skin != "red" else "blue"  # never the player's car
@@ -74,6 +75,7 @@ class VersusScene(RaceScene):
         self.name = self.nick = f"BOT {BOT_NAMES[level]}"
         bot = Bot(BOT_LEVELS[level], random.Random(self.seed ^ 0xB07))
         self.rival = Run(ctx.assets, self.mode.key, skin, self.seed, True, bot, rival=ctx.save.skin)
+        self.rival.world.road.restart(ctx.save.biome)  # my scenery on both halves
         self.verdict: int | None = None
 
     def again(self) -> Scene:
@@ -120,6 +122,8 @@ class VersusScene(RaceScene):
         """The results card: the verdict, why (or `why`), and the rival's line."""
         from .results import RaceStats, ResultsScene
 
+        unlocked = self.ctx.save.drove(self.score.meters)
+        self.ctx.persist()
         stats = RaceStats(
             outcome,
             self.mode,
@@ -133,6 +137,7 @@ class VersusScene(RaceScene):
             self.official,
             button=self.button,
             wallet=self.wallet,
+            unlocked=unlocked,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
@@ -252,6 +257,7 @@ class LiveScene(VersusScene):
         self.friend, self.nick = friend, op["nick"]
         self.name = fit(self.nick, 22, COLUMN.width - 24)
         self.rival = Run(ctx.assets, self.mode.key, op["skin"], self.seed, True, rival=net.skin)
+        self.rival.world.road.restart(ctx.save.biome)
         self.verdict: int | None = None
         self.result: dict | None = None
         self.end: tuple[int, str] | None = None  # the rival's last tick, and why (op_end)

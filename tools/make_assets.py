@@ -44,10 +44,16 @@ SPRITES: dict[str, tuple[int, int, int]] = {
     "coin": (8, 12, 12),
     "shield": (4, 16, 16),
     "tree": (2, 32, 32),
-    "bush": (2, 16, 12),
+    "bush": (4, 16, 12),
     "lamp": (1, 10, 28),
     "rock_small": (1, 10, 8),
     "flowers": (3, 8, 6),
+    "cactus": (2, 14, 26),
+    "pine": (2, 20, 32),
+    "snowman": (1, 12, 16),
+    "building": (2, 40, 40),
+    "basalt": (2, 14, 10),
+    "lava": (1, 24, 14),
     "blinker": (2, 6, 6),
     "road_tile": (1, 160, 64),
 }
@@ -1304,9 +1310,12 @@ def tree_palm(seed: str) -> Surf:
     return with_shadow(outline(s, LEAF_OUT), 2, 2, 70)
 
 
+# bush's three clumps; bush_snow() lays snow on their tops
+BUSH_BALLS = [(5.2, 7.0, 4.2, 3.6, 0), (10.8, 6.8, 4.2, 3.8, 0.4), (8.0, 4.6, 3.6, 3.2, 1.6)]
+
+
 def bush(variant: int) -> Surf:
-    balls = [(5.2, 7.0, 4.2, 3.6, 0), (10.8, 6.8, 4.2, 3.8, 0.4), (8.0, 4.6, 3.6, 3.2, 1.6)]
-    s = blob(16, 12, balls, LEAF, f"bush{variant}", jitter=0.1, speckle=0.06, edge=LEAF_OUT)
+    s = blob(16, 12, BUSH_BALLS, LEAF, f"bush{variant}", jitter=0.1, speckle=0.06, edge=LEAF_OUT)
     if variant:
         rng = random.Random("bougainvillea")
         for _ in range(9):
@@ -1563,6 +1572,397 @@ def blinker(frame: int) -> Surf:
     return art(rows, legend)
 
 
+# Biome props: desert cactus, snow pine and snowman, dry and snowy bushes (bush frames 2 and 3)
+CACTUS_GREEN = [(22, 58, 54), (36, 94, 70), (60, 132, 82), (102, 172, 98), (170, 214, 134)]
+CACTUS_SPINE = (240, 232, 188)
+CACTUS_BLOOM = [(200, 40, 96), (246, 92, 150), (255, 176, 212), (255, 220, 92)]  # shade, petal, lit, heart
+CACTUS_SAGUARO = (  # trunk + two arms, lit from the left, ribs as grooves; caps lit seen a little from above
+    "..............",
+    ".....eed......",
+    "....eedcb.....",
+    "....dbcab.....",
+    "....dbcab..e..",
+    "....dbcab.eed.",
+    "....dbcab.dba.",
+    "....dbcab.dba.",
+    ".ed.dbcab.dba.",
+    ".db.dbcab.dba.",
+    ".db.dbcab.dba.",
+    ".db.dbcab.dba.",
+    ".db.dbcabcdba.",
+    ".db.dbcabbdba.",
+    ".db.dbcabaaa..",
+    ".dbcdbcab.....",
+    ".dbbdbcab.....",
+    "..aadbcab.....",
+    "....dbcab.....",
+    "....dbcab.....",
+    "....dbcab.....",
+    "....dbcab.....",
+    "....dbcab.....",
+    "....bbaaa.....",
+)
+CACTUS_SAGUARO_SPINES = ((4, 5), (6, 8), (4, 11), (6, 14), (4, 17), (6, 20), (10, 8), (10, 11), (1, 11))
+
+
+def cactus_saguaro() -> Surf:
+    s = new(14, 26)
+    s.blit(art(CACTUS_SAGUARO, dict(zip("abcde", CACTUS_GREEN, strict=True))), (0, 0))
+    for x, y in CACTUS_SAGUARO_SPINES:
+        put(s, x, y, CACTUS_SPINE)
+    return with_shadow(outline(s, LEAF_OUT), 1, 1, 80)
+
+
+CACTUS_GOLD = [(176, 136, 60), (240, 204, 100)]  # barrel spines: shade, lit
+
+
+def cactus_barrel() -> Surf:
+    """Golden barrel cactus: ribs bowing round the ball, spines on the ridges, a pink bloom on the crown."""
+    s = new(14, 26)
+    cx, cy, rx, ry = 6.5, 18.5, 5.5, 5.3
+    angles = (-0.95, 0.0, 0.95)  # rib grooves facing us; spiny ridges sit halfway between
+    for y in range(13, 24):
+        dy = (y + 0.5 - cy) / ry
+        hw = rx * math.sqrt(max(0.0, 1 - dy * dy))
+        grooves = {round(cx + math.sin(a) * hw - 0.5) for a in angles}
+        ridges = {round(cx + math.sin(a + 0.47) * hw - 0.5) for a in angles[:-1]}
+        for x in range(14):
+            dx = (x + 0.5 - cx) / rx
+            if dx * dx + dy * dy >= 1:
+                continue
+            nz = math.sqrt(1 - dx * dx - dy * dy)
+            i = max(1, min(4, int((dx * LX + dy * LY + nz * LZ + 0.12) / 1.02 * 5)))
+            c = CACTUS_GREEN[i]
+            if dy < -0.6 and abs(dx) < 0.42:
+                c = CACTUS_BLOOM[3] if abs(dx) < 0.1 and dy > -0.85 else CACTUS_BLOOM[2 if dx < 0 else 1]
+            elif x in grooves and dy > -0.75:
+                c = CACTUS_GREEN[i - 1 if i < 3 else i - 2]
+            elif x in ridges and y % 2 and dy > -0.75:
+                c = CACTUS_GOLD[i >= 3]
+            s.set_at((x, y), c)
+    return with_shadow(outline(s, LEAF_OUT), 1, 1, 80)
+
+
+PINE_NEEDLE = [(12, 40, 44), (20, 64, 56), (30, 92, 62), (52, 124, 70), (98, 162, 88)]
+SNOWMAN_SNOW = [(104, 122, 170), (150, 170, 212), (200, 214, 238), (234, 241, 252), (255, 255, 255)]
+PINE_TIERS = ((1, 8, 0.8, 3.6), (5, 14, 1.6, 5.6), (10, 20, 2.6, 7.4), (15, 26, 3.6, 9.0))  # y0, y1, hw0, hw1
+PINE_SNOW_DEPTH = (0.75, 0.6, 0.5, 0.4)  # share of each visible skirt under snow, top tier first
+
+
+def pine(snowy: bool) -> Surf:
+    """Conifer in three-quarter view: four skirts, each front edge bowing down toward the camera."""
+    s, rng, cx = new(20, 32), random.Random("pine"), 10.0
+    for y in range(26, 30):
+        for x in range(8, 12):
+            s.set_at((x, y), BARK[3] if x == 8 else BARK[1] if x < 11 else BARK[0])
+    owner: dict[tuple[int, int], tuple[int, float, float]] = {}
+    for k, (yt, yb, w0, w1) in enumerate(PINE_TIERS):
+        for y in range(yt, yb + 3):
+            for x in range(20):
+                f = x + 0.5 - cx
+                hw = w0 + (w1 - w0) * min(1.0, (y - yt) / (yb - yt))
+                bottom = yb + 1.8 * (1 - (f / w1) ** 2) - (0.9 if (x + k) % 3 else 0)
+                if abs(f) <= hw and y + 0.5 <= bottom and (x, y) not in owner:
+                    owner[x, y] = (k, f / hw, (y + 0.5 - yt) / (bottom - yt))
+    for (x, y), (k, u, v) in sorted(owner.items()):
+        d = next(j for j in range(32) if owner.get((x, y - j - 1), (-1,))[0] != k)  # rows of this skirt above
+        n = d + next(j for j in range(32) if owner.get((x, y + j + 1), (-1,))[0] != k) + 1
+        covered = (x, y - d - 1) in owner  # a higher skirt overlaps this one here
+        i = 3 if u < -0.45 else 2 if u < 0.15 else 1 if u < 0.65 else 0
+        if v > 0.8 and u < 0.3:
+            i += 1  # lit branch tips along the front edge
+        if covered and d < 2:
+            i -= 2 - d  # in the shade of the skirt above
+        if rng.random() < 0.12:
+            i += rng.choice((-1, 1))
+        c = PINE_NEEDLE[max(0, min(4, i))]
+        if snowy and covered <= d < PINE_SNOW_DEPTH[k] * n + (x * 7 + k * 3) % 3 - 1:
+            c = SNOWMAN_SNOW[max(1, min(4, i + 1))]
+        s.set_at((x, y), c)
+    return with_shadow(outline(s, LEAF_OUT), 1, 1, 80)
+
+
+SNOWMAN_SCARF = [(150, 20, 36), (220, 44, 56), (255, 112, 104)]
+SNOWMAN_CARROT = [(204, 78, 22), (255, 140, 40)]
+SNOWMAN_COAL = (34, 34, 46)
+SNOWMAN_TWIG = (92, 56, 38)
+
+
+def snowman() -> Surf:
+    """Three snowballs seen a little from above: coal face, carrot nose, red scarf, twig arms."""
+    balls = [(6.5, 11.9, 4.6, 3.4, 0), (6.5, 7.6, 3.4, 2.7, 2.0), (6.5, 3.2, 2.6, 2.3, 4.0)]
+    s = blob(12, 16, balls, SNOWMAN_SNOW, "snowman", jitter=0.0)
+    for x in range(4, 9):  # scarf round the neck, its tail hanging on the lit side
+        put(s, x, 5, SNOWMAN_SCARF[2 if x < 6 else 1])
+    put(s, 4, 6, SNOWMAN_SCARF[1])
+    put(s, 4, 7, SNOWMAN_SCARF[0])
+    for x, y in ((5, 2), (7, 2), (6, 8), (6, 10)):  # eyes, buttons
+        put(s, x, y, SNOWMAN_COAL)
+    put(s, 6, 3, SNOWMAN_CARROT[1])
+    put(s, 7, 4, SNOWMAN_CARROT[0])
+    for x, y in ((2, 7), (1, 6), (0, 5), (10, 7), (11, 6), (11, 5)):  # twig arms
+        put(s, x, y, SNOWMAN_TWIG)
+    return with_shadow(s, 1, 1, 80)
+
+
+BUSH_DRY = [(52, 32, 22), (96, 60, 36), (140, 94, 52), (180, 130, 70)]  # shade, twig, lit twig, tip
+BUSH_DRY_LEAF = [(110, 104, 48), (150, 140, 64)]
+BUSH_DRY_STEMS = (  # root to tip; a stem may start on another one (a fork)
+    ((7, 10), (7, 9), (7, 8), (8, 7), (8, 6), (7, 5), (8, 4), (8, 3), (8, 2), (8, 1)),
+    ((7, 10), (6, 9), (5, 8), (4, 7), (3, 6), (2, 6), (1, 5)),
+    ((7, 8), (6, 7), (5, 6), (5, 5), (4, 4), (4, 3), (3, 2)),
+    ((8, 7), (9, 6), (10, 5), (10, 4), (11, 3), (12, 2)),
+    ((8, 10), (9, 9), (10, 8), (11, 7), (12, 7), (13, 6), (14, 5)),
+    ((5, 5), (6, 4), (6, 3), (6, 2)),
+    ((10, 5), (11, 5), (12, 4)),
+    ((3, 6), (2, 4)),
+)
+BUSH_DRY_LEAVES = ((1, 4, 1), (3, 1, 0), (8, 0, 1), (12, 1, 0), (14, 4, 1), (6, 1, 0), (13, 3, 1), (2, 3, 0))
+
+
+def bush_dry() -> Surf:
+    """Dry desert scrub: bare stems fanning up from one root, a few khaki leaves left on the tips."""
+    s = new(16, 12)
+    for stem in BUSH_DRY_STEMS:
+        for j, (x, y) in enumerate(stem):
+            put(s, x, y, BUSH_DRY[3 if j == len(stem) - 1 else 2 if y < 7 else 1])
+    for x, y, i in BUSH_DRY_LEAVES:
+        put(s, x, y, BUSH_DRY_LEAF[i])
+    for x, y in [(x, y) for y in range(12) for x in range(16) if solid(s, x, y)]:
+        if not solid(s, x, y + 1):  # 1 px shade under each twig gives it some body
+            put(s, x, y + 1, BUSH_DRY[0])
+    return with_shadow(s, 1, 1, 70)
+
+
+def bush_snow() -> Surf:
+    """Today's bush with snow lying on top of each clump."""
+    s, rng = bush(0), random.Random("bush_snow")
+    for y in range(12):
+        for x in range(16):
+            c = s.get_at((x, y))
+            if c[3] < 255 or c[:3] == LEAF_OUT:
+                continue
+            best = None
+            for bx, by, rx, ry, z in BUSH_BALLS:
+                dx, dy = (x + 0.5 - bx) / rx, (y + 0.5 - by) / ry
+                if dx * dx + dy * dy < 1:
+                    nz = math.sqrt(1 - dx * dx - dy * dy)
+                    if best is None or z + nz * min(rx, ry) > best[0]:
+                        best = (z + nz * min(rx, ry), dx, dy, nz)
+            if best and best[2] < -0.05 + rng.uniform(-0.25, 0.2):
+                _, dx, dy, nz = best
+                i = int((dx * LX + dy * LY + nz * LZ + 0.12) / 1.02 * 5)
+                s.set_at((x, y), SNOWMAN_SNOW[max(1, min(4, i + 1))])
+    return s
+
+
+# Biome props: city rooftops, volcano basalt and lava
+# Night city rooftops: a height map (parapet 1, units 3, tank 4) shaded from the upper-left, with
+# diagonal cast shadows; warm skylights and a red beacon are the lit details that read at night.
+BUILDING_CONCRETE = [
+    (28, 30, 46),
+    (44, 48, 68),
+    (60, 65, 88),
+    (78, 84, 110),
+    (102, 109, 138),
+    (140, 148, 178),
+]
+BUILDING_TAR = [(34, 26, 42), (52, 40, 60), (70, 56, 78), (90, 74, 98), (118, 100, 126), (156, 138, 164)]
+BUILDING_METAL = [(30, 34, 46), (58, 64, 82), (90, 98, 118), (128, 136, 156), (176, 184, 202)]
+BUILDING_TANK = [(16, 36, 84), (26, 58, 128), (42, 90, 170), (82, 136, 210), (150, 196, 240)]
+BUILDING_GLASS = [(64, 46, 34), (230, 150, 60), (255, 206, 106), (255, 246, 206)]  # frame, deep, glass, glint
+
+BuildingCells = dict[tuple[int, int], tuple[int, str]]
+
+
+def building_rect(cells: BuildingCells, x0: int, y0: int, x1: int, y1: int, h: int, mat: str) -> None:
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            cells[x, y] = (h, mat)
+
+
+def building_shell(cells: BuildingCells, rects: Sequence[tuple[int, int, int, int]], roof: str) -> None:
+    """Union of footprint rects: a 2 px parapet (height 1) round a flat roof (height 0)."""
+    for x0, y0, x1, y1 in rects:
+        building_rect(cells, x0, y0, x1, y1, 0, roof)
+    inside = set(cells)
+    for x, y in inside:
+        if any((x + dx, y + dy) not in inside for dx in range(-2, 3) for dy in range(-2, 3)):
+            cells[x, y] = (1, roof + "_wall")
+
+
+BuildingMats = dict[str, tuple[Sequence[Color], int, float]]  # material -> (ramp, base index, gravel)
+
+
+def building_render(cells: BuildingCells, mats: BuildingMats, seed: str) -> Surf:
+    rng, s = random.Random(seed), new(40, 40)
+
+    def hgt(x: int, y: int) -> int:
+        c = cells.get((x, y))
+        return c[0] if c else -1
+
+    for (x, y), (h, m) in sorted(cells.items()):
+        ramp, i, speck = mats[m]
+        if hgt(x - 1, y) < h or hgt(x, y - 1) < h:
+            i += 1  # edge facing the light
+        elif hgt(x + 1, y) < h or hgt(x, y + 1) < h:
+            i -= 1
+        if any(hgt(x - k, y - k) >= h + k for k in range(1, 8)):
+            i -= 2  # cast shadow, falling down-right
+        if speck and rng.random() < speck:
+            i -= 1  # dark gravel
+        s.set_at((x, y), ramp[max(0, min(len(ramp) - 1, i))])
+    return s
+
+
+def building_skylight(s: Surf, x0: int, y0: int, panes: int) -> None:
+    """A row of lit 2x3 glass panes in a dark frame (shared mullions)."""
+    for y in range(y0, y0 + 5):
+        for x in range(x0, x0 + 3 * panes + 1):
+            if (x - x0) % 3 == 0 or y in (y0, y0 + 4):
+                c = BUILDING_GLASS[0]
+            elif (x - x0) % 3 == 1 and y == y0 + 1:
+                c = BUILDING_GLASS[3]
+            else:
+                c = BUILDING_GLASS[1] if y == y0 + 3 else BUILDING_GLASS[2]
+            put(s, x, y, c)
+
+
+def building_fan(s: Surf, cx: float, cy: float) -> None:
+    """Condenser fan from above: dark round grille, lit lower-right lip, bright hub."""
+    for y in range(int(cy) - 3, int(cy) + 4):
+        for x in range(int(cx) - 3, int(cx) + 4):
+            fx, fy = x + 0.5 - cx, y + 0.5 - cy
+            d = math.hypot(fx, fy)
+            if d < 2.7:
+                c = BUILDING_METAL[0]
+                if d > 1.7 and fx + fy > 1.2:
+                    c = BUILDING_METAL[2]
+                elif d < 0.8:
+                    c = BUILDING_METAL[3]
+                put(s, x, y, c)
+
+
+def building(frame: int) -> Surf:
+    cells: BuildingCells = {}
+    mats = {
+        "concrete": (BUILDING_CONCRETE, 3, 0.1),
+        "concrete_wall": (BUILDING_CONCRETE, 4, 0.0),
+        "tar": (BUILDING_TAR, 3, 0.0),
+        "tar_wall": (BUILDING_TAR, 4, 0.0),
+        "box": (BUILDING_CONCRETE, 4, 0.0),
+        "metal": (BUILDING_METAL, 2, 0.0),
+        "pipe": (BUILDING_METAL, 3, 0.0),
+        "tank": (BUILDING_TANK, 2, 0.0),
+    }
+    if frame == 0:  # concrete roof: blue water tank, stair box with a lit door, roof hatch, skylights
+        building_shell(cells, [(1, 1, 36, 36)], "concrete")
+        building_rect(cells, 22, 4, 31, 11, 3, "box")
+        building_rect(cells, 5, 25, 9, 29, 1, "metal")
+        tank = blob(11, 11, [(5.5, 5.5, 4.4, 4.4, 0)], BUILDING_TANK, "tank", jitter=0.0)
+        for y in range(11):
+            for x in range(11):
+                if tank.get_at((x, y))[3]:
+                    cells[x + 4, y + 4] = (4, "tank")
+        s = building_render(cells, mats, "building0")
+        for y in range(11):  # lid groove
+            for x in range(11):
+                if 2.1 < math.hypot(x + 0.5 - 5.5, y + 0.5 - 5.5) < 2.9:
+                    tank.set_at((x, y), BUILDING_TANK[1] if x + y > 10 else BUILDING_TANK[3])
+        s.blit(tank, (4, 4))
+        for x, y, c in ((9, 9, (255, 160, 150)), (10, 9, (226, 44, 52)), (9, 10, (226, 44, 52))):
+            put(s, x, y, c)  # red beacon on the lid
+        put(s, 10, 10, (150, 24, 40))
+        hline(s, 25, 27, 11, BUILDING_GLASS[2])  # open door, its light spilling onto the roof
+        hline(s, 25, 27, 12, (164, 140, 112))
+        hline(s, 24, 28, 13, (126, 112, 104))
+        hline(s, 25, 27, 14, (104, 98, 104))
+        building_skylight(s, 21, 22, 4)
+        building_skylight(s, 21, 28, 4)
+    else:  # L-shaped tar roof: two condensers on a duct, a long skylight
+        building_shell(cells, [(1, 9, 36, 36), (1, 1, 22, 9)], "tar")
+        building_rect(cells, 10, 12, 11, 25, 1, "pipe")
+        building_rect(cells, 10, 24, 28, 25, 1, "pipe")
+        building_rect(cells, 4, 4, 11, 11, 3, "metal")
+        building_rect(cells, 24, 15, 31, 22, 3, "metal")
+        s = building_render(cells, mats, "building1")
+        for (x, y), (_, m) in cells.items():  # membrane seams
+            if m == "tar" and y % 5 == 2 and s.get_at((x, y))[:3] == BUILDING_TAR[3]:
+                s.set_at((x, y), BUILDING_TAR[2])
+        building_fan(s, 8.0, 8.0)
+        building_fan(s, 28.0, 19.0)
+        building_skylight(s, 5, 29, 9)
+    return with_shadow(outline(s), 2, 2, 90)
+
+
+# Volcano: chiselled basalt (lit top-left facet, dark flank, a faint ember line where it sits on the hot
+# ground) and a crusted lava pool.
+BASALT = {
+    "o": (14, 10, 16), "e": (168, 52, 28), "r": (78, 38, 38),
+    "1": (12, 12, 18), "2": (40, 40, 54), "3": (62, 62, 80), "4": (92, 94, 114), "5": (142, 146, 168),
+}  # fmt: skip
+BASALT_ART = (
+    (  # one big chunk
+        "....oooo......",
+        "..oo5543ooo...",
+        ".o554444133o..",
+        "o54444441333o.",
+        ".o44444413322o",
+        ".o34441122222e",
+        "..o11222r2r1e.",
+        "...oeeeeeee...",
+        "..............",
+        "..............",
+    ),
+    (  # a chunk with a splinter leaning on it
+        "..oooo........",
+        ".o5543o..ooo..",
+        "o554443o.o543o",
+        "o5444413oo432o",
+        "o4444122o3322o",
+        ".o3411222o221e",
+        "..o112r21o1re.",
+        "...oeeeee.ee..",
+        "..............",
+        "..............",
+    ),
+)
+LAVA = [(110, 20, 14), (182, 40, 16), (234, 88, 24), (255, 150, 40), (255, 212, 84), (255, 248, 196)]
+LAVA_CRUST = [(20, 12, 14), (40, 24, 24), (62, 38, 32)]  # outline, crust, crust lit top-left
+
+
+def basalt(frame: int) -> Surf:
+    return with_shadow(art(BASALT_ART[frame], BASALT), 1, 1, 80)
+
+
+def lava() -> Surf:
+    """Pool: crust ring (lit outer top-left, glowing inner lip), molten bands to a white-hot core, cracks."""
+    rng = random.Random("lava")
+    s, cx, cy = new(24, 14), 12.0, 7.0
+    harm = [(rng.uniform(0.04, 0.08), k, rng.uniform(0, math.tau)) for k in (2, 3, 5)]
+    for y in range(14):
+        for x in range(24):
+            fx, fy = x + 0.5 - cx, y + 0.5 - cy
+            a = math.atan2(fy, fx)
+            d = math.hypot(fx / 10.2, fy / 5.6) / (1 + sum(amp * math.cos(k * a + p) for amp, k, p in harm))
+            if d >= 1:
+                continue
+            if d > 0.72:
+                c = LAVA_CRUST[2 if fx + 1.6 * fy < -6 else 1]
+                if d < 0.8:
+                    c = LAVA[0]  # crust lip lit by the melt
+            else:
+                heat = (1 - d / 0.72) * 4.6 + 0.35 * math.sin(fx * 0.7 - fy * 1.3)
+                c = LAVA[max(1, min(5, round(heat)))]
+            s.set_at((x, y), c)
+    for x, y in ((7, 5), (8, 5), (16, 9), (17, 9), (17, 8), (14, 3)):  # floating crust plates
+        s.set_at((x, y), LAVA_CRUST[1])
+    for x, y in ((2, 7), (3, 7), (21, 6), (22, 5), (12, 1), (11, 12)):  # cracks glowing through the crust
+        if s.get_at((x, y))[3]:
+            s.set_at((x, y), LAVA[1])
+    return outline(s, LAVA_CRUST[0])
+
+
 def tile_noise(w: int, h: int, cell: int, rng: random.Random) -> list[list[float]]:
     gw, gh = w // cell, h // cell
     g = [[rng.random() for _ in range(gw)] for _ in range(gh)]
@@ -1719,10 +2119,16 @@ def build_sprites() -> dict[str, Surf]:
         "coin": strip([coin(f) for f in range(8)]),
         "shield": strip([shield(f) for f in range(4)]),
         "tree": strip([tree_round("tree0"), tree_palm("palm")]),
-        "bush": strip([bush(0), bush(1)]),
+        "bush": strip([bush(0), bush(1), bush_dry(), bush_snow()]),
         "lamp": lamp(),
         "rock_small": rock_small(),
         "flowers": strip([flowers(i) for i in range(3)]),
+        "cactus": strip([cactus_saguaro(), cactus_barrel()]),
+        "pine": strip([pine(False), pine(True)]),
+        "snowman": snowman(),
+        "building": strip([building(0), building(1)]),
+        "basalt": strip([basalt(0), basalt(1)]),
+        "lava": lava(),
         "blinker": strip([blinker(0), blinker(1)]),
         "road_tile": road_tile(),
         "icon": icon(),

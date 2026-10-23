@@ -11,7 +11,8 @@ from ..input import Action
 from ..particles import Particles
 from ..settings import ACCENT, CYAN, DANGER, HEIGHT, MUTED, WHITE, WIDTH, Difficulty
 from ..tween import out_back, out_cubic
-from ..ui import Menu, blit_pop, blit_text, clock_text, faded, panel
+from ..ui import Menu, blit_pop, blit_text, clock_text, faded, panel, text
+from ..world.road import BIOMES
 from ..world.scoring import Score
 from .base import WEB, Context, Scene, Transition
 from .online import NO_RESULT, VERIFYING, official, paid
@@ -39,6 +40,7 @@ class RaceStats:
     button: str = "JOGAR DE NOVO"  # the first button (REVANCHE: a new invite to the same friend; AMIGOS)
     to: str = ""  # a challenge's run: the friend it goes to (the official line says it was sent)
     wallet: str = ""  # an online run: what it paid (online.paid), once the server said; online.NO_COINS
+    unlocked: tuple[int, ...] = ()  # the biomes this race's distance unlocked as sceneries
 
     @property
     def won(self) -> bool:
@@ -178,9 +180,20 @@ class ResultsScene(Scene):
             anchor="midright",
         )
         self._draw_record(surface, box)
+        if stats.unlocked:
+            self._draw_unlocked(surface, box)
         if line := " · ".join(filter(None, (stats.official, stats.wallet))):
             self._draw_official(surface, line, box.y + 512)
         self.menu.draw(surface)
+
+    def _draw_unlocked(self, surface: pygame.Surface, box: pygame.Rect) -> None:
+        """A tab on the card's top edge: the sceneries this race unlocked."""
+        s = "s" if len(self.stats.unlocked) > 1 else ""
+        label = f"Cenário{s} liberado{s}: " + ", ".join(BIOMES[i].name.upper() for i in self.stats.unlocked)
+        rect = pygame.Rect(0, 0, 48 + text(label, 28).get_width(), 40)
+        rect.center = (WIDTH // 2, box.y)
+        panel(surface, rect, alpha=255, radius=20, border=ACCENT)
+        blit_text(surface, label, 28, rect.center, ACCENT, shadow=False)
 
     def _draw_official(self, surface: pygame.Surface, line: str, y: int) -> None:
         """The server's line; its ✓ (missing from the font) is drawn."""

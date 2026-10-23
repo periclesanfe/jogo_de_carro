@@ -1277,6 +1277,10 @@ def test_the_garage_sells_a_car_on_the_second_enter(game, window, monkeypatch, d
     assert "record" in played and scene.particles.items and "LIBERADO!" in popped
     key(game, pygame.K_LEFT, 2)
     assert game.scenes.top is scene and "Recorde com este carro: 0 · SELECIONADO" in drawn
+    popped.clear()
+    drawn.clear()
+    key(game, pygame.K_DOWN, 2)  # LIBERADO! is the car's: the sceneries keep their tabs
+    assert scene.unlocked and not popped and "CENÁRIOS" in drawn
 
 
 def test_the_garage_says_what_stops_a_buy(game, window, monkeypatch, drawn):

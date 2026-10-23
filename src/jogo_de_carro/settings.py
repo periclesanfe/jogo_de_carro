@@ -116,10 +116,16 @@ SPRITES: dict[str, tuple[int, int, int]] = {
     "coin": (12, 12, 8),
     "shield": (16, 16, 4),
     "tree": (32, 32, 2),
-    "bush": (16, 12, 2),
+    "bush": (16, 12, 4),  # green, in flower, dry, snowy
     "lamp": (10, 28, 1),
     "rock_small": (10, 8, 1),
     "flowers": (8, 6, 3),
+    "cactus": (14, 26, 2),  # saguaro, barrel
+    "pine": (20, 32, 2),  # green, snowy
+    "snowman": (12, 16, 1),
+    "building": (40, 40, 2),  # rooftops: water tank, air conditioning
+    "basalt": (14, 10, 2),
+    "lava": (24, 14, 1),
     "blinker": (6, 6, 2),
     "road_tile": (160, 64, 1),
 }

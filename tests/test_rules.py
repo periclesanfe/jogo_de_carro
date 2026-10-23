@@ -124,6 +124,27 @@ def test_partial_save_keeps_valid_fields(tmp_path):
     assert data.skin == "tank" and data.best == {"normal": 50} and data.best_by_skin == {"tank": 7}
 
 
+def test_a_scenery_is_kept_once_a_race_unlocked_it(tmp_path):
+    data = save.SaveData()
+    assert data.drove(999.9) == () and data.best_m == 999
+    assert data.drove(2500.4) == (1, 2) and data.drove(1800.0) == () and data.best_m == 2500  # Deserto, Neve
+    data.biome = 2
+    path = tmp_path / "save.json"
+    save.store(data, path)
+    assert save.load(path) == data
+    for raw, best_m, biome in [
+        ({"best_m": 2500, "biome": 3}, 2500, 0),  # not reached yet
+        ({"best_m": 9000, "biome": 5}, 9000, 0),
+        ({"best_m": 9000, "biome": -1}, 9000, 0),
+        ({"best_m": 9000, "biome": True}, 9000, 0),
+        ({"best_m": 9000, "biome": "4"}, 9000, 0),
+        ({"best_m": 4000.0, "biome": 4}, 0, 0),
+        ({"best_m": -5, "biome": 0}, 0, 0),
+    ]:
+        path.write_text(json.dumps(raw), encoding="utf-8")
+        assert (save.load(path).best_m, save.load(path).biome) == (best_m, biome), raw
+
+
 def test_unwritable_save_does_not_crash(tmp_path):
     blocker = tmp_path / "file"
     blocker.write_text("x")
