@@ -54,7 +54,7 @@ progress (invalido) and closes the socket with 1008:
     S→C {"t":"op_end","m":903,"k":7321,"why":"crash|win|giveup|conexao|ritmo|adiantado|invalido"}   likewise,
          or right before the result once the race is over; k: the rival's ticks simulated
     C→S {"t":"leave","m":901}                   gives up at the last k sent (before go: the attempt is used)
-    S→C {"t":"result","m":901,"run":901,"state":"ok|review|rejected","why":null|"top10|bot|desync|adiantado|
+    S→C {"t":"result","m":901,"run":901,"state":"ok|review|rejected","why":null|"bot|desync|adiantado|
          ritmo|invalido|conexao|prazo|substituida|anulada","outcome":"crash|win|giveup|decided"|null,
          "score":2210|null,"secs":12.1|null,"rank":37|null,"verdict":null|"win|loss|draw",
          "op":null|{"nick":"ana_42","score":5321,"secs":83.2},"coins":37,"wallet":357}   coins: what this run
@@ -854,9 +854,7 @@ class Hub:
                 at = place(self.db, uid, live.mode, score) if best is None or score > best else None
                 if at and held is not None and score <= held:
                     row["state"], why = "rejected", "substituida"  # one run in review per player and mode
-                elif at and at <= 10 and score:
-                    row["state"], why = "review", "top10"
-                elif at and at <= 100 and flags.flagged(f):
+                elif at and at <= 100 and score and flags.flagged(f):  # top 10 too; the rest ranks at once
                     row["state"], why = "review", "bot"
                 if at and held is not None and row["state"] != "rejected":  # better: it replaces that one
                     self.db.execute(SUPERSEDE, (live.mode, uid))

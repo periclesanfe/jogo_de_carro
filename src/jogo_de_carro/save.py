@@ -1,5 +1,5 @@
-"""Persistent save (best scores, chosen skin and mode, audio settings) as JSON in the user data dir, or in
-localStorage in the browser."""
+"""Persistent save (best scores, chosen skin, mode and scenery, audio settings) as JSON in the user data dir,
+or in localStorage in the browser."""
 
 import json
 import logging
@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .settings import CARS, DEFAULT_MODE, MODE_BY_KEY, SKINS
+from .world.road import BIOMES
 
 log = logging.getLogger(__name__)
 APP_DIR = "jogo-de-carro"
@@ -38,6 +39,17 @@ class SaveData:
     best_time: dict[str, float] = field(default_factory=dict)  # longest survival per mode key
     best_by_skin: dict[str, int] = field(default_factory=dict)
     races: int = 0
+    best_m: int = 0  # the longest race in meters, offline too (a scenery is only a look): it unlocks biomes
+    biome: int = 0  # the scenery races start in (world/road.py BIOMES), once unlocked
+
+    def unlocked(self, biome: int) -> bool:
+        return self.best_m >= biome * 1000
+
+    def drove(self, meters: float) -> tuple[int, ...]:
+        """Store a race's distance; returns the biomes it unlocked."""
+        locked = [i for i in range(len(BIOMES)) if not self.unlocked(i)]
+        self.best_m = max(self.best_m, int(meters))
+        return tuple(i for i in locked if self.unlocked(i))
 
     def record(self, mode: str, skin: str, score: int, seconds: float) -> bool:
         """Store a finished race; returns True when it beat the previous best of that mode."""
@@ -63,6 +75,10 @@ class SaveData:
             data.muted = raw["muted"]
         if type(raw.get("races")) is int and raw["races"] >= 0:
             data.races = raw["races"]
+        if type(raw.get("best_m")) is int and raw["best_m"] >= 0:
+            data.best_m = raw["best_m"]
+        if type(raw.get("biome")) is int and 0 <= raw["biome"] < len(BIOMES) and data.unlocked(raw["biome"]):
+            data.biome = raw["biome"]
         data.best = _numbers(raw.get("best"), MODE_BY_KEY, int)
         data.best_time = _numbers(raw.get("best_time"), MODE_BY_KEY, float)
         data.best_by_skin = _numbers(raw.get("best_by_skin"), CARS, int)

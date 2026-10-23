@@ -17,6 +17,7 @@ from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.race import Phase, RaceScene
 from jogo_de_carro.settings import CARS, DIFICIL, FACIL, FIXED_DT, MODES, PRICE
 from jogo_de_carro.world.autopilot import BOT_LEVELS, Bot, autopilot
+from jogo_de_carro.world.road import BIOMES, biome_at, ground
 from jogo_de_carro.world.world import Controls
 
 HELD = [set(), {pygame.K_w}, {pygame.K_w}, {pygame.K_s}, {pygame.K_w, pygame.K_s}]  # W+S: no boost
@@ -230,6 +231,32 @@ def test_every_car_races_alike(game):
             assert same(simulate(assets, log | {"skin": key}), run), (name, key)
     for key in CARS:
         assert assets.bounds(f"car_{key}") == assets.bounds("car_yellow")
+
+
+@pytest.mark.parametrize("biome", range(1, len(BIOMES)), ids=lambda i: BIOMES[i].key)
+def test_a_scenery_is_only_a_look(assets, biome):
+    """The corpus races alike from every biome (and through the next ones); the road never uses world.rng."""
+    for name in CORPUS:
+        log = load(name)
+        want = simulate(assets, log)
+        run = Run(assets, log["mode"], log["skin"], log["seed"], log["shared"])
+        run.world.road.restart(biome)  # as the client does
+        run.load(log["end"], log["ev"])
+        run.advance(log["end"])
+        run.stop("giveup")
+        assert same(run, want) and run.world.rng.getstate() == want.world.rng.getstate(), name
+
+
+def test_the_road_changes_biome_every_km():
+    assert [biome_at(0, m) for m in (-40.0, 0.0, 999.99, 1000.0, 4999.0, 5000.0)] == [0, 0, 0, 1, 4, 0]
+    assert [biome_at(3, m) for m in (0.0, 1000.0, 2000.0, 3500.0)] == [3, 4, 0, 1]
+
+
+def test_a_run_builds_no_ground(assets):
+    """The server only simulates: its roads are never drawn, so they build no ground (6 MB) either."""
+    ground.cache_clear()
+    simulate(assets, load("normal_crash"))  # 1.5 km: two biomes
+    assert ground.cache_info().currsize == 0
 
 
 @pytest.mark.parametrize("mode", [m.key for m in MODES])

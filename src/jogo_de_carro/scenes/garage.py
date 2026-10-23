@@ -1,5 +1,6 @@
 """Car picker and shop: an endless carousel of every car on a turntable. A paid car is locked until the site's
-account owns it (net.owned): ENTER twice buys it, and the server's wallet message says it went through."""
+account owns it (net.owned): ENTER twice buys it, and the server's wallet message says it went through. UP and
+DOWN switch to the sceneries: the biome races start in, previewed on the road behind; a race unlocks it."""
 
 import math
 import random
@@ -8,9 +9,10 @@ import pygame
 
 from ..input import Action
 from ..particles import Particles
-from ..settings import ACCENT, CARS, HEIGHT, MUTED, PRICE, WHITE, WIDTH
+from ..settings import ACCENT, CARS, HEIGHT, MUTED, PRICE, PX_PER_METER, WHITE, WIDTH
 from ..tween import approach, out_back
 from ..ui import blit_pop, blit_text, glow, outlined, panel, text
+from ..world.road import BIOMES, TILE_H
 from .base import WEB, Context, MenuScene, Transition, menu_hint
 
 KEYS = tuple(CARS)
@@ -20,6 +22,9 @@ ARROWS[0].center = (CENTER[0] - 172, CENTER[1])
 ARROWS[1].center = (CENTER[0] + 172, CENTER[1])
 DISC_R = 135
 UNLOCKED_S = 2.5  # LIBERADO! stays up this long
+TABS = (pygame.Rect(0, 0, 220, 40), pygame.Rect(0, 0, 220, 40))  # CARROS, CENÁRIOS
+TABS[0].center = (WIDTH // 2 - 120, 128)
+TABS[1].center = (WIDTH // 2 + 120, 128)
 
 
 def slot_x(d: float) -> float:
@@ -34,7 +39,7 @@ def coins(n: int) -> str:
 
 
 class GarageScene(MenuScene):
-    dim, blur = 70, True
+    blur = True
 
     def __init__(self, ctx: Context) -> None:
         super().__init__(ctx)
@@ -45,6 +50,12 @@ class GarageScene(MenuScene):
         self.buying: str | None = None  # the car a second ENTER sent buy for, until the wallet answers
         self.unlocked = 0.0  # LIBERADO! is up while this runs down
         self.particles = Particles(random.Random(ctx.rng.random()))
+        self.scenery = False  # the CENÁRIOS tab
+        self.biome = ctx.save.biome
+
+    @property
+    def dim(self) -> int:
+        return 20 if self.scenery else 70  # the road behind is the scenery's preview
 
     @property
     def skin(self) -> str:
@@ -55,14 +66,33 @@ class GarageScene(MenuScene):
         net = self.ctx.net
         return key in PRICE and key not in (net.owned if net else ()) and key != self.ctx.save.skin
 
+    def _tab(self, scenery: bool) -> None:
+        self.scenery, self.armed = scenery, None
+        if scenery:
+            self.backdrop.world.road.restart(self.biome)
+        self.ctx.audio.play("ui_move", 0.6)
+
     def _move(self, step: int) -> None:
-        self.target += step
-        self.armed = None
+        if self.scenery:  # any biome is previewed, a locked one too
+            self.biome = (self.biome + step) % len(BIOMES)
+            self.backdrop.world.road.restart(self.biome)
+        else:
+            self.target += step
+            self.armed = None
         self.ctx.audio.play("ui_move", 0.6)
 
     def _confirm(self) -> None:
-        """A car it may race is chosen; on a locked one the first ENTER asks, the second buys it."""
+        """A car it may race is chosen; on a locked one the first ENTER asks, the second buys it. A scenery is
+        chosen once unlocked."""
+        if self.scenery:
+            if self.ctx.save.unlocked(self.biome):
+                self.ctx.save.biome = self.biome
+                self._leave(confirm=True)
+            else:
+                self.ctx.audio.play("ui_back")  # the line says how far to drive
+            return
         if not self.locked(self.skin):
+            self.ctx.save.skin = self.skin
             self._leave(confirm=True)
             return
         net = self.ctx.net
@@ -80,7 +110,6 @@ class GarageScene(MenuScene):
         from .title import TitleScene
 
         if confirm:
-            self.ctx.save.skin = self.skin
             self.ctx.persist()
             self.ctx.audio.play("ui_select")
         else:
@@ -88,7 +117,9 @@ class GarageScene(MenuScene):
         self.ctx.scenes.switch(TitleScene(self.ctx, focus=1), Transition.SLIDE_RIGHT)
 
     def handle(self, action: Action | None, event: pygame.Event) -> None:
-        if action is Action.LEFT:
+        if action in (Action.UP, Action.DOWN):
+            self._tab(not self.scenery)
+        elif action is Action.LEFT:
             self._move(-1)
         elif action is Action.RIGHT:
             self._move(1)
@@ -97,7 +128,9 @@ class GarageScene(MenuScene):
         elif action is Action.BACK:
             self._leave(confirm=False)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if ARROWS[0].collidepoint(event.pos):
+            if TABS[not self.scenery].collidepoint(event.pos):
+                self._tab(not self.scenery)
+            elif ARROWS[0].collidepoint(event.pos):
                 self._move(-1)
             elif ARROWS[1].collidepoint(event.pos):
                 self._move(1)
@@ -121,14 +154,22 @@ class GarageScene(MenuScene):
 
     def update(self, dt: float) -> None:
         super().update(dt)
+        road = self.backdrop.world.road
+        if self.scenery and road.biome(-TILE_H) != self.biome:  # the next biome is coming into view
+            road.px -= 1000 * PX_PER_METER  # back a km (25 whole tiles): the preview stays in its biome
         self.t += dt
         self.pos = approach(self.pos, self.target, 12.0, dt)
         self.unlocked = max(0.0, self.unlocked - dt)
         self.particles.update(dt, 0.0)
 
     def info(self) -> str:
-        """The line under the name: the record with this car, or what it takes to buy it."""
+        """The line under the name: the record with this car, or what it takes to buy it (or a scenery)."""
         save, net, key = self.ctx.save, self.ctx.net, self.skin
+        if self.scenery:
+            if save.unlocked(self.biome):
+                return "Liberado" + (" · SELECIONADO" if self.biome == save.biome else "")
+            best = f"{save.best_m // 100 / 10:.1f}".replace(".", ",")  # 1,2: never rounded up to the goal
+            return f"Chegue a {self.biome} km numa corrida para liberar · seu recorde: {best} km"
         if not self.locked(key):
             current = " · SELECIONADO" if key == save.skin else ""
             return f"Recorde com este carro: {save.best_by_skin.get(key, 0)}{current}"
@@ -151,29 +192,38 @@ class GarageScene(MenuScene):
     def draw_ui(self, surface: pygame.Surface) -> None:
         heading = outlined("GARAGEM", 80, WHITE, width=4)
         surface.blit(heading, heading.get_rect(center=(WIDTH // 2, 74)))
-        if self.unlocked:
+        if self.unlocked and not self.scenery:  # a bought car's, over its own tab
             pop = out_back(min(1.0, (UNLOCKED_S - self.unlocked) / 0.35))
             alpha = round(255 * min(1.0, self.unlocked * 3))
             blit_pop(surface, "LIBERADO!", 54, ACCENT, (WIDTH // 2, 140), pop, alpha, width=4, peak=1.17)
         else:
-            blit_text(surface, "Escolha o seu carro", 28, (WIDTH // 2, 126), MUTED)
+            for i, (rect, label) in enumerate(zip(TABS, ("CARROS", "CENÁRIOS"), strict=True)):
+                on = i == self.scenery
+                panel(surface, rect, alpha=230 if on else 150, radius=20, border=ACCENT if on else None)
+                blit_text(surface, label, 28, rect.center, ACCENT if on else MUTED, shadow=False)
 
-        self._draw_turntable(surface)
+        if not self.scenery:
+            self._draw_turntable(surface)
         for rect, direction in zip(ARROWS, (-1, 1), strict=True):  # under the cars that slide past them
             panel(surface, rect, alpha=210, radius=24)
             cx, cy = rect.center
             pts = [(cx + 8 * direction, cy), (cx - 6 * direction, cy - 11), (cx - 6 * direction, cy + 11)]
             pygame.draw.polygon(surface, WHITE, pts)
 
-        base = math.floor(self.pos)
-        slots = sorted(range(base - 3, base + 5), key=lambda k: -abs(k - self.pos))  # far cars first
-        for k in slots:
-            self._draw_car(surface, k)
-        if self.locked(self.skin):
-            self._draw_price(surface, PRICE[self.skin])
+        if self.scenery:
+            label = BIOMES[self.biome].name.upper()
+            color = ACCENT if self.ctx.save.unlocked(self.biome) else MUTED
+        else:
+            base = math.floor(self.pos)
+            slots = sorted(range(base - 3, base + 5), key=lambda k: -abs(k - self.pos))  # far cars first
+            for k in slots:
+                self._draw_car(surface, k)
+            if self.locked(self.skin):
+                self._draw_price(surface, PRICE[self.skin])
+            label, color = CARS[self.skin][0].upper(), ACCENT
         self.particles.draw(surface)
 
-        name = outlined(CARS[self.skin][0].upper(), 72, ACCENT, width=4)
+        name = outlined(label, 72, color, width=4)
         surface.blit(name, name.get_rect(center=(WIDTH // 2, 548)))
         blit_text(surface, self.info(), 28, (WIDTH // 2, 600), ACCENT if self.armed else WHITE)
         blit_text(surface, menu_hint(self.ctx), 24, (WIDTH // 2, HEIGHT - 40), MUTED)

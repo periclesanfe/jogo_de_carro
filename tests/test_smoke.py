@@ -4,14 +4,18 @@ import pygame
 import pytest
 
 from jogo_de_carro.app import Game
+from jogo_de_carro.save import load
+from jogo_de_carro.scenes import results
 from jogo_de_carro.scenes.base import Transition
 from jogo_de_carro.scenes.difficulty import DifficultyScene, card_rect
-from jogo_de_carro.scenes.garage import ARROWS, GarageScene
+from jogo_de_carro.scenes.garage import ARROWS, TABS, GarageScene
 from jogo_de_carro.scenes.pause import PauseScene
 from jogo_de_carro.scenes.race import Outcome, Phase, RaceScene
 from jogo_de_carro.scenes.results import ResultsScene
 from jogo_de_carro.scenes.title import TitleScene
-from jogo_de_carro.settings import FACIL, NORMAL
+from jogo_de_carro.scenes.versus import VersusScene
+from jogo_de_carro.settings import FACIL, HEIGHT, NORMAL, PLAYER_Y, PX_PER_METER
+from jogo_de_carro.world.road import BIOMES, TILE_H
 
 FRAME = 1 / 60
 
@@ -118,22 +122,69 @@ def test_every_scene_with_scripted_input(game):
 def test_race_until_crash(game):
     game.ctx.save.mode = NORMAL.key
     game.time_scale = 4.0
-    game.scenes.switch(RaceScene(game.ctx), Transition.NONE)
+    scene = RaceScene(game.ctx)
+    game.scenes.switch(scene, Transition.NONE)
+    until(game, lambda: scene.phase is Phase.CRASHED, 120)
+    road = scene.world.road
+    road.px = 1000 * PX_PER_METER - 2  # the car is 2 px short of the Deserto
     until(game, lambda: isinstance(top(game), ResultsScene), 120)
+    assert road.biome(PLAYER_Y) == 1 and scene.biome == 0  # the slow-motion rolled in: the race did not
     stats = top(game).stats
     assert stats.outcome is Outcome.CRASH and stats.seconds > 0
     assert stats.new_record and game.ctx.save.best[NORMAL.key] == stats.score.total > 0
     frames(game, 120)
 
 
-def test_race_until_win(game):
+def test_race_until_win(game, monkeypatch):
     game.ctx.save.mode = FACIL.key
     game.ctx.autopilot = True
     game.time_scale = 20.0
-    game.scenes.switch(RaceScene(game.ctx), Transition.NONE)
+    scene = RaceScene(game.ctx)
+    game.scenes.switch(scene, Transition.NONE)
     until(game, lambda: isinstance(top(game), RaceScene) and top(game).phase is Phase.WON, 20)
     until(game, lambda: isinstance(top(game), ResultsScene), 10)
     stats = top(game).stats
     assert stats.outcome is Outcome.WIN and stats.seconds == FACIL.win_s
     assert game.ctx.save.best_time[FACIL.key] == FACIL.win_s
     assert stats.score.coins > 0
+    assert stats.unlocked == (1, 2) and game.ctx.save.best_m == int(stats.score.meters)  # 2.6 km
+    assert scene.biome == 2  # the banner named each biome on the way
+    drawn: list[str] = []
+    monkeypatch.setattr(results, "blit_text", lambda surface, label, *a, **k: drawn.append(label))
+    frames(game, 1)
+    assert "Cenários liberados: DESERTO, NEVE" in drawn
+
+
+def test_the_garage_previews_every_scenery_and_picks_a_reached_one(game):
+    """DOWN (or its tab) switches to CENÁRIOS: each biome restarts the road behind as its preview, and ENTER
+    picks one a race has reached; races then start there, both halves of a versus too."""
+    save = game.ctx.save
+    save.best_m = 1500  # Deserto, not Neve
+    scene = GarageScene(game.ctx)
+    game.scenes.switch(scene, Transition.NONE)
+    road = game.ctx.backdrop.world.road
+    key(game, pygame.K_DOWN)
+    key(game, pygame.K_RIGHT)
+    key(game, pygame.K_RIGHT, 1)
+    assert scene.scenery and road.start == 2 and scene.target == 0  # the cars stay put
+    neve = {sprite for sprite, *_ in BIOMES[2].props} | {"lamp"}
+    assert {p.sprite for p in road.props} <= neve  # planted anew: no cactus of the Deserto left
+    assert scene.info() == "Chegue a 2 km numa corrida para liberar · seu recorde: 1,5 km"
+    key(game, pygame.K_RETURN)
+    assert top(game) is scene and save.biome == 0  # previewed, not chosen
+    key(game, pygame.K_UP)
+    assert not scene.scenery
+    click(game, TABS[1].center)
+    assert scene.scenery and road.start == 2
+    key(game, pygame.K_LEFT)
+    assert road.start == 1 and scene.info() == "Liberado"
+    game.time_scale = 20.0
+    frames(game, 120)  # 40 s: the preview drives on past its km...
+    game.time_scale = 1.0
+    deserto = {sprite for sprite, *_ in BIOMES[1].props} | {"lamp"}
+    assert {road.biome(y) for y in (-TILE_H, PLAYER_Y, HEIGHT)} == {1}  # ...and stays in the Deserto
+    assert {p.sprite for p in road.props} <= deserto
+    key(game, pygame.K_RETURN, 60)
+    assert isinstance(top(game), TitleScene) and save.biome == 1 == load(game.ctx.save_path).biome
+    race, versus = RaceScene(game.ctx), VersusScene(game.ctx, "medio")
+    assert [r.start for r in (race.world.road, versus.world.road, versus.rival.world.road)] == [1, 1, 1]

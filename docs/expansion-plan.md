@@ -69,7 +69,7 @@ O valor pago é `run.score.coins` como o servidor simulou. O cliente nunca envia
 | Corrida | Paga |
 |---|---|
 | Ranqueada solo `ok` (inclusive `desync` e desistência) | sim |
-| Em revisão (`top10`/`bot`) | sim, na hora; se o admin rejeitar, a moeda sai do saldo, que pode ficar negativo (dívida) |
+| Em revisão (`bot`; a retenção do top 10 saiu no E3, decisão do dono) | sim, na hora; se o admin rejeitar, a moeda sai do saldo, que pode ficar negativo (dívida) |
 | `rejected/substituida` (legítima, mas pior que a retida) | sim |
 | `rejected/conexao` (caiu a conexão) | sim. São entradas que o servidor já aceitou, e cair não dá vantagem sobre sair, que já paga |
 | Ao vivo e desafio, os dois jogadores | sim, até o tick em que o servidor parou a corrida |
@@ -271,10 +271,10 @@ Um carro estornado com o socket aberto continua utilizável até o próximo `hel
 
 ## 4. Cenários (E3), sem mudar o GOLDEN
 
-**Regra:** `biome_at(start, meters) = (start + int(meters // 1000)) % len(BIOMES)`.
+**Regra:** `biome_at(start, meters) = (start + int(meters // 1000)) % len(BIOMES)`; metros negativos (atrás da largada) contam como o bioma inicial.
 - O `Road` acumula seu próprio `px`, zerado depois do pré-povoamento.
 - `Road.biome(y)` dá o bioma na linha de tela `y`: `biome_at(self.start, (self.px + PLAYER_Y - y) / PX_PER_METER)`.
-- Props usam o bioma da linha onde nascem (`y = -100`). Cada ladrilho de chão de 576 px usa o bioma da sua borda de baixo.
+- Props usam o bioma da linha onde nascem (`y = -100`). Cada ladrilho de chão de 576 px usa o bioma do seu meio (dá no mesmo: um bioma tem exatamente 25 ladrilhos).
 - O banner usa `biome(PLAYER_Y)`. O cenário novo aparece chegando cerca de 45 a 85 m antes, e o banner confirma.
 
 **Tabela de biomas** (`BIOMES` em `road.py`, uma linha por bioma). O asfalto, as faixas e os obstáculos são os mesmos em todos.
@@ -285,7 +285,7 @@ Um carro estornado com o socket aberto continua utilizável até o próximo `hel
 | 1 | `deserto` / Deserto | 1 km | areia e ocre, terra rachada | cactus 45, bush seco 25, rock_small 30 | ~20 |
 | 2 | `neve` / Neve | 2 km | branco e azul-acinzentado, acostamento de lama | pine nevado 45, bush nevado 40, snowman 15 | ~20 |
 | 3 | `cidade` / Cidade à noite | 3 km | calçada escura, meio-fio | building 70, bush 30 (canteiros) | ~25 |
-| 4 | `vulcao` / Vulcão | 4 km | basalto com rachaduras vermelhas | basalt 50, rock_small 30, lava 20 | ~20 |
+| 4 | `vulcao` / Vulcão | 4 km | basalto com rachaduras vermelhas | basalt 60, lava 30, rock_small 10 | ~20 |
 
 **Sprites novos** (em `SPRITES` nos dois arquivos):
 
@@ -323,11 +323,11 @@ Um carro estornado com o socket aberto continua utilizável até o próximo `hel
 - No título, o fundo de demonstração percorre os biomas como numa corrida, como vitrine e sem código.
 
 **Banner:**
-- No solo, o nome do bioma fica na margem esquerda, centrado em (200, 70), por 1,6 s, fora da pista (x de 400 a 880).
+- No solo, o nome do bioma fica na margem esquerda, centrado em (200, 170), logo abaixo do painel TEMPO, por 1,6 s, fora da pista (x de 400 a 880).
 - No versus, com alpha 120 no topo da minha metade.
 
 **Desempenho e servidor:**
-- `ground(assets, biome)` continua com `functools.cache` e `Random(2022)` fixo. Os 5 chãos são aquecidos atrás da tela de carregamento: cerca de 3 MB cada já escalados, ≈ 15 MB no total.
+- `ground(assets, biome)` usa `lru_cache(maxsize=5)` e `Random(2022)` fixo. Os 5 chãos são aquecidos atrás da tela de carregamento: cerca de 3 MB cada já escalados, ≈ 15 MB no total.
 - O `Road.ground` passa a ser **preguiçoso, lido no `draw()`**. Isso é uma mudança: hoje o `Road.__init__` constrói o chão no servidor. Com ela, o servidor não constrói nenhum.
 - Marcar com `ponytail:`: se a memória do wasm reclamar, trocar por `lru_cache(2)` e pré-escalar antes da troca.
 - Não há transição pontilhada entre biomas: a costura é seca, junto com o banner.

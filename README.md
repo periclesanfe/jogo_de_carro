@@ -162,7 +162,7 @@ JOGO_DEV=1 JOGO_DB=jogo-dev.db JOGO_WWW=../build/www SMTP_HOST=localhost SMTP_PO
 
 ## Ranked runs and review (M3)
 
-Logged in on the web, JOGAR is a ranked run: the server reveals the seed only when the race starts, receives the inputs as they are played, re-simulates the run with the same code and checks it keeps real-time pace, and the score it computes is the official one (`/ranking`: the best run per player and mode). Without a login the game plays offline as before. A run that would enter its mode's top 10, or that the bot detector flags, shows "Em análise" and waits for review; the server emails `ADMIN_EMAIL` at most once an hour while the queue is not empty.
+Logged in on the web, JOGAR is a ranked run: the server reveals the seed only when the race starts, receives the inputs as they are played, re-simulates the run with the same code and checks it keeps real-time pace, and the score it computes is the official one (`/ranking`: the best run per player and mode). Without a login the game plays offline as before. A run that the bot detector flags (top 100) shows "Em análise" and waits for review; the server emails `ADMIN_EMAIL` at most once an hour while the queue is not empty.
 
 On the VPS, M3 adds:
 

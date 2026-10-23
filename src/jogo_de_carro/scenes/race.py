@@ -22,6 +22,7 @@ from ..settings import (
     MODE_BY_KEY,
     MUTED,
     NEAR_MISS_POINTS,
+    PLAYER_Y,
     SHIELD_TIME,
     WHITE,
     WIDTH,
@@ -29,6 +30,7 @@ from ..settings import (
 from ..tween import clamp, out_back, out_cubic
 from ..ui import blit_pop, blit_text, clock_text, faded, glow, panel
 from ..world.autopilot import autopilot
+from ..world.road import BIOMES
 from ..world.world import Controls, EventKind
 from .base import WEB, Context, Scene, Transition
 from .online import CHALLENGE_LOST, LOST, NO_COINS, NO_RESULT, VERIFYING, official, paid
@@ -39,6 +41,7 @@ CRASH_TO_RESULTS = 1.7
 WIN_CRUISE = 0.6  # the victory lap cruises a moment before zooming off the top
 WIN_TO_RESULTS = 2.0
 HINT_TIME = 4.5  # the controls card shows from the countdown until this long after "JÁ!"
+BIOME_S = 1.6  # a new biome's name shows this long
 SHIELD_BOX = pygame.Rect(24, HEIGHT - 84, 230, 60)
 KEY_HINTS = (
     ("SETAS / A D", "trocar de faixa"),
@@ -90,6 +93,7 @@ class RaceScene(Scene):
     pause_button = pygame.Rect(336, 20, 48, 48)
     button = "JOGAR DE NOVO"  # the results' first button, which plays again()
     cannons = (0, WIDTH)  # world x of the victory confetti cannons: the screen's bottom corners
+    biome_banner = ((200, 170), 255)  # a new biome's name: centre (on the left verge, under TEMPO), alpha
 
     def __init__(
         self,
@@ -116,6 +120,8 @@ class RaceScene(Scene):
         skin = skin or ctx.save.skin
         self.run = Run(ctx.assets, self.mode.key, skin, self.seed, shared_road, rival=rival)
         self.world, self.score = self.run.world, self.run.score
+        self.world.road.restart(ctx.save.biome)  # only a look: never in the Run, its log or the server
+        self.biome, self.biome_t = ctx.save.biome, 0.0
         self.best = ctx.save.best.get(self.mode.key, 0)
         self.phase = Phase.COUNTDOWN
         self.phase_t = 0.0
@@ -204,6 +210,9 @@ class RaceScene(Scene):
         if self.phase is Phase.RACING:
             self._react(self._step())
             self._report()
+            # the car enters a new biome; only while the race counts meters (a crash still rolls on a bit)
+            if (biome := self.world.road.biome(PLAYER_Y)) != self.biome:
+                self.biome, self.biome_t = biome, BIOME_S
             if self.run.outcome == "win":
                 self._win()
             elif self.run.known and self.run.outcome is None and self.run.tick == self.run.known:
@@ -211,6 +220,7 @@ class RaceScene(Scene):
                 return
         else:  # the countdown, the crash slow-motion and the victory lap: nothing scores
             self.world.update(world_dt, Controls())
+        self.biome_t = max(0.0, self.biome_t - dt)
         for popup in self.popups:
             popup.life += dt
             popup.y -= 70 * dt
@@ -345,6 +355,7 @@ class RaceScene(Scene):
         save = self.ctx.save
         # a challenge's run is on the versus road: no record (its road is not the solo road)
         record = not self.run.shared and save.record(self.mode.key, save.skin, self.score.total, seconds)
+        unlocked = save.drove(self.score.meters)
         self.ctx.persist()
         stats = RaceStats(
             outcome,
@@ -358,6 +369,7 @@ class RaceScene(Scene):
             button=self.button,
             to=self.to,
             wallet=self.wallet,
+            unlocked=unlocked,
         )
         self.ctx.scenes.switch(ResultsScene(self.ctx, stats, self.snapshot(), self.again), Transition.NONE)
 
@@ -385,6 +397,8 @@ class RaceScene(Scene):
         self._draw_world(surface, offset)
         hud = 1.0 if self.phase is not Phase.WON else clamp(1 - (self.phase_t - 0.2) / 0.3, 0.0, 1.0)
         faded(surface, 255 * hud, self._draw_hud)
+        if self.biome_t:
+            self._draw_biome(surface)
         if overlay:
             self._draw_overlay_text(surface)
 
@@ -404,6 +418,12 @@ class RaceScene(Scene):
                 light = glow(150, (255, 244, 214), 255 * min(1.0, self.flash * 2.5))
                 at = (round(self.impact[0] + offset[0]), round(self.impact[1] + offset[1]))
                 surface.blit(light, light.get_rect(center=at))
+
+    def _draw_biome(self, surface: pygame.Surface) -> None:
+        center, alpha = self.biome_banner
+        scale = out_back(min(1.0, (BIOME_S - self.biome_t) / 0.3))
+        alpha = round(alpha * min(1.0, self.biome_t / 0.3))
+        blit_pop(surface, BIOMES[self.biome].name.upper(), 56, ACCENT, center, scale, alpha, width=4)
 
     def _draw_pause(self, surface: pygame.Surface) -> None:
         button = self.pause_button
