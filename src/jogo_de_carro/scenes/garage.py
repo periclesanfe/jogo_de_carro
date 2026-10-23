@@ -12,6 +12,7 @@ from ..particles import Particles
 from ..settings import ACCENT, CARS, HEIGHT, MUTED, PRICE, PX_PER_METER, WHITE, WIDTH
 from ..tween import approach, out_back
 from ..ui import blit_pop, blit_text, glow, outlined, panel, text
+from ..world.player import car_glow
 from ..world.road import BIOMES, TILE_H
 from .base import WEB, Context, MenuScene, Transition, menu_hint
 
@@ -281,5 +282,8 @@ class GarageScene(MenuScene):
                 setcolor=(0, 0, 0, 110), unsetcolor=(0, 0, 0, 0)
             )
             surface.blit(shadow, shadow.get_rect(center=(center[0] + 10, center[1] + 14)))
+            halo = car_glow(key, self.t, 6)
+            if halo:  # over the shadow: the car lights the turntable under it
+                surface.blit(halo, halo.get_rect(center=center))
         img.set_alpha(round(255 * max(0.0, 1 - 0.45 * abs(d))))
         surface.blit(img, img.get_rect(center=center))
