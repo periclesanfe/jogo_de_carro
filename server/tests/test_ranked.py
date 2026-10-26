@@ -13,7 +13,6 @@ from conftest import BASE, BUILD
 from jogo_de_carro.golden import REPLAYS
 from jogo_de_carro.run import simulate
 from jogo_server import admin, hub, load
-from jogo_server import app as site
 
 WS = BASE.replace("https", "wss") + "/ws"  # the cookies' domain (TestClient defaults to ws://testserver)
 HELLO = {"t": "hello", "build": BUILD, "py": "3.12.12", "pg": "2.5.7", "skin": "yellow"}
@@ -197,9 +196,6 @@ def test_a_bot_like_run_in_the_top_100_waits_for_review(s, clock, request, ranks
     with c.websocket_connect(WS) as ws:
         res = Racer(s, clock, ws).play(LOG, fin=honest(LOG))
     assert (res["state"], res["why"], res["rank"]) == ("review", "bot", None)
-    site.review_mail(s.app.state)
-    [(to, msg)] = s.outbox
-    assert to == "admin@jogo.test" and "1 corrida(s) em análise" in msg["Subject"]
     assert s.client().get("/saude").json()["review"] == 1
     assert s.count("bests WHERE user_id = ?", uid) == 0  # held: not on the board
 

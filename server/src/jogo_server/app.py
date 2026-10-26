@@ -178,27 +178,12 @@ async def lifespan(app: Starlette):
     app.state.limits = auth.Limits()
     clock = getattr(app.state, "clock", None)  # tests drive the hub's clock and its ticks by hand
     app.state.hub = hub.Hub(app.state, clock)
-    tasks = [asyncio.create_task(remind(app.state))]
-    if clock is None:
-        tasks.append(asyncio.create_task(app.state.hub.ticker()))
+    tasks = [] if clock else [asyncio.create_task(app.state.hub.ticker())]
     log.warning("pronto: build %s em %s", app.state.build, cfg.base)
     yield
     for task in tasks:
         task.cancel()
     app.state.db.close()
-
-
-def review_mail(state) -> None:
-    """Emails ADMIN_EMAIL how many runs wait for review, if any do."""
-    n = state.db.execute("SELECT count(*) FROM runs WHERE state = 'review'").fetchone()[0]
-    if n and state.cfg.admin_email and state.cfg.mail:
-        state.send_mail(state.cfg.admin_email, mail.review_message(state.cfg.base, n))
-
-
-async def remind(state) -> None:
-    while True:  # at startup, then hourly: one email an hour at most while the queue is not empty
-        review_mail(state)
-        await asyncio.sleep(3600)
 
 
 # --- every request --------------------------------------------------------------------------------------
