@@ -32,17 +32,6 @@ def link_message(base: str, token: str) -> EmailMessage:
     return msg
 
 
-def review_message(base: str, n: int) -> EmailMessage:
-    msg = EmailMessage()
-    msg["Subject"] = f"Jogo de Carro: {n} corrida(s) em análise"
-    msg.set_content(
-        f"{n} corrida(s) aguardam revisão em {base}.\n\n"
-        "No servidor: jogo-admin revisar\n"
-        "Este aviso se repete a cada hora enquanto houver corridas em análise.\n"
-    )
-    return msg
-
-
 def send(cfg: Any, to: str, msg: EmailMessage) -> None:
     msg["From"], msg["To"] = cfg.mail_from, to
     try:
